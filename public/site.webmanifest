@@ -1,0 +1,17 @@
+{
+  "name": "AI Miner BTC",
+  "short_name": "AI Miner",
+  "description": "Premium AI-Powered Bitcoin Mining Staking Platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "https://cryptologos.cc/logos/bitcoin-btc-logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

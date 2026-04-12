@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <script>
+    // System Guard: Prevent common TMA loading issues without blocking wallet providers
+    (function () {
+      var handleCrash = function (m, s, l, c, e) {
+        var msg = String(m || "").toLowerCase();
+        var isCrossOrigin = msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1 || msg.indexOf("permission denied") !== -1;
+
+        if (isCrossOrigin) {
+          console.warn("System Shield: Muted cross-origin frame access error for TMA compatibility");
+          return true;
+        }
+        return false;
+      };
+
+      window.onerror = function (m, s, l, c, e) {
+        if (handleCrash(m, s, l, c, e)) return true;
+        return false;
+      };
+
+      window.addEventListener('unhandledrejection', function (event) {
+        handleCrash(String(event.reason), "", 0);
+      });
+    })();
+  </script>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>AI MINING BTC</title>
+  <style>
+    body {
+      background-color: #050505 !important;
+      margin: 0;
+      padding: 0;
+    }
+  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Material+Icons+Round&display=swap"
+    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+
+<body style="background: #000 !important; color: white;">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>

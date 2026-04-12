@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ai Mining BTC Home</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;family=Material+Icons+Round&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: "#FFD700", // Gold
+              "primary-dim": "#C5A000",
+              "background-dark": "#050505", // Deep dark background
+              "card-dark": "#121212", // Very dark grey for cards
+              "accent-purple": "#7C3AED",
+            },
+            fontFamily: {
+              display: ["Rajdhani", "sans-serif"],
+              body: ["Inter", "sans-serif"],
+            },
+            borderRadius: {
+              DEFAULT: "12px",
+            },
+            boxShadow: {
+                'neon': '0 0 10px rgba(255, 215, 0, 0.4), 0 0 20px rgba(255, 215, 0, 0.2)',
+                'glow': '0 0 15px rgba(255, 215, 0, 0.15)',
+                'card': '0 4px 6px -1px rgba(0, 0, 0, 0.5), 0 2px 4px -1px rgba(0, 0, 0, 0.3)',
+            }
+          },
+        },
+      };
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .bg-grid-pattern {
+                background-image: linear-gradient(to right, #1f2937 1px, transparent 1px),
+                linear-gradient(to bottom, #1f2937 1px, transparent 1px);
+                background-size: 40px 40px;
+            }
+            .metallic-text {
+                background: linear-gradient(to bottom, #FFD700, #FDB931, #FFD700);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;
+            }
+            .metallic-btn {
+                background: linear-gradient(to right, #B8860B, #FFD700, #FDB931, #B8860B);
+                background-size: 200% auto;
+            }
+            .material-symbols-outlined {
+                font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            }
+        }
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-dark text-white font-body antialiased transition-colors duration-200 min-h-screen relative overflow-hidden flex flex-col">
+<div class="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+<div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-primary/5 rounded-full blur-[100px]"></div>
+<div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-accent-purple/5 rounded-full blur-[100px]"></div>
+<div class="absolute inset-0 bg-grid-pattern opacity-[0.03]"></div>
+</div>
+<div class="relative z-10 flex-1 flex flex-col max-w-md mx-auto w-full h-full pb-28">
+<header class="flex justify-between items-center p-6">
+<div class="flex items-center gap-2">
+<span class="material-icons-round text-primary text-2xl">memory</span>
+<h1 class="font-display font-bold text-xl text-white tracking-wide uppercase">AI Mining BTC</h1>
+</div>
+<div class="flex items-center gap-3">
+<div class="bg-card-dark/80 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-800 flex items-center gap-2 shadow-sm">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="text-xs font-semibold text-gray-300">Live</span>
+</div>
+<button class="text-gray-400 hover:text-primary transition-colors">
+<span class="material-icons-round">settings</span>
+</button>
+</div>
+</header>
+<section class="px-6 grid grid-cols-2 gap-4 mb-8">
+<div class="bg-card-dark p-4 rounded-2xl shadow-card border border-gray-800 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-10">
+<span class="material-icons-round text-4xl text-primary">bolt</span>
+</div>
+<p class="text-xs text-gray-400 font-medium mb-1">Total Mining Power</p>
+<div class="flex items-baseline gap-1">
+<h2 class="text-2xl font-display font-bold text-white uppercase">145.2</h2>
+<span class="text-xs text-primary font-bold uppercase">GH/s</span>
+</div>
+</div>
+<div class="bg-card-dark p-4 rounded-2xl shadow-card border border-gray-800 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-2 opacity-10">
+<span class="material-icons-round text-4xl text-primary">account_balance_wallet</span>
+</div>
+<p class="text-xs text-gray-400 font-medium mb-1">Current Balance</p>
+<div class="flex items-baseline gap-1">
+<h2 class="text-2xl font-display font-bold text-white uppercase">0.0042</h2>
+<span class="text-xs text-primary font-bold uppercase">BTC</span>
+</div>
+</div>
+</section>
+<section class="flex-1 flex flex-col items-center justify-center relative mb-8 min-h-[350px]">
+<div class="relative w-72 h-72 flex items-center justify-center">
+<svg class="absolute inset-0 w-full h-full transform -rotate-90 drop-shadow-lg" viewBox="0 0 100 100">
+<circle cx="50" cy="50" fill="none" r="46" stroke="#1f2937" stroke-width="3"></circle>
+<circle class="filter drop-shadow-[0_0_3px_rgba(255,215,0,0.5)] transition-all duration-1000 ease-out" cx="50" cy="50" fill="none" r="46" stroke="url(#goldGradient)" stroke-dasharray="289" stroke-dashoffset="72" stroke-linecap="round" stroke-width="3"></circle>
+<defs>
+<linearGradient id="goldGradient" x1="0%" x2="100%" y1="0%" y2="0%">
+<stop offset="0%" stop-color="#B8860B"></stop>
+<stop offset="50%" stop-color="#FFD700"></stop>
+<stop offset="100%" stop-color="#FDB931"></stop>
+</linearGradient>
+</defs>
+</svg>
+<div class="absolute w-56 h-56 border border-primary/10 rounded-full"></div>
+<div class="absolute w-48 h-48 border border-primary/20 rounded-full border-dashed"></div>
+<div class="relative w-32 h-32 bg-gradient-to-br from-gray-900 to-black rounded-full flex items-center justify-center shadow-neon z-20 border border-primary/30">
+<div class="absolute inset-0 bg-primary rounded-full blur-xl opacity-10"></div>
+<span class="material-icons-round text-5xl text-primary drop-shadow-md">currency_bitcoin</span>
+<div class="absolute -top-2 -right-1 w-2 h-2 bg-primary rounded-full"></div>
+<div class="absolute bottom-3 -left-2 w-1.5 h-1.5 bg-yellow-200 rounded-full"></div>
+</div>
+<div class="absolute bottom-6 bg-black/60 backdrop-blur-md border border-gray-800 px-3 py-1 rounded-full flex items-center gap-1">
+<span class="material-icons-round text-xs text-primary">bolt</span>
+<span class="text-[10px] uppercase font-bold tracking-wider text-gray-300">75% MINED</span>
+</div>
+</div>
+<div class="mt-6 text-center">
+<p class="text-primary font-display font-bold text-lg tracking-widest uppercase">System Operational</p>
+<div class="flex flex-col gap-1 mt-1">
+<p class="text-xs text-gray-400">Next Reward Progress</p>
+<p class="text-sm font-medium text-white uppercase">0.000354 / <span class="text-gray-500">0.000500 BTC</span></p>
+</div>
+</div>
+</section>
+<section class="px-6 mb-8 w-full flex flex-col gap-4">
+<button class="w-full metallic-btn text-black font-bold text-lg py-4 rounded-2xl shadow-neon transform active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 group border border-yellow-400/30">
+<span class="material-icons-round">savings</span>
+                Collect Earnings
+            </button>
+<button class="w-full bg-transparent text-primary font-bold text-lg py-4 rounded-2xl border-2 border-primary/50 transform active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 group hover:bg-primary/5">
+<span class="material-icons-round">payments</span>
+                Withdraw
+            </button>
+<div class="flex justify-between mt-2 px-2">
+<div class="text-center">
+<p class="text-xs text-gray-500 uppercase">Daily Profit</p>
+<p class="text-sm font-bold text-white font-display uppercase">+$12.45</p>
+</div>
+<div class="h-8 w-px bg-gray-800"></div>
+<div class="text-center">
+<p class="text-xs text-gray-500 uppercase">Active Miners</p>
+<p class="text-sm font-bold text-white font-display uppercase">842</p>
+</div>
+<div class="h-8 w-px bg-gray-800"></div>
+<div class="text-center">
+<p class="text-xs text-gray-500 uppercase">Network</p>
+<p class="text-sm font-bold text-green-500 font-display uppercase uppercase">Stable</p>
+</div>
+</div>
+</section>
+</div>
+<div class="fixed bottom-6 left-1/2 transform -translate-x-1/2 w-[90%] max-w-md z-50">
+<nav class="bg-[#121212]/90 rounded-[24px] shadow-lg border border-gray-800 px-2 py-2 flex justify-between items-center backdrop-blur-md">
+<a class="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl text-primary transition-colors" href="#">
+<div class="relative">
+<span class="material-icons-round text-2xl">grid_view</span>
+<span class="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-primary rounded-full"></span>
+</div>
+<span class="text-[10px] font-medium uppercase">Mining</span>
+</a>
+<a class="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl text-gray-400 hover:text-white transition-colors" href="#">
+<span class="material-icons-round text-2xl text-primary">rocket_launch</span>
+<span class="text-[10px] font-medium uppercase">Upgrade</span>
+</a>
+<a class="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl text-gray-400 hover:text-white transition-colors" href="#">
+<span class="material-icons-round text-2xl">groups</span>
+<span class="text-[10px] font-medium uppercase">Friends</span>
+</a>
+<a class="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl text-gray-400 hover:text-white transition-colors" href="#">
+<span class="material-icons-round text-2xl">info</span>
+<span class="text-[10px] font-medium uppercase">Info</span>
+</a>
+</nav>
+</div>
+
+</body></html>

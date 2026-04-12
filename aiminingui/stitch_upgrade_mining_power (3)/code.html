@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Settings Page Dark Gold</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#f4c025",
+                        "background-light": "#f8f8f5",
+                        "background-dark": "#221e10",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Custom Scrollbar for Webkit */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333; 
+            border-radius: 3px;
+        }
+        .material-symbols-outlined {
+            font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-white antialiased">
+<div class="relative flex h-full min-h-screen w-full flex-col overflow-x-hidden max-w-md mx-auto shadow-2xl bg-background-light dark:bg-background-dark">
+<!-- TopAppBar -->
+<header class="flex items-center px-4 py-4 justify-between sticky top-0 z-10 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-sm border-b border-gray-200 dark:border-white/5">
+<div class="flex size-10 shrink-0 items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 cursor-pointer transition-colors">
+<span class="material-symbols-outlined text-slate-900 dark:text-white">arrow_back</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center pr-10">Settings</h2>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col px-4 pb-8">
+<!-- ProfileHeader -->
+<div class="py-6">
+<div class="flex items-center gap-4 p-4 rounded-xl bg-white dark:bg-white/5 shadow-sm border border-gray-100 dark:border-white/5">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full h-16 w-16 shrink-0 border-2 border-primary" data-alt="Digital avatar of a futuristic miner character with neon accents" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCKNY9U0XuAGcurY7YeV6gHCHRxRRisjBRh8Ll5jhklbv0qhBx65bZ8AhCzTZVSfjlp4MYwkoD-bfGTcht6gF0a8SVTDkRvqutQCRja_E5epv0G1leSir_hOqFt3kacSr5_gUqUwZIT9tHrw3lypZ0Ws1Ihex6fhrslLn_CHcKUupj0mo0Rq_-GRfEc8HIF08soExPDZemoCvEwMSVG5dYFJ6sDNRF98hkcCaH5HbU77rqKeMguu7E2clPVFaz0TIWc5UQNo7jFVT9R");'>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0">
+<div class="flex items-center gap-2">
+<p class="text-lg font-bold leading-tight tracking-tight truncate">CryptoMiner_99</p>
+<span class="material-symbols-outlined text-primary text-[16px]">verified</span>
+</div>
+<p class="text-slate-500 dark:text-[#bab29c] text-sm font-medium">Level 5 • Pro Miner</p>
+</div>
+<div class="shrink-0">
+<span class="material-symbols-outlined text-slate-400 dark:text-white/30">qr_code_2</span>
+</div>
+</div>
+</div>
+<!-- Group: Account -->
+<div class="flex flex-col gap-2 mb-6">
+<h3 class="text-slate-500 dark:text-[#bab29c] text-xs font-bold uppercase tracking-wider px-2 pb-1">Account</h3>
+<div class="flex flex-col bg-white dark:bg-white/5 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5">
+<!-- Profile Settings -->
+<div class="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer group">
+<div class="flex items-center gap-4 overflow-hidden">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10 group-hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined text-primary">person</span>
+</div>
+<p class="text-base font-medium leading-normal flex-1 truncate">Profile Settings</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 dark:text-white/30">chevron_right</span>
+</div>
+<div class="h-px bg-gray-100 dark:bg-white/5 mx-4"></div>
+<!-- Security / 2FA -->
+<div class="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer group">
+<div class="flex items-center gap-4 overflow-hidden">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10 group-hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined text-primary">shield_lock</span> <!-- Changed to shield_lock for better semantic match -->
+</div>
+<p class="text-base font-medium leading-normal flex-1 truncate">Security / 2FA</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 dark:text-white/30">chevron_right</span>
+</div>
+</div>
+</div>
+<!-- Group: Finance -->
+<div class="flex flex-col gap-2 mb-6">
+<h3 class="text-slate-500 dark:text-[#bab29c] text-xs font-bold uppercase tracking-wider px-2 pb-1">Finance</h3>
+<div class="flex flex-col bg-white dark:bg-white/5 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5">
+<!-- Wallet Address -->
+<div class="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer group">
+<div class="flex items-center gap-4 overflow-hidden">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10 group-hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined text-primary">account_balance_wallet</span>
+</div>
+<div class="flex flex-col overflow-hidden">
+<p class="text-base font-medium leading-normal truncate">Wallet Address</p>
+</div>
+</div>
+<div class="flex items-center gap-2 shrink-0">
+<span class="text-xs text-slate-400 dark:text-white/40 font-mono hidden min-[350px]:block">0x3f...9a2</span>
+<span class="material-symbols-outlined text-slate-400 dark:text-white/30">edit</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Group: App Preferences -->
+<div class="flex flex-col gap-2 mb-8">
+<h3 class="text-slate-500 dark:text-[#bab29c] text-xs font-bold uppercase tracking-wider px-2 pb-1">App Preferences</h3>
+<div class="flex flex-col bg-white dark:bg-white/5 rounded-xl overflow-hidden shadow-sm border border-gray-100 dark:border-white/5">
+<!-- Notifications -->
+<div class="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer group">
+<div class="flex items-center gap-4 overflow-hidden">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10 group-hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined text-primary">notifications</span>
+</div>
+<p class="text-base font-medium leading-normal flex-1 truncate">Notification Preferences</p>
+</div>
+<!-- Toggle Switch Visual -->
+<div class="w-11 h-6 bg-primary rounded-full relative cursor-pointer">
+<div class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full shadow-sm"></div>
+</div>
+</div>
+<div class="h-px bg-gray-100 dark:bg-white/5 mx-4"></div>
+<!-- Language -->
+<div class="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer group">
+<div class="flex items-center gap-4 overflow-hidden">
+<div class="flex items-center justify-center rounded-lg bg-primary/10 shrink-0 size-10 group-hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined text-primary">language</span>
+</div>
+<p class="text-base font-medium leading-normal flex-1 truncate">Language</p>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-500 dark:text-white/50">English</span>
+<span class="material-symbols-outlined text-slate-400 dark:text-white/30">chevron_right</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Logout -->
+<button class="w-full py-3.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 active:bg-red-500/20 font-semibold transition-colors flex items-center justify-center gap-2 mt-auto mb-4">
+<span class="material-symbols-outlined text-[20px]">logout</span>
+                Log Out
+            </button>
+<!-- Version -->
+<p class="text-center text-xs text-slate-400 dark:text-white/20 font-medium">
+                Ai Mining BTC v1.0.4
+            </p>
+</main>
+</div>
+</body></html>
