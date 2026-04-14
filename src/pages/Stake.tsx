@@ -28,7 +28,7 @@ const Stake: React.FC = () => {
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
-    const [activeTab, setActiveTab] = useState('All Upgrades');
+    const [activeTab, setActiveTab] = useState('AI Mining');
     const [loading, setLoading] = useState<number | string | null>(null);
     const [userStakes, setUserStakes] = useState<any[]>([]);
     const [stats, setStats] = useState({
@@ -155,7 +155,7 @@ const Stake: React.FC = () => {
         }
     ];
 
-    const tabs = ['AI Mining', 'Hardware', 'My Stakes'];
+    const tabs = ['AI Mining', 'Plan', 'Hardware', 'My Stakes'];
 
     useEffect(() => {
         const fetchStakes = async () => {
@@ -379,7 +379,115 @@ const Stake: React.FC = () => {
                     ))}
                 </div>
 
-                {activeTab === 'Hardware' ? (
+                {activeTab === 'Plan' ? (
+                    <section className="grid grid-cols-1 gap-5">
+                       <div className="bg-[#1a1a1a] rounded-[32px] p-6 border border-white/5 relative overflow-hidden mb-2">
+                             <div className="absolute top-0 right-0 p-8 opacity-5">
+                                <span className="material-icons-round text-8xl text-primary font-black">assignment</span>
+                            </div>
+                            <h2 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">Mining Plan Details</h2>
+                            <p className="text-xs text-gray-400 leading-relaxed font-medium">
+                                Comprehensive breakdown of our mining cycles, tier yields, and global stakeholder dividends.
+                            </p>
+                        </div>
+                        
+                        <div className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
+                            <h3 className="font-black text-white text-base uppercase tracking-tighter italic border-b border-white/10 pb-2">Core Parameters</h3>
+                            <div className="flex justify-between items-center bg-black/40 p-3 rounded-2xl border border-white/5">
+                                <span className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">Mine Cycle</span>
+                                <span className="text-[12px] text-primary font-black">37 Days</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-black/40 p-3 rounded-2xl border border-white/5">
+                                <span className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">Invitation Income</span>
+                                <span className="text-[12px] text-white font-black">20$</span>
+                            </div>
+                            <div className="flex justify-between items-center bg-black/40 p-3 rounded-2xl border border-white/5">
+                                <span className="text-[11px] text-gray-500 font-bold uppercase tracking-widest">Minimum Stake</span>
+                                <span className="text-[12px] text-white font-black">200$</span>
+                            </div>
+                        </div>
+
+                        <div className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
+                             <h3 className="font-black text-white text-base uppercase tracking-tighter italic border-b border-white/10 pb-2">Tier Yields (Cycle)</h3>
+                             <div className="grid grid-cols-2 gap-2">
+                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
+                                    <span className="text-[11px] text-gray-400 font-bold">&gt; 50$</span>
+                                    <span className="text-[11px] text-primary font-black">5.50%</span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
+                                    <span className="text-[11px] text-gray-400 font-bold">&gt; 500$</span>
+                                    <span className="text-[11px] text-primary font-black">6%</span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
+                                    <span className="text-[11px] text-gray-400 font-bold">&gt; 1000$</span>
+                                    <span className="text-[11px] text-primary font-black">6.50%</span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
+                                    <span className="text-[11px] text-gray-400 font-bold">&gt; 2000$</span>
+                                    <span className="text-[11px] text-primary font-black">7%</span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5 flex justify-between items-center">
+                                    <span className="text-[11px] text-gray-400 font-bold">&gt; 5000$</span>
+                                    <span className="text-[11px] text-primary font-black">8%</span>
+                                </div>
+                                <div className="bg-black/40 p-3 rounded-2xl border border-white/5 flex justify-between items-center col-span-2">
+                                    <span className="text-[11px] text-gray-400 font-bold">&gt; 10000$ To unlimited</span>
+                                    <span className="text-[11px] text-primary font-black">12%</span>
+                                </div>
+                             </div>
+                        </div>
+
+                        <div className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
+                             <h3 className="font-black text-white text-base uppercase tracking-tighter italic border-b border-white/10 pb-2">Stake Holders Dividend</h3>
+                             
+                             <div className="p-3 bg-purple-900/10 border border-purple-500/20 rounded-2xl mb-2">
+                                 <div className="text-[10px] text-purple-400 font-black uppercase tracking-widest mb-2 flex justify-between">
+                                     <span>Levels 1-3</span>
+                                     <span className="text-white">Stake Req: 300$</span>
+                                 </div>
+                                 <div className="grid grid-cols-3 gap-2">
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-1</span><span className="text-[11px] text-white font-black">5%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-2</span><span className="text-[11px] text-white font-black">3%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-3</span><span className="text-[11px] text-white font-black">2%</span></div>
+                                 </div>
+                             </div>
+
+                             <div className="p-3 bg-blue-900/10 border border-blue-500/20 rounded-2xl mb-2">
+                                 <div className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-2 flex justify-between">
+                                     <span>Levels 4-6</span>
+                                     <span className="text-white">Stake Req: 1000$</span>
+                                 </div>
+                                 <div className="grid grid-cols-3 gap-2">
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-4</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-5</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-6</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                 </div>
+                             </div>
+
+                             <div className="p-3 bg-orange-900/10 border border-orange-500/20 rounded-2xl">
+                                 <div className="text-[10px] text-orange-400 font-black uppercase tracking-widest mb-2 flex justify-between">
+                                     <span>Levels 7-10</span>
+                                     <span className="text-white">Stake Req: 2000$</span>
+                                 </div>
+                                 <div className="grid grid-cols-4 gap-2">
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-7</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-8</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-9</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                    <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-10</span><span className="text-[11px] text-white font-black">1%</span></div>
+                                 </div>
+                             </div>
+                        </div>
+
+                        <div className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-3 relative overflow-hidden hover:border-primary/20 transition-all">
+                             <h3 className="font-black text-white text-base uppercase tracking-tighter italic border-b border-white/10 pb-2">Terms and Conditions</h3>
+                             <ul className="text-[11px] text-gray-400 font-medium space-y-2 list-disc pl-4 marker:text-primary">
+                                 <li>Minimum withdrawal <span className="text-white font-black">1$</span></li>
+                                 <li><span className="text-white font-black">24×7</span> System Access & Transactions</li>
+                                 <li>The commission will be released after the cycle is completed.</li>
+                             </ul>
+                        </div>
+                    </section>
+                ) : activeTab === 'Hardware' ? (
                     <section className="grid grid-cols-1 gap-5">
                         <div className="bg-[#1a1a1a] rounded-[32px] p-6 border border-white/5 relative overflow-hidden mb-2">
                              <div className="absolute top-0 right-0 p-8 opacity-5">
