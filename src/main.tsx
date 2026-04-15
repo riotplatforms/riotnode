@@ -36,9 +36,9 @@ if (typeof (window as any).global === 'undefined') {
 
     console.log('[TMA-Shield] Link Request:', urlStr, '| TimeSinceNav:', timeSinceNav);
 
-    // GUARD: If a wallet link is triggered within 1 second of navigation,
+    // GUARD: If a wallet link is triggered within 500ms of navigation,
     // it's likely an automatic library sync. We ignore it to prevent the popup loop.
-    if (isWalletLink && timeSinceNav < 1000) {
+    if (isWalletLink && timeSinceNav < 500) {
       console.warn('[TMA-Shield] Nav Guard Blocked Auto-Sync Link:', urlStr);
       return { closed: false, focus: () => { }, close: () => { } };
     }
@@ -51,7 +51,8 @@ if (typeof (window as any).global === 'undefined') {
       'tp://': 'https://tokenpocket.platform/',
       'bitkeep://': 'https://bkcode.vip/',
       'okx://': 'https://www.okx.com/download',
-      'bnc://': 'bnc://app.binance.com/mp/appcon',
+      'bnc://': 'https://app.binance.com/mp/appcon',
+      'bitget://': 'https://web3.bitget.com/',
       'rainbow://': 'https://rnbwapp.com/',
       'phantom://': 'https://phantom.app/ul/'
     };
@@ -77,6 +78,12 @@ if (typeof (window as any).global === 'undefined') {
 
     // 2. Handle Generic WalletConnect (wc:) URIs
     if (urlStr.startsWith('wc:')) {
+      // If it's already an HTTPS bridge from the library, let it through
+      if (urlStr.includes('http')) {
+         webapp.openLink(urlStr);
+         return { closed: false, focus: () => { }, close: () => { } };
+      }
+      
       const bridgeUrl = `https://metamask.app.link/wc?uri=${encodeURIComponent(urlStr)}&redirectUrl=${encodeURIComponent(botUrl)}`;
       console.log('[TMA-Shield] Bridging Generic WC ->', bridgeUrl);
       webapp.openLink(bridgeUrl);
