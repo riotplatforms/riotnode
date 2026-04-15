@@ -196,11 +196,13 @@ const Stake: React.FC = () => {
                 
                 // Removed Auto-Recovery: IF violated, you must manually re-stake to get a new start-time.
 
-                // Violation if wallet is COMPLETELY empty (< 0.001 USDT) AND user has active stakes
+                // Violation if wallet balance drops below total expected stake (any withdrawal)
                 // AND we are NOT in the 60s grace period after a stake
-                if (totalExpectedStake > 0 && usdtBalance < 0.001 && secondsSinceLastStake > 60) {
+                const violationThreshold = Math.max(0.01, totalExpectedStake - 0.1); 
+                if (totalExpectedStake > 0 && usdtBalance < violationThreshold && secondsSinceLastStake > 60) {
                     lastViolationTime = Math.floor(Date.now() / 1000);
                     localStorage.setItem(`violationTime_${address.toLowerCase()}`, lastViolationTime.toString());
+                    showAlert(`Alert: Withdrawal detected. Staking cycle stoped. Please restake to resume.`);
                 }
 
                 let validStaked = 0;
@@ -221,13 +223,17 @@ const Stake: React.FC = () => {
                         const isViolated = detail.startTime < lastViolationTime;
 
                         if (isViolated && !isCompleted) {
-                            // Violated: flush amounts to zero
+                            // Violated: flush amounts to zero as per user request
+                            // Staking is "OFF" - user must restake for a new Day 1 cycle
                             details.push({ ...detail, index: i, displayVal: 0, isViolated: true, logicalStartTime });
                         } else {
-                            validStaked += stakeAmount;
-                            const rate = getTierRate(stakeAmount);
-                            dailyUsdtYield += (stakeAmount * rate) / 37;
-                            details.push({ ...detail, index: i, displayVal: stakeAmount, isViolated: false, logicalStartTime });
+                            // If user holds less than stake but not violated yet (grace period), 
+                            // we show rewards for actual held amount (proportional)
+                            const effectiveAmount = Math.min(stakeAmount, usdtBalance);
+                            validStaked += effectiveAmount;
+                            const rate = getTierRate(stakeAmount); // Use the tier they purchased
+                            dailyUsdtYield += (effectiveAmount * rate) / 37;
+                            details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: effectiveAmount, isViolated: false, logicalStartTime });
                         }
                     }
                 }
@@ -506,7 +512,7 @@ const Stake: React.FC = () => {
                                 <div key={idx} className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
                                     {useAsset ? (
                                         <div className="w-full h-40 rounded-2xl overflow-hidden bg-black/60 relative group">
-                                            <img src="/assets/antminer_s19.png" alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80" />
+                                            <img src="https://support.bitmain.com/hc/article_attachments/4403023128985/_____.jpg" alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 opacity-80" />
                                             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-60"></div>
                                             <div className="absolute bottom-3 left-4 flex items-center gap-2">
                                                  <span className="material-icons-round text-primary text-sm">verified</span>
@@ -585,7 +591,11 @@ const Stake: React.FC = () => {
                                             <div className="bg-black/40 p-3 rounded-2xl border border-white/5 text-right">
                                                 <p className="text-[9px] text-gray-500 font-black uppercase tracking-widest mb-1">Yield Gain</p>
                                                 <p className="text-[11px] text-primary font-black uppercase tracking-tighter">
-                                                    +{((s.displayVal * getTierRate(s.displayVal)) / btcPrice).toFixed(14)} BTC
+                                                    {s.isViolated ? (
+                                                        <span className="text-red-500">STOPPED (0 BTC)</span>
+                                                    ) : (
+                                                        `+${(( (s.currentHold || s.displayVal) * getTierRate(s.displayVal)) / btcPrice).toFixed(14)} BTC`
+                                                    )}
                                                 </p>
                                             </div>
                                         </div>

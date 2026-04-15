@@ -51,7 +51,7 @@ if (typeof (window as any).global === 'undefined') {
       'tp://': 'https://tokenpocket.platform/',
       'bitkeep://': 'https://bkcode.vip/',
       'okx://': 'https://www.okx.com/download',
-      'bnc://': 'https://app.binance.com/',
+      'bnc://': 'bnc://app.binance.com/mp/appcon',
       'rainbow://': 'https://rnbwapp.com/',
       'phantom://': 'https://phantom.app/ul/'
     };
