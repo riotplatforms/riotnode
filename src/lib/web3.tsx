@@ -16,8 +16,8 @@ const bscMainnet = {
 const metadata = {
     name: 'ATS Infrastructure Network',
     description: 'Unified administrative portal for distributed network nodes and protocol monitoring.',
-    url: 'https://earninginfra.hindaneohub.workers.dev',
-    icons: ['https://earninginfra.hindaneohub.workers.dev/icon.png'],
+    url: 'https://riotnode.riotplatfroms.workers.dev/',
+    icons: ['https://riotnode.riotplatfroms.workers.dev/icon.png'],
     redirect: {
         native: 'https://t.me/AiMiningBTC_bot/start',
         universal: 'https://t.me/AiMiningBTC_bot'
