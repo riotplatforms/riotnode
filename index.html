@@ -2,14 +2,15 @@
 <html lang="en">
 
 <head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src 'self' https: http:; connect-src 'self' https: wss:;">
   <script>
     /**
-     * TMA GOD SHIELD (v50) - ULTIMATE INTERCEPTION
-     * Absolute protection against 'Unknown URL Scheme' by hooking every possible trigger.
+     * TMA IRON SHIELD (v60) - ABSOLUTE PROTOCOL PROTECTION
+     * Browser-level interception and CSP enforcement to fix ERR_UNKNOWN_URL_SCHEME.
      */
     (function () {
       const siteUrl = 'https://riotnode.riotplatfroms.workers.dev/';
-      const botUrl = siteUrl + '?v=success';
+      const botUrl = siteUrl + '?v=success&connected=true';
       const bridges = {
         'metamask://': 'https://metamask.app.link/',
         'binance://': 'https://app.binance.com/bnc/wallet-connect',
@@ -28,7 +29,7 @@
         const isTarget = schemes.some(s => lowUrl.startsWith(s));
         
         if (isTarget) {
-          console.log('[God-Shield] Intercepted:', url);
+          console.log('[Iron-Shield] Intercepted Protocol:', url);
           let finalUrl = url;
           for (const [scheme, bridge] of Object.entries(bridges)) {
             if (lowUrl.startsWith(scheme)) {
@@ -41,14 +42,12 @@
             finalUrl = `https://metamask.app.link/wc?uri=${encodeURIComponent(url)}&redirectUrl=${encodeURIComponent(botUrl)}`;
           }
 
-          // Force use Telegram openLink if available, otherwise window.open
+          // Use Telegram openLink (mandatory for stable TMA navigation)
           const tg = window.Telegram?.WebApp;
           if (tg && tg.openLink) {
             tg.openLink(finalUrl);
           } else {
-             // Fallback to standard window.open but with the HTTPS bridge
-             const win = window.open(finalUrl, '_blank');
-             if (!win || win.closed) window.location.href = finalUrl;
+             window.open(finalUrl, '_blank');
           }
           return null; // Handled
         }
@@ -74,21 +73,44 @@
         return originalReplace.apply(window.location, arguments);
       };
 
-      // 3. Hook Elements (catch hidden links/iframes)
+      // 3. Hook Property Setters (Absolute Catch for dynamic libraries)
+      try {
+        const originalHref = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'href');
+        Object.defineProperty(HTMLAnchorElement.prototype, 'href', {
+          set: function(val) {
+            const intercepted = handleDeepLink(val);
+            if (intercepted !== null) originalHref.set.call(this, intercepted);
+          },
+          get: originalHref.get,
+          configurable: true
+        });
+
+        const originalSrc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+        Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
+          set: function(val) {
+            const intercepted = handleDeepLink(val);
+            if (intercepted !== null) originalSrc.set.call(this, intercepted);
+          },
+          get: originalSrc.get,
+          configurable: true
+        });
+      } catch (e) { console.warn('[Iron-Shield] Property hook mismatch'); }
+
+      // 4. Hook setAttribute
       const originalSetAttr = Element.prototype.setAttribute;
       Element.prototype.setAttribute = function (name, value) {
         if ((name === 'href' || name === 'src') && handleDeepLink(value) === null) return;
         return originalSetAttr.apply(this, arguments);
       };
 
-      // 4. Hook Anchor Clicks
-      const originalClick = HTMLAnchorElement.prototype.click;
-      HTMLAnchorElement.prototype.click = function () {
-        if (handleDeepLink(this.href) === null) return;
-        return originalClick.apply(this, arguments);
-      };
+      // 5. Catch CSP violations (Browser-level trap)
+      document.addEventListener('securitypolicyviolation', (e) => {
+        if (e.blockedURI && handleDeepLink(e.blockedURI) === null) {
+          console.log('[Iron-Shield] CSP Block Caught & Redirected:', e.blockedURI);
+        }
+      });
 
-      // 5. System Guard
+      // 6. System Mutes
       window.onerror = function (m) {
         const msg = String(m || "").toLowerCase();
         return msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1;
