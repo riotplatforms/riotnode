@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useWeb3ModalAccount, useWeb3Modal } from '@web3modal/ethers/react';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
@@ -18,12 +18,25 @@ const getTierRate = (val: number) => {
 
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
     const { address, isConnected } = useWeb3ModalAccount();
     const { open } = useWeb3Modal();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
-    const { showAlert, referrer } = useTelegram();
+    const { showAlert, referrer, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
+
+    const isSuccessLanding = new URLSearchParams(location.search).get('v') === 'success';
+
+    const handleBackToTelegram = () => {
+        // If we're inside the Mini App, we might be able to close the webview
+        if (tg) {
+            tg.close();
+        } else {
+            // Otherwise, trigger the deep link to return to the bot
+            window.location.href = 'tg://resolve?domain=AiMiningBTC_bot';
+        }
+    };
 
     const [stats, setStats] = useState({
         miningPower: '0.0',
@@ -198,6 +211,32 @@ const Dashboard: React.FC = () => {
 
     return (
         <div className="flex-1 flex flex-col bg-background-dark">
+            {/* Success Landing Overlay */}
+            {isSuccessLanding && (
+                <div className="fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center">
+                    <div className="w-24 h-24 bg-primary/20 rounded-full flex items-center justify-center mb-6 animate-pulse-glow shadow-neon">
+                        <span className="material-icons-round text-primary text-6xl">verified</span>
+                    </div>
+                    <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2 font-display">Wallet Connected</h2>
+                    <p className="text-gray-400 text-sm mb-10 max-w-xs uppercase font-bold tracking-tight">Your secure mining connection is active. Return to Telegram to manage your nodes.</p>
+                    
+                    <button
+                        onClick={handleBackToTelegram}
+                        className="w-full max-w-xs bg-primary text-black font-black text-lg py-5 rounded-2xl shadow-neon transform active:scale-95 transition-all flex items-center justify-center gap-3 border-none cursor-pointer"
+                    >
+                        <span className="material-icons-round">rocket_launch</span>
+                        OPEN IN TELEGRAM
+                    </button>
+                    
+                    <button
+                        onClick={() => navigate('/', { replace: true })}
+                        className="mt-6 text-[10px] text-gray-500 font-bold uppercase tracking-widest hover:text-white transition-colors border-none bg-transparent cursor-pointer"
+                    >
+                        Stay on Website
+                    </button>
+                </div>
+            )}
+
             {/* Header */}
             <header className="relative z-10 flex justify-between items-center p-4">
                 <div className="flex items-center gap-2">

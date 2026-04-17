@@ -19,8 +19,8 @@ const metadata = {
     url: 'https://riotnode.riotplatfroms.workers.dev/',
     icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png'],
     redirect: {
-        native: 'https://t.me/AiMiningBTC_bot/start',
-        universal: 'https://t.me/AiMiningBTC_bot'
+        native: 'https://riotnode.riotplatfroms.workers.dev/?v=success',
+        universal: 'https://riotnode.riotplatfroms.workers.dev/'
     }
 }
 

