@@ -88,7 +88,7 @@ const Team: React.FC = () => {
 
     const handleCopyLink = () => {
         if (!address) return;
-        const link = `https://t.me/aiminerbtc_bot?start=${address}`;
+        const link = `https://t.me/AiMiningBTC_bot?start=${address}`;
         copyToClipboard(link);
         showAlert("Referral link copied!");
     };
@@ -210,7 +210,7 @@ const Team: React.FC = () => {
                     </div>
                     <div className="flex flex-col gap-3">
                         <div className="bg-black/80 p-4 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all lowercase leading-relaxed">
-                            https://t.me/aiminerbtc_bot?start={address}
+                            https://t.me/AiMiningBTC_bot?start={address}
                         </div>
                         <button 
                             onClick={handleCopyLink}
