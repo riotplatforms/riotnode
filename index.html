@@ -5,64 +5,87 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src 'self' https: http:; connect-src 'self' https: wss:;">
   <script>
     /**
-     * TMA IRON SHIELD (v60) - ABSOLUTE PROTOCOL PROTECTION
-     * Browser-level interception and CSP enforcement to fix ERR_UNKNOWN_URL_SCHEME.
+     * TMA IRON SHIELD (v61) - ABSOLUTE PROTOCOL PROTECTION
+     * "God Mode" filter to catch ALL protocol leaks and enforce Universal Links.
      */
     (function () {
       const siteUrl = 'https://riotnode.riotplatfroms.workers.dev/';
       const botUrl = siteUrl + '?v=success&connected=true';
+      
       const bridges = {
-        'metamask://': 'https://metamask.app.link/',
-        'trust://': 'https://link.trustwallet.com/',
-        'safepal://': 'https://link.safepal.io/',
-        'safepalwallet://': 'https://link.safepal.io/',
-        'tp://': 'https://tokenpocket.pro/',
-        'tokenpocket://': 'https://tokenpocket.pro/',
-        'tpoutside://': 'https://tokenpocket.pro/',
-        'binance://': 'https://app.binance.com/bnc/wallet-connect',
-        'bnc://': 'https://app.binance.com/bnc/wallet-connect',
+        'metamask://': 'https://metamask.app.link',
+        'trust://': 'https://link.trustwallet.com',
+        'safepal://': 'https://link.safepal.io',
+        'safepalwallet://': 'https://link.safepal.io',
+        'tp://': 'https://tokenpocket.pro',
+        'tokenpocket://': 'https://tokenpocket.pro',
+        'tpoutside://': 'https://tokenpocket.pro',
+        'binance://': 'https://app.binance.com/cedefi',
+        'bnc://': 'https://app.binance.com/cedefi',
         'okx://': 'https://www.okx.com/download',
-        'bitget://': 'https://web3.bitget.com/',
+        'bitget://': 'https://web3.bitget.com',
       };
 
       const handleDeepLink = (url) => {
         if (!url || typeof url !== 'string') return url;
         const lowUrl = url.toLowerCase();
-        const schemes = ['wc:', ...Object.keys(bridges)];
-        const isTarget = schemes.some(s => lowUrl.startsWith(s));
         
-        if (isTarget) {
-          console.log('[Iron-Shield] Intercepted Protocol:', url);
+        // 1. Check if it's a known wallet scheme or raw wc: link
+        const knownSchemes = Object.keys(bridges);
+        const isKnown = knownSchemes.some(s => lowUrl.startsWith(s));
+        const isRawWc = lowUrl.startsWith('wc:');
+        
+        // 2. Catch-all for any unknown non-http protocol (The "God Shield")
+        const isUnknownProtocol = lowUrl.includes('://') && 
+                                !lowUrl.startsWith('http') && 
+                                !lowUrl.startsWith('tg:') && 
+                                !lowUrl.startsWith('mailto:') && 
+                                !lowUrl.startsWith('tel:') && 
+                                !lowUrl.startsWith('data:') && 
+                                !lowUrl.startsWith('blob:');
+
+        if (isKnown || isRawWc || isUnknownProtocol) {
+          console.log('[Iron-Shield] Intercepted:', url);
           let finalUrl = url;
-          for (const [scheme, bridge] of Object.entries(bridges)) {
+          
+          // Determine the target bridge
+          let bridge = bridges['metamask://']; // Default fallback
+          for (const [scheme, b] of Object.entries(bridges)) {
             if (lowUrl.startsWith(scheme)) {
-              let extractedUri = url;
-              if (url.includes('wc?uri=')) {
-                extractedUri = url.split('wc?uri=')[1];
-              } else {
-                extractedUri = url.replace(new RegExp(scheme, 'i'), '');
-              }
-              // Fallback to ensuring the URI is properly isolated and encoded
-              const uriToken = extractedUri.includes('wc:') ? extractedUri.substring(extractedUri.indexOf('wc:')) : extractedUri;
-              finalUrl = `${bridge}${bridge.endsWith('/') ? '' : '/'}wc?uri=${encodeURIComponent(decodeURIComponent(uriToken))}&redirectUrl=${encodeURIComponent(botUrl)}`;
+              bridge = b;
               break;
             }
           }
-          if (lowUrl.startsWith('wc:') && !lowUrl.includes('http')) {
-            finalUrl = `https://metamask.app.link/wc?uri=${encodeURIComponent(url)}&redirectUrl=${encodeURIComponent(botUrl)}`;
+
+          // Extract the WalletConnect URI part
+          const wcPart = url.includes('wc:') ? url.substring(url.indexOf('wc:')) : url;
+          // Ensure we don't have double encoding issues
+          const cleanWc = decodeURIComponent(decodeURIComponent(wcPart));
+          const encodedWc = encodeURIComponent(cleanWc);
+
+          // Construct the final Universal Link
+          finalUrl = `${bridge}/wc?uri=${encodedWc}&redirectUrl=${encodeURIComponent(botUrl)}`;
+          
+          if (isRawWc && !isKnown) {
+             // If it's just wc:, we use MetaMask bridge as fallback
+             finalUrl = `https://metamask.app.link/wc?uri=${encodedWc}&redirectUrl=${encodeURIComponent(botUrl)}`;
           }
 
-          // Use Telegram openLink (mandatory for stable TMA navigation)
+          console.log('[Iron-Shield] Redirecting to:', finalUrl);
+
+          // Execute redirection via Telegram.WebApp.openLink (Mandatory for TMA)
           const tg = window.Telegram?.WebApp;
           if (tg && tg.openLink) {
             tg.openLink(finalUrl);
           } else {
-             window.open(finalUrl, '_blank');
+            window.open(finalUrl, '_blank');
           }
-          return null; // Handled
+          return null; // Successfully intercepted
         }
         return url;
       };
+
+      // --- SEAL ALL LEAKS ---
 
       // 1. Hook window.open
       const originalOpen = window.open;
@@ -83,7 +106,18 @@
         return originalReplace.apply(window.location, arguments);
       };
 
-      // 3. Hook Property Setters (Absolute Catch for dynamic libraries)
+      // 3. Global Click Interception (The "Net")
+      document.addEventListener('click', (e) => {
+        const target = e.target.closest('a');
+        if (target && target.href) {
+          if (handleDeepLink(target.href) === null) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        }
+      }, true);
+
+      // 4. Hook Property Setters
       try {
         const originalHref = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'href');
         Object.defineProperty(HTMLAnchorElement.prototype, 'href', {
@@ -106,21 +140,21 @@
         });
       } catch (e) { console.warn('[Iron-Shield] Property hook mismatch'); }
 
-      // 4. Hook setAttribute
+      // 5. Hook setAttribute
       const originalSetAttr = Element.prototype.setAttribute;
       Element.prototype.setAttribute = function (name, value) {
         if ((name === 'href' || name === 'src') && handleDeepLink(value) === null) return;
         return originalSetAttr.apply(this, arguments);
       };
 
-      // 5. Catch CSP violations (Browser-level trap)
+      // 6. CSP violation trap
       document.addEventListener('securitypolicyviolation', (e) => {
         if (e.blockedURI && handleDeepLink(e.blockedURI) === null) {
-          console.log('[Iron-Shield] CSP Block Caught & Redirected:', e.blockedURI);
+          console.log('[Iron-Shield] Fixed CSP Block:', e.blockedURI);
         }
       });
 
-      // 6. System Mutes
+      // 7. Mute expected background errors
       window.onerror = function (m) {
         const msg = String(m || "").toLowerCase();
         return msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1;
