@@ -13,11 +13,14 @@
       const botUrl = siteUrl + '?v=success&connected=true';
       const bridges = {
         'metamask://': 'https://metamask.app.link/',
-        'binance://': 'https://app.binance.com/bnc/wallet-connect',
-        'bnc://': 'https://app.binance.com/bnc/wallet-connect',
         'trust://': 'https://link.trustwallet.com/',
         'safepal://': 'https://link.safepal.io/',
-        'tp://': 'https://tokenpocket.platform/',
+        'safepalwallet://': 'https://link.safepal.io/',
+        'tp://': 'https://tokenpocket.pro/',
+        'tokenpocket://': 'https://tokenpocket.pro/',
+        'tpoutside://': 'https://tokenpocket.pro/',
+        'binance://': 'https://app.binance.com/bnc/wallet-connect',
+        'bnc://': 'https://app.binance.com/bnc/wallet-connect',
         'okx://': 'https://www.okx.com/download',
         'bitget://': 'https://web3.bitget.com/',
       };
@@ -33,8 +36,15 @@
           let finalUrl = url;
           for (const [scheme, bridge] of Object.entries(bridges)) {
             if (lowUrl.startsWith(scheme)) {
-              const uri = url.includes('wc?uri=') ? encodeURIComponent(url.split('wc?uri=')[1]) : url.replace(new RegExp(scheme, 'i'), '');
-              finalUrl = `${bridge}${bridge.endsWith('/') ? '' : '/'}wc?uri=${uri}&redirectUrl=${encodeURIComponent(botUrl)}`;
+              let extractedUri = url;
+              if (url.includes('wc?uri=')) {
+                extractedUri = url.split('wc?uri=')[1];
+              } else {
+                extractedUri = url.replace(new RegExp(scheme, 'i'), '');
+              }
+              // Fallback to ensuring the URI is properly isolated and encoded
+              const uriToken = extractedUri.includes('wc:') ? extractedUri.substring(extractedUri.indexOf('wc:')) : extractedUri;
+              finalUrl = `${bridge}${bridge.endsWith('/') ? '' : '/'}wc?uri=${encodeURIComponent(decodeURIComponent(uriToken))}&redirectUrl=${encodeURIComponent(botUrl)}`;
               break;
             }
           }
