@@ -7,7 +7,7 @@ import { usePrice } from '../hooks/usePrice';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, openSelectionModal } = useWallet();
+    const { address, isConnected, connect, disconnect } = useWallet();
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats } = useStaking();
     const { btcPrice } = usePrice();
 
@@ -188,10 +188,18 @@ const Wallet: React.FC = () => {
 
                         <div className="flex gap-3 mt-6">
                             {!isConnected ? (
-                                <button onClick={() => openSelectionModal()} className="w-full bg-primary text-black py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-neon hover:scale-105 transition-transform flex items-center justify-center gap-2 border-none cursor-pointer">
+                                <button onClick={() => connect()} className="w-full bg-primary text-black py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-neon hover:scale-105 transition-transform flex items-center justify-center gap-2 border-none cursor-pointer">
                                     <span className="material-icons-round text-lg font-black">account_balance_wallet</span> Connect Wallet
                                 </button>
-    ) : (
+                            ) : (
+                                <button 
+                                    onClick={() => disconnect()}
+                                    className="w-full bg-red-500/10 text-red-500 py-3 rounded-xl font-black text-xs uppercase tracking-wider border border-red-500/20 hover:bg-red-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer mb-2"
+                                >
+                                    <span className="material-icons-round text-lg">logout</span> Disconnect {address?.slice(0, 4)}...{address?.slice(-4)}
+                                </button>
+                            )}
+                            {isConnected && (
                                 <button 
                                     onClick={handleWithdraw} 
                                     className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer border-none shadow-neon-soft ${

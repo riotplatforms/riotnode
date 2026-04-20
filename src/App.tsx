@@ -11,7 +11,6 @@ import { useWallet } from './lib/web3';
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isAdmin } from './lib/admin';
-import WalletSelectionModal from './components/WalletSelectionModal';
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
   constructor(props: any) {
@@ -58,7 +57,7 @@ export default function App() {
 }
 
 function AppContent() {
-  const { address, isConnected, isModalOpen, closeSelectionModal: closeModal, connect } = useWallet();
+  const { address, isConnected } = useWallet();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -141,13 +140,6 @@ function AppContent() {
           </div>
         )}
       </Layout>
-
-      {/* Wallet Selection Modal */}
-      <WalletSelectionModal 
-        isOpen={isModalOpen}
-        onClose={closeModal}
-        onSelect={connect}
-      />
     </>
   );
 }

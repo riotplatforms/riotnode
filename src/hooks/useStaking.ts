@@ -643,14 +643,14 @@ export function useStaking() {
         const tg = (window as any).Telegram?.WebApp;
         if (!tg || !tg.openLink || !walletType) return;
 
-        const pokes = {
+        const pokes: Record<string, string> = {
             metamask: 'https://metamask.app.link/',
             trust: 'https://link.trustwallet.com/',
             safepal: 'https://link.safepal.io/',
             tp: 'https://tokenpocket.pro/'
         };
 
-        const target = pokes[walletType] || pokes.metamask;
+        const target = pokes[walletType as string] || pokes.metamask;
         console.log(`[Poke] Waking up ${walletType} via ${target}`);
         tg.openLink(target, { try_instant_view: false });
     };
