@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWeb3ModalAccount } from '@web3modal/ethers/react';
+import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { formatUnits } from 'ethers';
@@ -8,7 +8,7 @@ import { usePrice } from '../hooks/usePrice';
 
 const Team: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected } = useWeb3ModalAccount();
+    const { address, isConnected, connect } = useWallet();
     const { getStakedInfo, getTeamTree, getTeamMiningStats } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();

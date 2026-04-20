@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWeb3ModalAccount } from '@web3modal/ethers/react';
+import { useWallet } from '../lib/web3';
 import { isAdmin } from '../lib/admin';
 
 const Settings: React.FC = () => {
     const navigate = useNavigate();
-    const { address } = useWeb3ModalAccount();
+    const { address, disconnect } = useWallet();
     const [notifications, setNotifications] = useState(true);
 
     // Theme specific colors for Settings page (Yellow/Brown)

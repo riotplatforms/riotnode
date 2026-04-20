@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWeb3ModalAccount, useWeb3Modal } from '@web3modal/ethers/react';
+import { useWallet } from '../lib/web3';
 import { useStaking, getTierRate } from '../hooks/useStaking';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected } = useWeb3ModalAccount();
-    const { open } = useWeb3Modal();
+    const { address, isConnected, connect } = useWallet();
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats } = useStaking();
     const { btcPrice } = usePrice();
 

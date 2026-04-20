@@ -619,21 +619,22 @@ export const getTierRate = (val: number) => {
     return 0;
 };
 
-// Cache for providers and contracts to prevent redundant initializations
-let cachedProvider: BrowserProvider | null = null;
-let cachedWalletProvider: any = null;
-
 const BSC_RPC = 'https://bsc-dataseed.binance.org/';
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
-    const { walletProvider } = useWeb3ModalProvider();
-    const { isConnected } = useWeb3ModalAccount();
+    const { address, isConnected, signer } = useWallet();
+    const [stats, setStats] = useState({
+        totalStaked: '0',
+        totalEarned: '0',
+        referralRewards: '0',
+        totalParticipants: '0',
+        miningRate: '3.6',
+        userBalance: '0'
+    });
+    const [loading, setLoading] = useState(true);
 
     const getProvider = async () => {
-        if (!walletProvider) return null;
-        if (walletProvider !== cachedWalletProvider) {
-            cachedWalletProvider = walletProvider;
             cachedProvider = new BrowserProvider(walletProvider as any);
         }
         return cachedProvider;

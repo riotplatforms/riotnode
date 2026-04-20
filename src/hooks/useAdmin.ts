@@ -58,38 +58,33 @@ const ADMIN_ABI = [
 ];
 
 export function useAdmin() {
-    const { walletProvider } = useWeb3ModalProvider();
-    const { isConnected, address: adminAddress } = useWeb3ModalAccount();
+    const { address: adminAddress, isConnected, signer } = useWallet();
+    const [loading, setLoading] = useState(false);
 
-    const getProvider = async () => {
-        if (!walletProvider) return null;
-        return new BrowserProvider(walletProvider as any);
+    const getContract = async (withSigner = false) => {
+        if (withSigner && signer) {
+            return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, signer);
+        }
+        return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, readOnlyProvider);
     };
 
-    const getContract = async () => {
-        const provider = await getProvider();
-        if (!provider || !isConnected) return null;
-        const signer = await provider.getSigner();
-        return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, signer);
-    };
-
-    const getUsdtContract = async () => {
-        const provider = await getProvider();
-        if (!provider) return null;
-        return new Contract(USDT_ADDRESS, ERC20_ABI, provider);
+    const getUsdtContract = async (withSigner = false) => {
+        if (withSigner && signer) {
+            return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
+        }
+        return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
 
     const fetchAllUsersDetailed = async () => {
         try {
-            const staticProvider = new JsonRpcProvider(BSC_RPC);
-            const contract = new Contract(CONTRACT_ADDRESS, ADMIN_ABI, staticProvider);
-            const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, staticProvider);
+            const contract = await getContract();
+            const usdt = await getUsdtContract();
 
             console.log("[Discovery] Scanning events...");
             
             // 1. Get addresses from multiple event types for better coverage
-            const stakedFilter = contract.filters.Staked();
-            const referralFilter = contract.filters.ReferralPaid();
+            const stakedFilter = (contract as any).filters.Staked();
+            const referralFilter = (contract as any).filters.ReferralPaid();
             
             const startBlock = 36000000;
             const [stakedEvents, referralEvents] = await Promise.all([

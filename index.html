@@ -7,55 +7,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>AI MINING BTC</title>
   
-  <!-- Use proper secure policy for Web3 scripts -->
+  <!-- Security Policy -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src 'self' https: http:; connect-src 'self' https: wss:;">
   
   <!-- Telegram WebApp SDK -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <!-- TMA REDIRECTION LAYER (v84) -->
-  <script>
-    (function() {
-      const handleUrl = (url) => {
-        try {
-          if (!url || typeof url !== 'string') return url;
-          const lowUrl = url.toLowerCase();
-          
-          if (lowUrl.includes('wc:') && !lowUrl.includes('tma_shield=true')) {
-            console.log('[TMA-v84] Standardizing:', url);
-            let wcPayload = url.substring(url.indexOf('wc:'));
-            
-            // Standardizing to the official WalletConnect Relayer
-            const bridge = 'https://link.walletconnect.com/wc';
-            const finalUrl = `${bridge}?uri=${encodeURIComponent(wcPayload)}&tma_shield=true`;
-            
-            const tg = window.Telegram?.WebApp;
-            if (tg && tg.openLink) {
-                tg.openLink(finalUrl, { try_instant_view: false });
-                return null;
-            }
-          }
-        } catch (e) {}
-        return url;
-      };
-
-      // Targeted hooks
-      const originalOpen = window.open;
-      window.open = (url, target, features) => {
-        const result = handleUrl(url);
-        return result ? originalOpen.call(window, result, target, features) : null;
-      };
-
-      const originalHref = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'href');
-      Object.defineProperty(HTMLAnchorElement.prototype, 'href', {
-        get: originalHref.get,
-        set: function(val) {
-          const result = handleUrl(val);
-          originalHref.set.call(this, result || val);
-        }
-      });
-    })();
-  </script>
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">

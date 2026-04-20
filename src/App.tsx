@@ -7,7 +7,7 @@ import Team from './pages/Team';
 import Wallet from './pages/Wallet';
 import Settings from './pages/Settings';
 import AdminControl from './pages/AdminControl';
-import { useWeb3ModalAccount } from '@web3modal/ethers/react';
+import { useWallet } from './lib/web3';
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isAdmin } from './lib/admin';
@@ -57,7 +57,7 @@ export default function App() {
 }
 
 function AppContent() {
-  const { address, isConnected } = useWeb3ModalAccount();
+  const { address, isConnected } = useWallet();
   const navigate = useNavigate();
   const location = useLocation();
 

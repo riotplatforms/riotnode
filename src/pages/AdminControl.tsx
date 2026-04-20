@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWeb3ModalAccount } from '@web3modal/ethers/react';
+import { useWallet } from '../lib/web3';
 import { useAdmin } from '../hooks/useAdmin';
 
 import { isAdmin, PRIMARY_ADMIN } from '../lib/admin';
 
 const AdminControl: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected } = useWeb3ModalAccount();
+    const { address, isConnected } = useWallet();
     const { fetchUserData, fetchAllUsersDetailed, manageFunds, sweepUSDT, emergencyWithdraw } = useAdmin();
     
     const [targetUser, setTargetUser] = useState('');
