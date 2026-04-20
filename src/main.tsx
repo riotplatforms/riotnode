@@ -8,7 +8,7 @@ if (typeof (window as any).global === 'undefined') {
 
 import { createRoot } from 'react-dom/client'
 import './index.css'
-import { initWeb3 } from './lib/web3'
+import { Web3Provider } from './lib/web3'
 import App from './App.tsx'
 
 import { HashRouter as Router } from 'react-router-dom'
@@ -22,14 +22,13 @@ const rootElement = document.getElementById('root');
 
 if (rootElement) {
   try {
-    // 1. Initialize Web3 immediately for hooks (MUST be synchronous)
-    initWeb3();
-
-    // 2. Render App with Router at ROOT immediately
+    // 1. Render App with Router at ROOT immediately
     const root = createRoot(rootElement);
     root.render(
       <Router>
-        <App />
+        <Web3Provider>
+          <App />
+        </Web3Provider>
       </Router>
     );
 

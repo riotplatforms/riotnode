@@ -7,7 +7,7 @@ import Team from './pages/Team';
 import Wallet from './pages/Wallet';
 import Settings from './pages/Settings';
 import AdminControl from './pages/AdminControl';
-import { useWallet, Web3Provider } from './lib/web3';
+import { useWallet } from './lib/web3';
 import { useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { isAdmin } from './lib/admin';
@@ -51,9 +51,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 export default function App() {
   return (
     <ErrorBoundary>
-      <Web3Provider>
-        <AppContent />
-      </Web3Provider>
+      <AppContent />
     </ErrorBoundary>
   );
 }
