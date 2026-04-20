@@ -2,222 +2,25 @@
 <html lang="en">
 
 <head>
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src 'self' https: http:; connect-src 'self' https: wss:;">
-  <script>
-    /**
-     * TMA IRON SHIELD (v61) - ABSOLUTE PROTOCOL PROTECTION
-     * "God Mode" filter to catch ALL protocol leaks and enforce Universal Links.
-     */
-    (function () {
-      const siteUrl = 'https://riotnode.riotplatfroms.workers.dev/';
-      const botUrl = siteUrl + '?v=success&connected=true';
-      
-      const bridges = {
-        'metamask://': 'https://link.walletconnect.com/wc',
-        'trust://': 'https://link.walletconnect.com/wc',
-        'trustwallet://': 'https://link.walletconnect.com/wc',
-        'safepal://': 'https://link.safepal.io/wc',
-        'safepalwallet://': 'https://link.safepal.io/wc',
-        'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
-        'tokenpocket://': 'https://tokenpocket.pro/tp/link/walletConnect',
-        'binance://': 'https://app.binance.com/cedefi/wc',
-        'bnc://': 'https://app.binance.com/cedefi/wc',
-        'okx://': 'https://www.okx.com/download',
-        'bitkeep://': 'https://bitkeep.com/wc',
-        'bitget://': 'https://bitkeep.com/wc',
-      };
-
-      const handleDeepLink = (url) => {
-        try {
-          if (!url || typeof url !== 'string') return url;
-          const lowUrl = url.toLowerCase();
-          
-          // 0. FLAG-BASED LOOP BREAKER: Never intercept if it's already processed by us
-          if (lowUrl.includes('tma_shield=true')) {
-            return url;
-          }
-
-          // 1. SAFETY: Never intercept system assets or standard Telegram links
-          if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
-            if (lowUrl.includes('wc:')) {
-               // Intercept if it's a WalletConnect link wrapped in an HTTP link
-            } else {
-               return url;
-            }
-          }
-
-          // 2. Identify specific bridge
-          const schemes = Object.keys(bridges);
-          const scheme = schemes.find(s => lowUrl.startsWith(s));
-          const isRawWc = lowUrl.includes('wc:');
-
-          // 3. Protocol Interception
-          if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v83] Standardizing:', url);
-            
-            let bridge = bridges[scheme];
-            if (!bridge) {
-              bridge = lowUrl.includes('trust') ? bridges['trustwallet://'] : bridges['metamask://'];
-            }
-            
-            let wcPayload = '';
-            // EXTRACTION: Preserve the entire URI (symKey is vital!)
-            if (url.includes('wc:')) {
-              wcPayload = url.substring(url.indexOf('wc:'));
-              if (wcPayload.includes('?uri=')) wcPayload = wcPayload.split('?uri=')[1];
-              // Ensure we don't carry over extraneous wrapper params
-              if (wcPayload.includes('&redirectUrl=')) wcPayload = wcPayload.split('&redirectUrl=')[0];
-            } else if (scheme) {
-              wcPayload = 'wc:' + url.split('://')[1];
-            }
-
-            // Normalization
-            let cleanPayload = decodeURIComponent(wcPayload);
-            if (cleanPayload.includes('wc:')) {
-               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
-            } else if (!cleanPayload.startsWith('wc:')) {
-               cleanPayload = 'wc:' + cleanPayload;
-            }
-
-            // 4. Final Redirection (Universal Link + Safe Tag)
-            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}&tma_shield=true`;
-            console.log('[Iron-Shield-v83] Redirecting to:', finalUrl);
-
-            // SAVE for Poke
-            localStorage.setItem('iron_shield_last_bridge', bridge);
-
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg && tg.openLink) {
-              tg.openLink(finalUrl, { try_instant_view: false });
-            } else {
-              window.open(finalUrl, '_blank');
-            }
-            return null;
-          }
-        } catch (err) {
-          console.error('[Iron-Shield-v83] Error:', err);
-        }
-        return url;
-      };
-
-      // --- SEAL ALL LEAKS ---
-
-      // 1. Hook window.open
-      const originalOpen = window.open;
-      window.open = function (url) {
-        if (handleDeepLink(url) === null) return { closed: false, focus: function(){}, close: function(){} };
-        return originalOpen.apply(window, arguments);
-      };
-
-      // 2. Hook Location Methods
-      const originalAssign = window.location.assign;
-      window.location.assign = function(url) {
-        if (handleDeepLink(url) === null) return;
-        return originalAssign.apply(window.location, arguments);
-      };
-      const originalReplace = window.location.replace;
-      window.location.replace = function(url) {
-        if (handleDeepLink(url) === null) return;
-        return originalReplace.apply(window.location, arguments);
-      };
-
-      // 3. Global Click Interception (The "Net")
-      document.addEventListener('click', (e) => {
-        const target = e.target.closest('a');
-        if (target && target.href) {
-          if (handleDeepLink(target.href) === null) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-          }
-        }
-      }, true);
-
-      // 4. Hook Property Setters
-      try {
-        const originalHref = Object.getOwnPropertyDescriptor(HTMLAnchorElement.prototype, 'href');
-        Object.defineProperty(HTMLAnchorElement.prototype, 'href', {
-          set: function(val) {
-            const intercepted = handleDeepLink(val);
-            if (intercepted !== null) originalHref.set.call(this, intercepted);
-          },
-          get: originalHref.get,
-          configurable: true
-        });
-
-        const originalSrc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
-        Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
-          set: function(val) {
-            const intercepted = handleDeepLink(val);
-            if (intercepted !== null) originalSrc.set.call(this, intercepted);
-          },
-          get: originalSrc.get,
-          configurable: true
-        });
-      } catch (e) { console.warn('[Iron-Shield] Property hook mismatch'); }
-
-      // 5. Hook setAttribute
-      const originalSetAttr = Element.prototype.setAttribute;
-      Element.prototype.setAttribute = function (name, value) {
-        if ((name === 'href' || name === 'src') && handleDeepLink(value) === null) return;
-        return originalSetAttr.apply(this, arguments);
-      };
-
-      // 6. CSP violation trap
-      document.addEventListener('securitypolicyviolation', (e) => {
-        if (e.blockedURI && handleDeepLink(e.blockedURI) === null) {
-          console.log('[Iron-Shield] Fixed CSP Block:', e.blockedURI);
-        }
-      });
-
-      // 7. Mute expected background errors
-      window.onerror = function (m) {
-        const msg = String(m || "").toLowerCase();
-        return msg.indexOf("cross-origin") !== -1 || msg.indexOf("blocked a frame") !== -1;
-      };
-    })();
-  </script>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="/logo.png" />
-  <link rel="apple-touch-icon" href="/logo.png" />
-  <link rel="manifest" href="/site.webmanifest" />
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <link rel="icon" type="image/svg+xml" href="/logo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>AI MINING BTC</title>
   
-  <!-- SEO & Social Sharing Metadata -->
-  <title>AI MINING BTC - Premium AI Bitcoin Staking</title>
-  <meta name="description" content="Secure AI-powered Bitcoin Staking Platform. Earn high yields with the latest mining protocol infrastructure." />
+  <!-- Use proper secure policy for Web3 scripts -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https: http: 'unsafe-inline' 'unsafe-eval' data: blob:; frame-src 'self' https: http:; connect-src 'self' https: wss:;">
   
-  <!-- Open Graph / Facebook -->
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://riotnode.riotplatfroms.workers.dev/" />
-  <meta property="og:title" content="AI MINING BTC" />
-  <meta property="og:description" content="Secure AI-powered Bitcoin Staking Platform. Earn high yields with the latest mining protocol infrastructure." />
-  <meta property="og:image" content="https://riotnode.riotplatfroms.workers.dev/logo.png" />
+  <!-- Telegram WebApp SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Twitter -->
-  <meta property="twitter:card" content="summary_large_image" />
-  <meta property="twitter:url" content="https://riotnode.riotplatfroms.workers.dev/" />
-  <meta property="twitter:title" content="AI MINING BTC" />
-  <meta property="twitter:description" content="Secure AI-powered Bitcoin Staking Platform. Earn high yields with the latest mining protocol infrastructure." />
-  <meta property="twitter:image" content="https://riotnode.riotplatfroms.workers.dev/logo.png" />
-  <style>
-    body {
-      background-color: #050505 !important;
-      margin: 0;
-      padding: 0;
-    }
-  </style>
+  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Material+Icons+Round&display=swap"
-    rel="stylesheet" />
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
-    rel="stylesheet" />
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 </head>
 
-<body style="background: #000 !important; color: white;">
+<body class="bg-black text-white antialiased">
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
