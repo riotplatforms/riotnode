@@ -22,8 +22,6 @@
         'tpoutside://': 'https://tokenpocket.pro',
         'binance://': 'https://app.binance.com/cedefi',
         'bnc://': 'https://app.binance.com/cedefi',
-        'okx://': 'https://www.okx.com/download',
-        'bitget://': 'https://web3.bitget.com',
       };
 
       const handleDeepLink = (url) => {
@@ -37,25 +35,33 @@
           }
 
           // 1. Identify specific bridge
-          const schemes = Object.keys(bridges);
+          const schemes = ['metamask://', 'trust://', 'safepal://', 'tp://', 'binance://', 'bnc://', 'tokenpocket://', 'tpoutside://', 'safepalwallet://'];
           const scheme = schemes.find(s => lowUrl.startsWith(s));
           const isWc = lowUrl.startsWith('wc:');
 
-          // 2. Identify and Process Protocol
-          if (scheme || isWc || (lowUrl.includes('://') && !lowUrl.startsWith('http'))) {
+          // 2. Identify and Process Protocol (Including Catch-all for OTHER wallets)
+          const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http');
+
+          if (scheme || isWc || isUnknownProtocol) {
             console.log('[Iron-Shield] Catching:', url);
             
-            let bridge = bridges[scheme] || bridges['metamask://'];
+            // Determine the target bridge
+            // BIG 5 POLICY: Use their own app bridge. 
+            // OTHERS POLICY: Redirect to MetaMask or Trust for stability.
+            let bridge = bridges[scheme];
+            if (!bridge) {
+              // Fallback for OKX, Bitget, or any other unknown wallets
+              bridge = lowUrl.includes('bitget') ? bridges['trust://'] : bridges['metamask://'];
+              console.log('[Iron-Shield] Redirecting Other Wallet to Primary Bridge:', bridge);
+            }
+            
             let wcPayload = '';
-
-            // Use URL parser for reliability if it looks like a full URL
             try {
               const parseUrl = url.includes('://') ? url : 'https://x.y/' + url;
               const u = new URL(parseUrl);
               wcPayload = u.searchParams.get('uri') || u.searchParams.get('wc') || '';
             } catch (e) {}
 
-            // Fallback to substring extraction if URL parser didn't find 'uri'
             if (!wcPayload) {
               if (url.includes('wc:')) {
                 wcPayload = url.substring(url.indexOf('wc:'));
@@ -66,7 +72,6 @@
               }
             }
 
-            // Normalize payload: Ensure it starts with 'wc:' and contains the FULL string
             let cleanPayload = decodeURIComponent(wcPayload);
             if (cleanPayload.includes('wc:')) {
               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
@@ -74,11 +79,10 @@
               cleanPayload = 'wc:' + cleanPayload;
             }
             
-            // CRITICAL FIX: We NO LONGER split by '&' here. We must keep the FULL WalletConnect URI parameters (symKey, etc.)
-
             // 3. Final Redirection Construction
+            // We append /wc to all to ensure app triggers (v69 standard)
             const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
-            console.log('[Iron-Shield] Redirecting to:', finalUrl);
+            console.log('[Iron-Shield] Shield Redirection:', finalUrl);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
