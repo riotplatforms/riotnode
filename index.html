@@ -29,59 +29,52 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept standard web links
+          // 0. SAFETY: Never intercept standard web assets or Telegram system links
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('mailto:') || lowUrl.startsWith('tel:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
-            return url;
+            if (lowUrl.includes('wc:')) {
+               // If it's a web-wrapped WC link, it might still need processing
+            } else {
+               return url;
+            }
           }
 
-          // 1. Identify specific bridge
+          // 1. Identify specific bridge (Universal Links for stability)
           const schemes = Object.keys(bridges);
           const scheme = schemes.find(s => lowUrl.startsWith(s));
-          const isWc = lowUrl.startsWith('wc:');
+          const isWc = lowUrl.includes('wc:');
 
-          // 2. Identify and Process Protocol (Including Catch-all for OTHER wallets)
-          const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http');
-
-          if (scheme || isWc || isUnknownProtocol) {
-            console.log('[Iron-Shield-v72] Intercepting:', url);
+          // 2. Identify Protocol
+          if (scheme || isWc || (lowUrl.includes('://') && !lowUrl.startsWith('http'))) {
+            console.log('[Iron-Shield-v73] Intercept:', url);
             
-            // Determine the target bridge (Universal Link format for stability)
             let bridge = bridges[scheme];
             if (!bridge) {
-              bridge = lowUrl.includes('bitget') ? bridges['trust://'] : bridges['metamask://'];
+              bridge = lowUrl.includes('trust') ? bridges['trust://'] : bridges['metamask://'];
             }
             
             let wcPayload = '';
-            try {
-              const parseUrl = url.includes('://') ? url : 'https://x.y/' + url;
-              const u = new URL(parseUrl);
-              wcPayload = u.searchParams.get('uri') || u.searchParams.get('wc') || '';
-            } catch (e) {}
-
-            if (!wcPayload) {
-              if (url.includes('wc:')) {
-                wcPayload = url.substring(url.indexOf('wc:'));
-              } else if (scheme) {
-                wcPayload = 'wc:' + url.split('://')[1];
-              } else {
-                wcPayload = 'wc:' + url.split('://')[1];
-              }
+            // Precise Extraction
+            if (url.includes('uri=')) {
+              wcPayload = url.split('uri=')[1].split('&')[0];
+            } else if (url.includes('wc:')) {
+              wcPayload = url.substring(url.indexOf('wc:'));
+            } else if (scheme) {
+              wcPayload = 'wc:' + url.split('://')[1];
             }
 
+            // Normalization
             let cleanPayload = decodeURIComponent(wcPayload);
             if (cleanPayload.includes('wc:')) {
               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
-            } else {
+            } else if (!cleanPayload.startsWith('wc:')) {
               cleanPayload = 'wc:' + cleanPayload;
             }
-            
-            // 3. Final Redirection Construction (Universal Link + botUrl for returning)
-            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
-            console.log('[Iron-Shield-72] STABLE Redirect:', finalUrl);
 
-            // SAVE the last used bridge for "Poking" later
-            localStorage.setItem('iron_shield_last_bridge', bridge);
+            // 3. Final Redirection (CLEAN - No redirectUrl to prevent hangs)
+            const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}`;
+            console.log('[Iron-Shield-73] Final Clean URL:', finalUrl);
 
+            // Trigger via safest method
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
               tg.openLink(finalUrl);
@@ -91,7 +84,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield] Error:', err);
+          console.error('[Iron-Shield-v73] Error:', err);
         }
         return url;
       };
