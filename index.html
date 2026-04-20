@@ -30,51 +30,56 @@
         if (!url || typeof url !== 'string') return url;
         const lowUrl = url.toLowerCase();
         
-        // 1. Identify the specific wallet bridge
+        // 1. Identify specific bridge and identify if it's a protocol link
         const schemes = Object.keys(bridges);
         const scheme = schemes.find(s => lowUrl.startsWith(s));
-        const isRawWc = lowUrl.startsWith('wc:');
+        const isWc = lowUrl.includes('wc:') || lowUrl.includes('wc%3a');
+        const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http') && !lowUrl.startsWith('tg:') && !lowUrl.startsWith('mailto:');
 
-        // 2. Logic for known wallet schemes OR unknown protocols (The Shield)
-        const isUnknownProtocol = lowUrl.includes('://') && 
-                                !lowUrl.startsWith('http') && 
-                                !lowUrl.startsWith('tg:') && 
-                                !lowUrl.startsWith('mailto:') && 
-                                !lowUrl.startsWith('tel:') && 
-                                !lowUrl.startsWith('data:') && 
-                                !lowUrl.startsWith('blob:');
-
-        if (scheme || isUnknownProtocol || isRawWc) {
-          console.log('[Iron-Shield] Intercepted:', url);
+        if (scheme || isWc || isUnknownProtocol) {
+          console.log('[Iron-Shield] Intercepted Protocol:', url);
           
-          // Determine the target bridge (Default to MetaMask ONLY if we truly don't know the wallet)
           let bridge = bridges[scheme] || bridges['metamask://'];
           
-          // Extract the ACTUAL WalletConnect URI (the wc: part)
-          let wcUri = url;
-          if (url.includes('wc?uri=')) {
-            wcUri = decodeURIComponent(url.split('wc?uri=')[1]);
+          // 2. EXTREMELY PRECISION URI EXTRACTION
+          let wcPayload = '';
+          
+          if (url.includes('uri=')) {
+            // Case: metamask://wc?uri=wc%3A... or similar
+            wcPayload = url.split('uri=')[1].split('&')[0];
+          } else if (url.includes('wc:')) {
+            // Case: raw wc:topic@2...
+            wcPayload = url.substring(url.indexOf('wc:'));
           } else if (scheme) {
-            // Convert wallet-scheme:// to wc: format
-            wcUri = url.replace(new RegExp('^' + scheme.replace('://', ':\\/\\/'), 'i'), 'wc:');
+            // Case: metamask://topic@2... (Rare but possible)
+            wcPayload = 'wc:' + url.replace(new RegExp('^' + scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '');
+          } else {
+            // Fallback for unknown protocols
+            wcPayload = 'wc:' + url.split('://')[1];
           }
 
-          // CLEANUP: Ensure the URI starts with 'wc:' correctly for the bridge
-          if (!wcUri.startsWith('wc:')) wcUri = 'wc:' + wcUri;
+          // 3. CLEANING & RE-NORMALIZING
+          // Decode first to ensure we don't have multiple encodings
+          let cleanPayload = decodeURIComponent(wcPayload);
+          // If it started with wc:wc: or similar, fix it
+          if (cleanPayload.includes('wc:')) {
+            cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
+          } else if (!cleanPayload.startsWith('wc:')) {
+            cleanPayload = 'wc:' + cleanPayload;
+          }
 
-          // Build the final Universal Link
-          const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(wcUri)}&redirectUrl=${encodeURIComponent(botUrl)}`;
+          // 4. FINAL REDIRECTION
+          const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
           
-          console.log('[Iron-Shield] Redirecting to:', finalUrl);
+          console.log('[Iron-Shield] Precise Redirect:', finalUrl);
 
-          // Execute via Telegram WebApp openLink (Requirement for TMA)
           const tg = window.Telegram?.WebApp;
           if (tg && tg.openLink) {
             tg.openLink(finalUrl);
           } else {
             window.open(finalUrl, '_blank');
           }
-          return null; // Stop original execution
+          return null;
         }
         return url;
       };
