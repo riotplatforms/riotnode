@@ -27,9 +27,13 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept standard web, Telegram, or data links
+          // 0. SAFETY: Never intercept system or core assets
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:') || lowUrl.startsWith('mailto:')) {
-            return url;
+            if (lowUrl.includes('wc:')) {
+               // Proceed if it's a deep-link wrapped in a universal link
+            } else {
+               return url;
+            }
           }
 
           // 1. Identify specific bridge
@@ -37,9 +41,8 @@
           const scheme = schemes.find(s => lowUrl.startsWith(s));
           const isRawWc = lowUrl.startsWith('wc:');
 
-          // 2. ONLY intercept if it's a known wallet scheme or a raw wc: link
-          if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v75] Catching Protocol:', url);
+          if (scheme || isRawWc || lowUrl.includes('://')) {
+            console.log('[Iron-Shield-v76] Attempting Handshake:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
@@ -47,36 +50,43 @@
             }
             
             let wcPayload = '';
-            // Precise Extraction
+            // Extraction (Strict v2 Parsing)
             if (url.includes('wc:')) {
               wcPayload = url.substring(url.indexOf('wc:'));
-            } else if (scheme) {
-              wcPayload = 'wc:' + url.split('://')[1];
+              // Remove anything following the WC payload if it was wrapped
+              if (wcPayload.includes('&')) wcPayload = wcPayload.split('&')[0];
+              if (wcPayload.includes('?uri=')) wcPayload = wcPayload.split('?uri=')[1];
             }
 
-            // Normalization to ensure valid WalletConnect v2 format
+            // Clean & Fix Payload
             let cleanPayload = decodeURIComponent(wcPayload);
-            if (cleanPayload.includes('wc:')) {
-              cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
-            } else if (!cleanPayload.startsWith('wc:')) {
+            if (!cleanPayload.includes('wc:')) {
               cleanPayload = 'wc:' + cleanPayload;
             }
+            // Final check to ensure it's a clean "wc:topic@2..."
+            if (cleanPayload.includes('wc:')) {
+              cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
+            }
 
-            // 3. Final Redirection (Simple & Stable Universal Link)
+            // 3. Construct the "Golden Link" (WC Standard Universal Redirect)
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v75] Final Redirect:', finalUrl);
+            console.log('[Iron-Shield-v76] Final Intent URL:', finalUrl);
 
-            // Trigger via Telegram's native safe opener
+            // Save the bridge for Transaction Poking
+            localStorage.setItem('iron_shield_last_bridge', bridge);
+
+            // Execute Redirection
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
-              tg.openLink(finalUrl);
+              // Try to force external app opening
+              tg.openLink(finalUrl, { try_instant_view: false });
             } else {
-              window.open(finalUrl, '_blank');
+              window.location.href = finalUrl;
             }
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v75] Error:', err);
+          console.error('[Iron-Shield-v76] Error:', err);
         }
         return url;
       };
