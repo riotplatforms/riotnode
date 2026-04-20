@@ -31,10 +31,10 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept system links, images, or web-only assets
+          // 0. SAFETY: Never intercept system assets, Telegram internal links or web assets
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
             if (lowUrl.includes('wc:')) {
-               // If it's a web-wrapped WalletConnect link, we process it below
+               // Intercept if it's a WalletConnect link wrapped in an HTTP link
             } else {
                return url;
             }
@@ -45,9 +45,9 @@
           const scheme = schemes.find(s => lowUrl.startsWith(s));
           const isRawWc = lowUrl.includes('wc:');
 
-          // 2. Identify Protocol
+          // 2. Protocol Interception
           if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v77] Connecting:', url);
+            console.log('[Iron-Shield-v78] Intent Trigger:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
@@ -55,13 +55,12 @@
             }
             
             let wcPayload = '';
-            // EXTRACTION: We must preserve EVERY character after 'wc:' as it contains the symKey
+            // EXTRACTION: Preserve the entire URI (Crucial for the symKey)
             if (url.includes('wc:')) {
-              // Extract starting from 'wc:' to the very end of the string
               wcPayload = url.substring(url.indexOf('wc:'));
-              
-              // Remove any outer wrapping artifacts if they exist
               if (wcPayload.includes('?uri=')) wcPayload = wcPayload.split('?uri=')[1];
+            } else if (scheme) {
+              wcPayload = 'wc:' + url.split('://')[1];
             }
 
             // Normalization
@@ -72,23 +71,25 @@
                cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 3. Final Redirection Construction (CLEAN & COMPLETE)
+            // 3. Final Redirection (Intent Pattern)
+            // Using a generic but stable bot-callback parameter
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v77] Final Link:', finalUrl);
+            console.log('[Iron-Shield-v78] Final Redirection:', finalUrl);
 
-            // SAVE for transaction "Poking"
+            // SAVE for Poke
             localStorage.setItem('iron_shield_last_bridge', bridge);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
-              tg.openLink(finalUrl);
+              // try_instant_view: false is the "magic" that forces Telegram to open EXTERNAL apps
+              tg.openLink(finalUrl, { try_instant_view: false });
             } else {
               window.open(finalUrl, '_blank');
             }
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v77] Error:', err);
+          console.error('[Iron-Shield-v78] Error:', err);
         }
         return url;
       };

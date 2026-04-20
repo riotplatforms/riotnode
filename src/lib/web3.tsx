@@ -19,7 +19,7 @@ const metadata = {
     url: 'https://riotnode.riotplatfroms.workers.dev/',
     icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png'],
     redirect: {
-        native: 'https://riotnode.riotplatfroms.workers.dev/?v=success',
+        native: 'https://riotnode.riotplatfroms.workers.dev/', // Fallback to site to keep session alive
         universal: 'https://riotnode.riotplatfroms.workers.dev/'
     }
 }
@@ -29,7 +29,7 @@ export const ethersConfig = defaultConfig({
     rpcUrl: bscMainnet.rpcUrl,
     defaultChainId: bscMainnet.chainId,
     enableEIP6963: true,
-    enableInjected: true, // Restore injected providers for dApp browsers
+    enableInjected: false, // DO NOT use injected (Metamask extension) in TMA - use WC only
     enableCoinbase: false,
 })
 
