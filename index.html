@@ -13,15 +13,15 @@
       const botUrl = siteUrl + '?v=success&connected=true';
       
       const bridges = {
-        'metamask://': 'metamask://wc',
-        'trust://': 'trust://wc',
-        'safepal://': 'safepalwallet://wc',
-        'safepalwallet://': 'safepalwallet://wc',
-        'tp://': 'tpoutside://wc',
-        'tokenpocket://': 'tpoutside://wc',
-        'tpoutside://': 'tpoutside://wc',
-        'binance://': 'bnc://app.binance.com/cedefi/wc',
-        'bnc://': 'bnc://app.binance.com/cedefi/wc',
+        'metamask://': 'https://metamask.app.link/wc',
+        'trust://': 'https://link.trustwallet.com/wc',
+        'safepal://': 'https://link.safepal.io/wc',
+        'safepalwallet://': 'https://link.safepal.io/wc',
+        'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'tokenpocket://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'tpoutside://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'binance://': 'https://app.binance.com/cedefi/wc',
+        'bnc://': 'https://app.binance.com/cedefi/wc',
       };
 
       const handleDeepLink = (url) => {
@@ -43,12 +43,12 @@
           const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http');
 
           if (scheme || isWc || isUnknownProtocol) {
-            console.log('[Iron-Shield-v71] Catching:', url);
+            console.log('[Iron-Shield-v72] Intercepting:', url);
             
-            // Determine the target bridge (Deep Link format)
+            // Determine the target bridge (Universal Link format for stability)
             let bridge = bridges[scheme];
             if (!bridge) {
-              bridge = lowUrl.includes('bitget') ? 'bitkeep://wc' : 'metamask://wc';
+              bridge = lowUrl.includes('bitget') ? bridges['trust://'] : bridges['metamask://'];
             }
             
             let wcPayload = '';
@@ -75,19 +75,18 @@
               cleanPayload = 'wc:' + cleanPayload;
             }
             
-            // 3. Final Redirection Construction (Using RAW Deep Link for speed/stability)
-            // No redirectUrl needed for initial handshake in TMA
-            const finalUrl = `${bridge.includes('?') ? bridge + '&' : bridge + '?'}uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-71] RAW Redirect:', finalUrl);
+            // 3. Final Redirection Construction (Universal Link + botUrl for returning)
+            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
+            console.log('[Iron-Shield-72] STABLE Redirect:', finalUrl);
 
             // SAVE the last used bridge for "Poking" later
-            localStorage.setItem('iron_shield_last_bridge', bridge.split('?')[0]);
+            localStorage.setItem('iron_shield_last_bridge', bridge);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
               tg.openLink(finalUrl);
             } else {
-              window.location.href = finalUrl;
+              window.open(finalUrl, '_blank');
             }
             return null;
           }
