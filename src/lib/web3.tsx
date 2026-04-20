@@ -13,6 +13,10 @@ interface WalletContextType {
     connect: (walletType?: 'metamask' | 'trust' | 'safepal' | 'tp') => Promise<void>;
     disconnect: () => Promise<void>;
     isConnecting: boolean;
+    walletType: 'metamask' | 'trust' | 'safepal' | 'tp' | null;
+    openSelectionModal: () => void;
+    closeSelectionModal: () => void;
+    isModalOpen: boolean;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -28,25 +32,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnected, setIsConnected] = useState(false);
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [walletType, setWalletType] = useState<'metamask' | 'trust' | 'safepal' | 'tp' | null>(
+        (localStorage.getItem('last_wallet_type') as any) || null
+    );
     const [provider, setProvider] = useState<any>(null);
+
+    const openSelectionModal = () => setIsModalOpen(true);
+    const closeSelectionModal = () => setIsModalOpen(false);
 
     // Persist session logic
     useEffect(() => {
         const checkConnection = async () => {
             const saved = localStorage.getItem('wallet_connected');
-            if (saved === 'true') {
-               // Optional: Auto-reconnect logic if needed
+            if (saved === 'true' && !address) {
+               // Optional: Auto-reconnect could be implemented here
             }
         };
         checkConnection();
-    }, []);
+    }, [address]);
 
-    const connect = useCallback(async (walletType: 'metamask' | 'trust' | 'safepal' | 'tp' = 'metamask') => {
+    const connect = useCallback(async (selectedType: 'metamask' | 'trust' | 'safepal' | 'tp' = 'metamask') => {
         if (isConnecting) return;
         setIsConnecting(true);
+        setWalletType(selectedType);
+        localStorage.setItem('last_wallet_type', selectedType);
 
         try {
-            console.log(`[Wallet] Initializing connection for ${walletType}...`);
+            console.log(`[Wallet] Initializing connection for ${selectedType}...`);
             
             const ethereumProvider = await EthereumProvider.init({
                 projectId,
@@ -58,7 +71,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                    name: 'AI MINING BTC',
                    description: 'Secure AI-powered Bitcoin Staking Platform.',
                    url: 'https://riotnode.riotplatfroms.workers.dev/',
-                   icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png']
+                   icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png'],
+                   redirect: {
+                     native: 'https://t.me/aiminingbtc_bot',
+                     universal: 'https://t.me/aiminingbtc_bot'
+                   }
                 }
             });
 
@@ -73,7 +90,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     tp: `https://tokenpocket.pro/tp/link/walletConnect?uri=${encodeURIComponent(uri)}`
                 };
 
-                const finalUrl = bridges[walletType] || bridges.metamask;
+                const finalUrl = bridges[selectedType] || bridges.metamask;
                 
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
@@ -107,6 +124,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         } catch (err) {
             console.error("[Wallet] Connection failed:", err);
+            setWalletType(null);
+            localStorage.removeItem('last_wallet_type');
         } finally {
             setIsConnecting(false);
         }
@@ -114,17 +133,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const disconnect = useCallback(async () => {
         if (provider) {
-            await provider.disconnect();
+            try {
+                await provider.disconnect();
+            } catch (e) {
+                console.error("Disconnect error", e);
+            }
         }
         setAddress(undefined);
         setIsConnected(false);
         setSigner(null);
         setProvider(null);
+        setWalletType(null);
         localStorage.removeItem('wallet_connected');
+        localStorage.removeItem('last_wallet_type');
     }, [provider]);
 
     return (
-        <WalletContext.Provider value={{ address, isConnected, signer, connect, disconnect, isConnecting }}>
+        <WalletContext.Provider value={{ 
+            address, 
+            isConnected, 
+            signer, 
+            connect, 
+            disconnect, 
+            isConnecting, 
+            walletType,
+            openSelectionModal,
+            closeSelectionModal,
+            isModalOpen
+        }}>
             {children}
         </WalletContext.Provider>
     );

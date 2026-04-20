@@ -19,7 +19,7 @@ const getTierRate = (val: number) => {
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { address, isConnected, connect } = useWallet();
+    const { address, isConnected, connect, openSelectionModal } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
     const { showAlert, referrer, tg } = useTelegram();
     const { btcPrice } = usePrice();
@@ -245,8 +245,8 @@ const Dashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                     {!isConnected ? (
                         <button
-                            onClick={() => connect()}
-                            className="bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/20 flex items-center gap-2 shadow-sm transition-all text-[10px] font-bold uppercase tracking-wider"
+                            onClick={() => openSelectionModal()}
+                            className="bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/20 flex items-center gap-2 shadow-sm transition-all text-[10px] font-bold uppercase tracking-wider cursor-pointer"
                         >
                             <span className="material-icons-round text-sm">account_balance_wallet</span>
                             Connect

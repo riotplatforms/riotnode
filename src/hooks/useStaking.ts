@@ -623,8 +623,7 @@ const BSC_RPC = 'https://bsc-dataseed.binance.org/';
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
-    const { address, isConnected, signer } = useWallet();
-    // Initial hook setup
+    const { address, isConnected, signer, walletType } = useWallet();
 
     const getContract = async (withSigner = false) => {
         if (withSigner && signer) {
@@ -641,11 +640,19 @@ export function useStaking() {
     };
 
     const pokeWallet = () => {
-        const bridge = 'https://link.walletconnect.com/wc';
         const tg = (window as any).Telegram?.WebApp;
-        if (tg && tg.openLink) {
-            tg.openLink(bridge, { try_instant_view: false });
-        }
+        if (!tg || !tg.openLink || !walletType) return;
+
+        const pokes = {
+            metamask: 'https://metamask.app.link/',
+            trust: 'https://link.trustwallet.com/',
+            safepal: 'https://link.safepal.io/',
+            tp: 'https://tokenpocket.pro/'
+        };
+
+        const target = pokes[walletType] || pokes.metamask;
+        console.log(`[Poke] Waking up ${walletType} via ${target}`);
+        tg.openLink(target, { try_instant_view: false });
     };
 
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {

@@ -22,7 +22,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect } = useWallet();
+    const { address, isConnected, openSelectionModal } = useWallet();
     const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -282,7 +282,7 @@ const Stake: React.FC = () => {
     const handleBuy = async (id: number | string, priceStr: string) => {
         if (!isConnected || !address) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
-            connect();
+            openSelectionModal();
             return;
         }
 
