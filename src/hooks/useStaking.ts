@@ -701,27 +701,27 @@ export function useStaking() {
 
         if (BigInt(currentAllowance) < BigInt(requiredAllowance)) {
             console.log("[Stake] Requesting Fixed Approval...");
+            
+            // SMART POKE: Trigger 1.5s after starting to allow relay handshake
+            setTimeout(() => pokeWallet(), 1500);
+            
             const txApprove = await usdtContract.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
             console.log("[Stake] Approval TX sent:", txApprove.hash);
-            
-            // POKE WALLET to show the Approval Prompt
-            pokeWallet();
-            
             await txApprove.wait();
             console.log("[Stake] Approval Success");
         }
 
         console.log("[Stake] Initiating Stake TX...");
+        
+        // SMART POKE: Trigger 1.5s after starting
+        setTimeout(() => pokeWallet(), 1500);
+
         // Stake with BNB Fee (0.0003 BNB)
         const tx = await staking.stake(val, referrer, {
             value: parseUnits("0.00031", 18)
         });
 
         console.log("[Stake] Stake TX sent:", tx.hash);
-        
-        // POKE WALLET to show the Stake Prompt
-        pokeWallet();
-        
         const receipt = await tx.wait();
         console.log("[Stake] Stake complete!");
         return receipt;
@@ -769,6 +769,10 @@ export function useStaking() {
         if (!isConnected) throw new Error("Wallet not connected");
         const staking = await getContract(true);
         if (!staking) return;
+        
+        // SMART POKE: Trigger 1.5s after starting
+        setTimeout(() => pokeWallet(), 1500);
+
         const tx = await staking.withdraw(index);
         return await tx.wait();
     };
