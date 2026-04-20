@@ -13,8 +13,9 @@
       const botUrl = siteUrl + '?v=success&connected=true';
       
       const bridges = {
-        'metamask://': 'https://metamask.app.link/wc',
-        'trust://': 'https://link.trustwallet.com/wc',
+        'metamask://': 'https://link.walletconnect.com/wc',
+        'trust://': 'https://link.walletconnect.com/wc',
+        'trustwallet://': 'https://link.walletconnect.com/wc',
         'safepal://': 'https://link.safepal.io/wc',
         'safepalwallet://': 'https://link.safepal.io/wc',
         'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
@@ -32,7 +33,7 @@
           const lowUrl = url.toLowerCase();
           
           // 0. LOOP BREAKER: Never intercept if it's already an official bridge link
-          if (lowUrl.includes('metamask.app.link') || lowUrl.includes('link.trustwallet.com') || lowUrl.includes('link.safepal.io') || lowUrl.includes('tokenpocket.pro') || lowUrl.includes('app.binance.com')) {
+          if (lowUrl.includes('metamask.app.link') || lowUrl.includes('link.trustwallet.com') || lowUrl.includes('link.safepal.io') || lowUrl.includes('tokenpocket.pro') || lowUrl.includes('app.binance.com') || lowUrl.includes('link.walletconnect.com')) {
             return url;
           }
 
@@ -52,11 +53,11 @@
 
           // 3. Protocol Interception
           if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v81] Connecting:', url);
+            console.log('[Iron-Shield-v82] Connecting:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
-              bridge = lowUrl.includes('trust') ? bridges['trust://'] : bridges['metamask://'];
+              bridge = lowUrl.includes('trust') ? bridges['trustwallet://'] : bridges['metamask://'];
             }
             
             let wcPayload = '';
@@ -80,7 +81,7 @@
 
             // 4. Final Redirection (Universal Link ONLY - 0xSafePath)
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v81] Target URL:', finalUrl);
+            console.log('[Iron-Shield-v82] Target URL:', finalUrl);
 
             // SAVE for Poke
             localStorage.setItem('iron_shield_last_bridge', bridge);
@@ -94,7 +95,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v81] Error:', err);
+          console.error('[Iron-Shield-v82] Error:', err);
         }
         return url;
       };
