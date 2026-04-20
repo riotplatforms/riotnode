@@ -29,7 +29,7 @@ export const ethersConfig = defaultConfig({
     rpcUrl: bscMainnet.rpcUrl,
     defaultChainId: bscMainnet.chainId,
     enableEIP6963: true,
-    enableInjected: false, // CRITICAL: Stop waiting for non-existent injected providers in TMA
+    enableInjected: true, // Restore injected providers for dApp browsers
     enableCoinbase: false,
 })
 

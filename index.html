@@ -35,6 +35,13 @@
         const isKnown = knownSchemes.some(s => lowUrl.startsWith(s));
         const isRawWc = lowUrl.startsWith('wc:');
         
+        // --- BYPASS FOR TRUST AND METAMASK ---
+        // As per user request: "don't touch them, keep them as they were"
+        if (lowUrl.startsWith('metamask://') || lowUrl.startsWith('trust://')) {
+          console.log('[Iron-Shield] Bypassing (Native Support):', url);
+          return url; // Return the URL to be handled by the original browser/app mechanisms
+        }
+        
         // 2. Catch-all for any unknown non-http protocol (The "God Shield")
         const isUnknownProtocol = lowUrl.includes('://') && 
                                 !lowUrl.startsWith('http') && 
