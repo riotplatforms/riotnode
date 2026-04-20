@@ -31,7 +31,7 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept system assets, Telegram internal links or web assets
+          // 0. SAFETY: Never intercept system assets or standard Telegram links
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
             if (lowUrl.includes('wc:')) {
                // Intercept if it's a WalletConnect link wrapped in an HTTP link
@@ -47,19 +47,11 @@
 
           // 2. Protocol Interception
           if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v79] Logic Triggered:', url);
+            console.log('[Iron-Shield-v80] Standardizing Connection:', url);
             
             let bridge = bridges[scheme];
-            const isBig2 = lowUrl.includes('metamask') || lowUrl.includes('trust');
-            
-            // SPECIAL CASE: For MetaMask and Trust, switch from Universal Link to Direct Scheme
-            // This is because their Universal Links frequently 'hang' in Telegram.
-            if (isBig2) {
-               bridge = lowUrl.includes('metamask') ? 'metamask://wc' : 'trust://wc';
-            }
-            
             if (!bridge) {
-              bridge = lowUrl.includes('trust') ? 'trust://wc' : 'metamask://wc';
+              bridge = lowUrl.includes('trust') ? bridges['trust://'] : bridges['metamask://'];
             }
             
             let wcPayload = '';
@@ -81,16 +73,15 @@
                cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 3. Final Redirection
+            // 3. Final Redirection (Universal Link ONLY - Proven by SafePal)
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v79] Target:', finalUrl);
+            console.log('[Iron-Shield-v80] Target URL:', finalUrl);
 
             // SAVE for Poke
-            localStorage.setItem('iron_shield_last_bridge', bridge.includes('://') ? bridge.split('://')[0] + '://' : bridge);
+            localStorage.setItem('iron_shield_last_bridge', bridge);
 
-            const tg = window.Telegram?.WebApp;
+            const tg = (window as any).Telegram?.WebApp;
             if (tg && tg.openLink) {
-              // Forced external app call
               tg.openLink(finalUrl, { try_instant_view: false });
             } else {
               window.open(finalUrl, '_blank');
@@ -98,7 +89,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v79] Error:', err);
+          console.error('[Iron-Shield-v80] Error:', err);
         }
         return url;
       };
