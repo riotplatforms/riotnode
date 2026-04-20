@@ -24,36 +24,49 @@
         'bnc://': 'https://app.binance.com/cedefi/wc',
       };
 
+      const bridges = {
+        'metamask://': 'https://metamask.app.link/wc',
+        'trust://': 'https://link.trustwallet.com/wc',
+        'safepal://': 'https://link.safepal.io/wc',
+        'safepalwallet://': 'https://link.safepal.io/wc',
+        'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'tokenpocket://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'tpoutside://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'binance://': 'https://app.binance.com/cedefi/wc',
+        'bnc://': 'https://app.binance.com/cedefi/wc',
+      };
+
       const handleDeepLink = (url) => {
         try {
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept standard web assets or Telegram system links
+          // 0. SAFETY: Never intercept system links
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('mailto:') || lowUrl.startsWith('tel:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
             if (lowUrl.includes('wc:')) {
-               // If it's a web-wrapped WC link, it might still need processing
+               // Continue to process if it's a wrapped WalletConnect link
             } else {
                return url;
             }
           }
 
-          // 1. Identify specific bridge (Universal Links for stability)
+          // 1. Identify specific bridge
           const schemes = Object.keys(bridges);
           const scheme = schemes.find(s => lowUrl.startsWith(s));
           const isWc = lowUrl.includes('wc:');
 
           // 2. Identify Protocol
           if (scheme || isWc || (lowUrl.includes('://') && !lowUrl.startsWith('http'))) {
-            console.log('[Iron-Shield-v73] Intercept:', url);
+            console.log('[Iron-Shield-v74] Intercepting:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
+              // ALL OTHER WALLETS: Fallback to the two most stable providers
               bridge = lowUrl.includes('trust') ? bridges['trust://'] : bridges['metamask://'];
             }
             
             let wcPayload = '';
-            // Precise Extraction
+            // Extraction (Manual Split to ensure no double-encoding from URL parser)
             if (url.includes('uri=')) {
               wcPayload = url.split('uri=')[1].split('&')[0];
             } else if (url.includes('wc:')) {
@@ -62,7 +75,7 @@
               wcPayload = 'wc:' + url.split('://')[1];
             }
 
-            // Normalization
+            // Clean Payload: Must be exactly "wc:topic@2..."
             let cleanPayload = decodeURIComponent(wcPayload);
             if (cleanPayload.includes('wc:')) {
               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
@@ -70,11 +83,14 @@
               cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 3. Final Redirection (CLEAN - No redirectUrl to prevent hangs)
-            const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-73] Final Clean URL:', finalUrl);
+            // 3. Final Redirection Construction (SIMPLE - PROVEN)
+            // Note: We use the bridge path as is, no extra params like redirectUrl to ensure prompt triggers.
+            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
+            console.log('[Iron-Shield-v74] Final Stable URL:', finalUrl);
 
-            // Trigger via safest method
+            // SAVE for Poke
+            localStorage.setItem('iron_shield_last_bridge', bridge);
+
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
               tg.openLink(finalUrl);
@@ -84,7 +100,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v73] Error:', err);
+          console.error('[Iron-Shield-v74] Critical Error:', err);
         }
         return url;
       };
