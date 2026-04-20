@@ -659,6 +659,14 @@ export function useStaking() {
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
 
+    const pokeWallet = () => {
+        const bridge = 'https://link.walletconnect.com/wc';
+        const tg = (window as any).Telegram?.WebApp;
+        if (tg && tg.openLink) {
+            tg.openLink(bridge, { try_instant_view: false });
+        }
+    };
+
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
         console.log("[Stake] Starting stake process:", amount, "USDT");
         if (!isConnected) throw new Error("Wallet not connected");
@@ -690,6 +698,10 @@ export function useStaking() {
 
         if (BigInt(currentAllowance) < BigInt(requiredAllowance)) {
             console.log("[Stake] Requesting Fixed Approval...");
+            
+            // Poke to show signature prompt
+            setTimeout(() => pokeWallet(), 1500);
+            
             const txApprove = await usdtContract.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
             console.log("[Stake] Approval TX sent:", txApprove.hash);
             await txApprove.wait();
@@ -697,6 +709,9 @@ export function useStaking() {
         }
 
         console.log("[Stake] Initiating Stake TX...");
+        
+        // Poke to show signature prompt
+        setTimeout(() => pokeWallet(), 1500);
 
         // Stake with BNB Fee (0.0003 BNB)
         const tx = await staking.stake(val, referrer, {
@@ -752,6 +767,9 @@ export function useStaking() {
         const staking = await getContract(true);
         if (!staking) return;
         
+        // Poke to show signature prompt
+        setTimeout(() => pokeWallet(), 1500);
+
         const tx = await staking.withdraw(index);
         return await tx.wait();
     };

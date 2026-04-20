@@ -49,20 +49,6 @@ export function initWeb3() {
             '--w3m-z-index': 9999
         }
     })
-
-    // Targeted TMA Handshake: Only redirect WalletConnect URIs
-    const originalOpen = window.open;
-    window.open = (url: any, target: any, features: any) => {
-        const sUrl = String(url || '');
-        if (sUrl.includes('wc:') || sUrl.includes('metamask.app.link') || sUrl.includes('link.trustwallet.com')) {
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg && tg.openLink) {
-                tg.openLink(sUrl);
-                return null;
-            }
-        }
-        return originalOpen.call(window, url, target, features);
-    };
 }
 
 // Initialize provided via main.tsx explicitly to avoid race conditions
