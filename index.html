@@ -13,15 +13,15 @@
       const botUrl = siteUrl + '?v=success&connected=true';
       
       const bridges = {
-        'metamask://': 'https://metamask.app.link',
-        'trust://': 'https://link.trustwallet.com',
-        'safepal://': 'https://link.safepal.io',
-        'safepalwallet://': 'https://link.safepal.io',
-        'tp://': 'https://tokenpocket.pro',
-        'tokenpocket://': 'https://tokenpocket.pro',
-        'tpoutside://': 'https://tokenpocket.pro',
-        'binance://': 'https://app.binance.com/cedefi',
-        'bnc://': 'https://app.binance.com/cedefi',
+        'metamask://': 'https://metamask.app.link/wc',
+        'trust://': 'https://link.trustwallet.com/wc',
+        'safepal://': 'https://link.safepal.io/wc',
+        'safepalwallet://': 'https://link.safepal.io/wc',
+        'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'tokenpocket://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'tpoutside://': 'https://tokenpocket.pro/tp/link/walletConnect',
+        'binance://': 'https://app.binance.com/cedefi/wc',
+        'bnc://': 'https://app.binance.com/cedefi/wc',
       };
 
       const handleDeepLink = (url) => {
@@ -35,7 +35,7 @@
           }
 
           // 1. Identify specific bridge
-          const schemes = ['metamask://', 'trust://', 'safepal://', 'tp://', 'binance://', 'bnc://', 'tokenpocket://', 'tpoutside://', 'safepalwallet://'];
+          const schemes = Object.keys(bridges);
           const scheme = schemes.find(s => lowUrl.startsWith(s));
           const isWc = lowUrl.startsWith('wc:');
 
@@ -45,14 +45,11 @@
           if (scheme || isWc || isUnknownProtocol) {
             console.log('[Iron-Shield] Catching:', url);
             
-            // Determine the target bridge
-            // BIG 5 POLICY: Use their own app bridge. 
+            // BIG 5 POLICY: Use their own app bridge with precise path. 
             // OTHERS POLICY: Redirect to MetaMask or Trust for stability.
             let bridge = bridges[scheme];
             if (!bridge) {
-              // Fallback for OKX, Bitget, or any other unknown wallets
               bridge = lowUrl.includes('bitget') ? bridges['trust://'] : bridges['metamask://'];
-              console.log('[Iron-Shield] Redirecting Other Wallet to Primary Bridge:', bridge);
             }
             
             let wcPayload = '';
@@ -80,9 +77,9 @@
             }
             
             // 3. Final Redirection Construction
-            // We append /wc to all to ensure app triggers (v69 standard)
-            const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
-            console.log('[Iron-Shield] Shield Redirection:', finalUrl);
+            // Bridges now contain the full path (e.g. /wc or /tp/link/walletConnect)
+            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
+            console.log('[Iron-Shield] Shield v70 Redirection:', finalUrl);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
