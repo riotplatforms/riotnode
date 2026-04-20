@@ -149,13 +149,13 @@ const Settings: React.FC = () => {
                     </div>
                 )}
 
-                {/* Logout */}
+                {/* Disconnect Wallet */}
                 <button 
                     onClick={() => disconnect()}
-                    className="w-full py-3.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 active:bg-red-500/20 font-semibold transition-all flex items-center justify-center gap-2 mt-auto mb-4 cursor-pointer"
+                    className="w-full py-3.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 active:bg-red-500/20 font-semibold transition-all flex items-center justify-center gap-2 mt-auto mb-4 cursor-pointer active:scale-95"
                 >
                     <span className="material-icons-round text-[20px]">logout</span>
-                    Log Out
+                    Disconnect Wallet
                 </button>
 
                 {/* Version */}

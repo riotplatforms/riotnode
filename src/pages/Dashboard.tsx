@@ -254,16 +254,19 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="flex items-center gap-2">
                              <button
-                                onClick={() => connect()}
-                                className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold"
+                                onClick={() => connect()} // This will open account view if already connected
+                                className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold active:scale-95"
                             >
                                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                                 {address?.slice(0, 4)}...{address?.slice(-4)}
                             </button>
                             <button
-                                onClick={() => disconnect()}
-                                className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500/20 active:scale-95 transition-all cursor-pointer"
-                                title="Disconnect Wallet"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    disconnect();
+                                }}
+                                className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500/20 active:scale-90 transition-all cursor-pointer"
+                                title="Log Out"
                             >
                                 <span className="material-icons-round text-sm">logout</span>
                             </button>

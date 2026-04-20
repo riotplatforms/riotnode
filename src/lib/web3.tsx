@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { createAppKit, useAppKitProvider, useAppKitAccount, useAppKit } from '@reown/appkit/react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createAppKit, useAppKitProvider, useAppKitAccount, useAppKit, useDisconnect } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
@@ -10,7 +10,7 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 // 2. Set networks
 const networks: [any, ...any[]] = [bsc];
 
-// 3. Create a metadata object - optional
+// 3. Create a metadata object
 const metadata = {
   name: 'AI MINING BTC',
   description: 'Secure AI-powered Bitcoin Staking Platform.',
@@ -60,39 +60,58 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { address, isConnected } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
     const { open } = useAppKit();
+    const { disconnect: walletDisconnect } = useDisconnect();
+    
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
 
     // Sync signer whenever provider changes
-    useEffect(() => {
-        const syncSigner = async () => {
-            if (isConnected && walletProvider) {
-                try {
-                    const provider = walletProvider as any;
-                    const browserProvider = new BrowserProvider(provider);
-                    const web3Signer = await browserProvider.getSigner();
-                    setSigner(web3Signer);
-                } catch (err) {
-                    console.error("[Wallet] Signer sync failed:", err);
-                    setSigner(null);
-                }
-            } else {
+    const syncSigner = useCallback(async () => {
+        if (isConnected && walletProvider) {
+            try {
+                const provider = walletProvider as any;
+                const browserProvider = new BrowserProvider(provider);
+                const web3Signer = await browserProvider.getSigner();
+                setSigner(web3Signer);
+                console.log("[Wallet] State Synced:", address);
+            } catch (err) {
+                console.error("[Wallet] Signer sync failed:", err);
                 setSigner(null);
             }
-        };
+        } else {
+            setSigner(null);
+        }
+    }, [isConnected, walletProvider, address]);
+
+    useEffect(() => {
         syncSigner();
-    }, [isConnected, walletProvider]);
+    }, [syncSigner]);
+
+    // SMART SYNC: Force check when user returns to Telegram
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log("[Wallet] User returned to app, checking sync...");
+                syncSigner();
+            }
+        };
+
+        window.addEventListener('focus', handleVisibilityChange);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
+        return () => {
+            window.removeEventListener('focus', handleVisibilityChange);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [syncSigner]);
 
     // Global listener for deep link bridging in TMA
     useEffect(() => {
         if (!walletProvider) return;
-
         const provider = walletProvider as any;
         
-        // Listen for display_uri to bridge to Telegram
         if (provider && typeof provider.on === 'function') {
             provider.on("display_uri", (uri: string) => {
-                console.log("[AppKit TMA Bridge] Intercepted URI:", uri);
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
                     const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
@@ -115,8 +134,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const disconnect = async () => {
         try {
-            // AppKit handles internal disconnect, but we can trigger it
-            await open({ view: 'Account' }); // Shows account view where disconnect is available
+            await walletDisconnect();
+            console.log("[Wallet] Disconnected and session cleared.");
         } catch (err) {
             console.error("[Wallet] Disconnect failed:", err);
         }
