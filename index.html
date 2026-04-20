@@ -31,7 +31,12 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept system assets or standard Telegram links
+          // 0. LOOP BREAKER: Never intercept if it's already an official bridge link
+          if (lowUrl.includes('metamask.app.link') || lowUrl.includes('link.trustwallet.com') || lowUrl.includes('link.safepal.io') || lowUrl.includes('tokenpocket.pro') || lowUrl.includes('app.binance.com')) {
+            return url;
+          }
+
+          // 1. SAFETY: Never intercept system assets or standard Telegram links
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
             if (lowUrl.includes('wc:')) {
                // Intercept if it's a WalletConnect link wrapped in an HTTP link
@@ -40,14 +45,14 @@
             }
           }
 
-          // 1. Identify specific bridge
+          // 2. Identify specific bridge
           const schemes = Object.keys(bridges);
           const scheme = schemes.find(s => lowUrl.startsWith(s));
           const isRawWc = lowUrl.includes('wc:');
 
-          // 2. Protocol Interception
+          // 3. Protocol Interception
           if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v80] Standardizing Connection:', url);
+            console.log('[Iron-Shield-v81] Connecting:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
@@ -73,9 +78,9 @@
                cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 3. Final Redirection (Universal Link ONLY - Proven by SafePal)
+            // 4. Final Redirection (Universal Link ONLY - 0xSafePath)
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v80] Target URL:', finalUrl);
+            console.log('[Iron-Shield-v81] Target URL:', finalUrl);
 
             // SAVE for Poke
             localStorage.setItem('iron_shield_last_bridge', bridge);
@@ -89,7 +94,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v80] Error:', err);
+          console.error('[Iron-Shield-v81] Error:', err);
         }
         return url;
       };
