@@ -47,18 +47,28 @@
 
           // 2. Protocol Interception
           if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v78] Intent Trigger:', url);
+            console.log('[Iron-Shield-v79] Logic Triggered:', url);
             
             let bridge = bridges[scheme];
+            const isBig2 = lowUrl.includes('metamask') || lowUrl.includes('trust');
+            
+            // SPECIAL CASE: For MetaMask and Trust, switch from Universal Link to Direct Scheme
+            // This is because their Universal Links frequently 'hang' in Telegram.
+            if (isBig2) {
+               bridge = lowUrl.includes('metamask') ? 'metamask://wc' : 'trust://wc';
+            }
+            
             if (!bridge) {
-              bridge = lowUrl.includes('trust') ? bridges['trust://'] : bridges['metamask://'];
+              bridge = lowUrl.includes('trust') ? 'trust://wc' : 'metamask://wc';
             }
             
             let wcPayload = '';
-            // EXTRACTION: Preserve the entire URI (Crucial for the symKey)
+            // EXTRACTION: Preserve the entire URI (symKey is vital!)
             if (url.includes('wc:')) {
               wcPayload = url.substring(url.indexOf('wc:'));
               if (wcPayload.includes('?uri=')) wcPayload = wcPayload.split('?uri=')[1];
+              // Ensure we don't carry over extraneous wrapper params
+              if (wcPayload.includes('&redirectUrl=')) wcPayload = wcPayload.split('&redirectUrl=')[0];
             } else if (scheme) {
               wcPayload = 'wc:' + url.split('://')[1];
             }
@@ -71,17 +81,16 @@
                cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 3. Final Redirection (Intent Pattern)
-            // Using a generic but stable bot-callback parameter
+            // 3. Final Redirection
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v78] Final Redirection:', finalUrl);
+            console.log('[Iron-Shield-v79] Target:', finalUrl);
 
             // SAVE for Poke
-            localStorage.setItem('iron_shield_last_bridge', bridge);
+            localStorage.setItem('iron_shield_last_bridge', bridge.includes('://') ? bridge.split('://')[0] + '://' : bridge);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
-              // try_instant_view: false is the "magic" that forces Telegram to open EXTERNAL apps
+              // Forced external app call
               tg.openLink(finalUrl, { try_instant_view: false });
             } else {
               window.open(finalUrl, '_blank');
@@ -89,7 +98,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v78] Error:', err);
+          console.error('[Iron-Shield-v79] Error:', err);
         }
         return url;
       };
