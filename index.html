@@ -20,6 +20,10 @@
         'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
         'tokenpocket://': 'https://tokenpocket.pro/tp/link/walletConnect',
         'binance://': 'https://app.binance.com/cedefi/wc',
+        'bnc://': 'https://app.binance.com/cedefi/wc',
+        'okx://': 'https://www.okx.com/download',
+        'bitkeep://': 'https://bitkeep.com/wc',
+        'bitget://': 'https://bitkeep.com/wc',
       };
 
       const handleDeepLink = (url) => {
@@ -27,10 +31,10 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept system or core assets
-          if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:') || lowUrl.startsWith('mailto:')) {
+          // 0. SAFETY: Never intercept system links, images, or web-only assets
+          if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
             if (lowUrl.includes('wc:')) {
-               // Proceed if it's a deep-link wrapped in a universal link
+               // If it's a web-wrapped WalletConnect link, we process it below
             } else {
                return url;
             }
@@ -39,10 +43,11 @@
           // 1. Identify specific bridge
           const schemes = Object.keys(bridges);
           const scheme = schemes.find(s => lowUrl.startsWith(s));
-          const isRawWc = lowUrl.startsWith('wc:');
+          const isRawWc = lowUrl.includes('wc:');
 
-          if (scheme || isRawWc || lowUrl.includes('://')) {
-            console.log('[Iron-Shield-v76] Attempting Handshake:', url);
+          // 2. Identify Protocol
+          if (scheme || isRawWc) {
+            console.log('[Iron-Shield-v77] Connecting:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
@@ -50,43 +55,40 @@
             }
             
             let wcPayload = '';
-            // Extraction (Strict v2 Parsing)
+            // EXTRACTION: We must preserve EVERY character after 'wc:' as it contains the symKey
             if (url.includes('wc:')) {
+              // Extract starting from 'wc:' to the very end of the string
               wcPayload = url.substring(url.indexOf('wc:'));
-              // Remove anything following the WC payload if it was wrapped
-              if (wcPayload.includes('&')) wcPayload = wcPayload.split('&')[0];
+              
+              // Remove any outer wrapping artifacts if they exist
               if (wcPayload.includes('?uri=')) wcPayload = wcPayload.split('?uri=')[1];
             }
 
-            // Clean & Fix Payload
+            // Normalization
             let cleanPayload = decodeURIComponent(wcPayload);
-            if (!cleanPayload.includes('wc:')) {
-              cleanPayload = 'wc:' + cleanPayload;
-            }
-            // Final check to ensure it's a clean "wc:topic@2..."
             if (cleanPayload.includes('wc:')) {
-              cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
+               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
+            } else if (!cleanPayload.startsWith('wc:')) {
+               cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 3. Construct the "Golden Link" (WC Standard Universal Redirect)
+            // 3. Final Redirection Construction (CLEAN & COMPLETE)
             const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v76] Final Intent URL:', finalUrl);
+            console.log('[Iron-Shield-v77] Final Link:', finalUrl);
 
-            // Save the bridge for Transaction Poking
+            // SAVE for transaction "Poking"
             localStorage.setItem('iron_shield_last_bridge', bridge);
 
-            // Execute Redirection
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
-              // Try to force external app opening
-              tg.openLink(finalUrl, { try_instant_view: false });
+              tg.openLink(finalUrl);
             } else {
-              window.location.href = finalUrl;
+              window.open(finalUrl, '_blank');
             }
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v76] Error:', err);
+          console.error('[Iron-Shield-v77] Error:', err);
         }
         return url;
       };
