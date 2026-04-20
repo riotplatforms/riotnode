@@ -31,44 +31,55 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. SAFETY: Never intercept standard web links or Telegram links
+          // 0. SAFETY: Never intercept standard web links
           if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('mailto:') || lowUrl.startsWith('tel:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
             return url;
           }
 
-          // 1. Identify specific bridges for wallet protocols
+          // 1. Identify specific bridge
           const schemes = Object.keys(bridges);
           const scheme = schemes.find(s => lowUrl.startsWith(s));
-          const isWc = lowUrl.startsWith('wc:'); // ONLY at the start
+          const isWc = lowUrl.startsWith('wc:');
 
-          // 2. Identify if it's a non-http procedure calling for interception
-          const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http');
-
-          if (scheme || isWc || isUnknownProtocol) {
-            console.log('[Iron-Shield] Catching Protocol:', url);
+          // 2. Identify and Process Protocol
+          if (scheme || isWc || (lowUrl.includes('://') && !lowUrl.startsWith('http'))) {
+            console.log('[Iron-Shield] Catching:', url);
             
             let bridge = bridges[scheme] || bridges['metamask://'];
             let wcPayload = '';
-            
-            if (url.includes('uri=')) {
-              wcPayload = url.split('uri=')[1].split('&')[0];
-            } else if (url.includes('wc:')) {
-              wcPayload = url.substring(url.indexOf('wc:'));
-            } else if (scheme) {
-              wcPayload = 'wc:' + url.replace(new RegExp('^' + scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '');
-            } else {
-              wcPayload = 'wc:' + url.split('://')[1];
+
+            // Use URL parser for reliability if it looks like a full URL
+            try {
+              const parseUrl = url.includes('://') ? url : 'https://x.y/' + url;
+              const u = new URL(parseUrl);
+              wcPayload = u.searchParams.get('uri') || u.searchParams.get('wc') || '';
+            } catch (e) {}
+
+            // Fallback to substring extraction if URL parser didn't find 'uri'
+            if (!wcPayload) {
+              if (url.includes('wc:')) {
+                wcPayload = url.substring(url.indexOf('wc:'));
+              } else if (scheme) {
+                wcPayload = 'wc:' + url.split('://')[1];
+              } else {
+                wcPayload = 'wc:' + url.split('://')[1];
+              }
             }
 
+            // Normalize payload: Ensure it starts with 'wc:' and only one 'wc:'
             let cleanPayload = decodeURIComponent(wcPayload);
             if (cleanPayload.includes('wc:')) {
               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
-            } else if (!cleanPayload.startsWith('wc:')) {
+            } else {
               cleanPayload = 'wc:' + cleanPayload;
             }
+            // Remove any trailing parameters that aren't part of the WC topic
+            cleanPayload = cleanPayload.split('&')[0];
 
+            // 3. Final Redirection Construction
+            // Note: We use the most stable bridge format /wc?uri=
             const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
-            console.log('[Iron-Shield] Redirecting:', finalUrl);
+            console.log('[Iron-Shield] Redirecting to:', finalUrl);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
@@ -76,10 +87,10 @@
             } else {
               window.open(finalUrl, '_blank');
             }
-            return null; // Intercepted
+            return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield] Safety Guard Triggered:', err);
+          console.error('[Iron-Shield] Error:', err);
         }
         return url;
       };
