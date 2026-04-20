@@ -27,59 +27,59 @@
       };
 
       const handleDeepLink = (url) => {
-        if (!url || typeof url !== 'string') return url;
-        const lowUrl = url.toLowerCase();
-        
-        // 1. Identify specific bridge and identify if it's a protocol link
-        const schemes = Object.keys(bridges);
-        const scheme = schemes.find(s => lowUrl.startsWith(s));
-        const isWc = lowUrl.includes('wc:') || lowUrl.includes('wc%3a');
-        const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http') && !lowUrl.startsWith('tg:') && !lowUrl.startsWith('mailto:');
-
-        if (scheme || isWc || isUnknownProtocol) {
-          console.log('[Iron-Shield] Intercepted Protocol:', url);
+        try {
+          if (!url || typeof url !== 'string') return url;
+          const lowUrl = url.toLowerCase();
           
-          let bridge = bridges[scheme] || bridges['metamask://'];
-          
-          // 2. EXTREMELY PRECISION URI EXTRACTION
-          let wcPayload = '';
-          
-          if (url.includes('uri=')) {
-            // Case: metamask://wc?uri=wc%3A... or similar
-            wcPayload = url.split('uri=')[1].split('&')[0];
-          } else if (url.includes('wc:')) {
-            // Case: raw wc:topic@2...
-            wcPayload = url.substring(url.indexOf('wc:'));
-          } else if (scheme) {
-            // Case: metamask://topic@2... (Rare but possible)
-            wcPayload = 'wc:' + url.replace(new RegExp('^' + scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '');
-          } else {
-            // Fallback for unknown protocols
-            wcPayload = 'wc:' + url.split('://')[1];
+          // 0. SAFETY: Never intercept standard web links or Telegram links
+          if (lowUrl.startsWith('http') || lowUrl.startsWith('tg:') || lowUrl.startsWith('mailto:') || lowUrl.startsWith('tel:') || lowUrl.startsWith('data:') || lowUrl.startsWith('blob:')) {
+            return url;
           }
 
-          // 3. CLEANING & RE-NORMALIZING
-          // Decode first to ensure we don't have multiple encodings
-          let cleanPayload = decodeURIComponent(wcPayload);
-          // If it started with wc:wc: or similar, fix it
-          if (cleanPayload.includes('wc:')) {
-            cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
-          } else if (!cleanPayload.startsWith('wc:')) {
-            cleanPayload = 'wc:' + cleanPayload;
-          }
+          // 1. Identify specific bridges for wallet protocols
+          const schemes = Object.keys(bridges);
+          const scheme = schemes.find(s => lowUrl.startsWith(s));
+          const isWc = lowUrl.startsWith('wc:'); // ONLY at the start
 
-          // 4. FINAL REDIRECTION
-          const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
-          
-          console.log('[Iron-Shield] Precise Redirect:', finalUrl);
+          // 2. Identify if it's a non-http procedure calling for interception
+          const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http');
 
-          const tg = window.Telegram?.WebApp;
-          if (tg && tg.openLink) {
-            tg.openLink(finalUrl);
-          } else {
-            window.open(finalUrl, '_blank');
+          if (scheme || isWc || isUnknownProtocol) {
+            console.log('[Iron-Shield] Catching Protocol:', url);
+            
+            let bridge = bridges[scheme] || bridges['metamask://'];
+            let wcPayload = '';
+            
+            if (url.includes('uri=')) {
+              wcPayload = url.split('uri=')[1].split('&')[0];
+            } else if (url.includes('wc:')) {
+              wcPayload = url.substring(url.indexOf('wc:'));
+            } else if (scheme) {
+              wcPayload = 'wc:' + url.replace(new RegExp('^' + scheme.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), '');
+            } else {
+              wcPayload = 'wc:' + url.split('://')[1];
+            }
+
+            let cleanPayload = decodeURIComponent(wcPayload);
+            if (cleanPayload.includes('wc:')) {
+              cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
+            } else if (!cleanPayload.startsWith('wc:')) {
+              cleanPayload = 'wc:' + cleanPayload;
+            }
+
+            const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
+            console.log('[Iron-Shield] Redirecting:', finalUrl);
+
+            const tg = window.Telegram?.WebApp;
+            if (tg && tg.openLink) {
+              tg.openLink(finalUrl);
+            } else {
+              window.open(finalUrl, '_blank');
+            }
+            return null; // Intercepted
           }
-          return null;
+        } catch (err) {
+          console.error('[Iron-Shield] Safety Guard Triggered:', err);
         }
         return url;
       };
