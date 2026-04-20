@@ -32,8 +32,8 @@
           if (!url || typeof url !== 'string') return url;
           const lowUrl = url.toLowerCase();
           
-          // 0. LOOP BREAKER: Never intercept if it's already an official bridge link
-          if (lowUrl.includes('metamask.app.link') || lowUrl.includes('link.trustwallet.com') || lowUrl.includes('link.safepal.io') || lowUrl.includes('tokenpocket.pro') || lowUrl.includes('app.binance.com') || lowUrl.includes('link.walletconnect.com')) {
+          // 0. FLAG-BASED LOOP BREAKER: Never intercept if it's already processed by us
+          if (lowUrl.includes('tma_shield=true')) {
             return url;
           }
 
@@ -53,7 +53,7 @@
 
           // 3. Protocol Interception
           if (scheme || isRawWc) {
-            console.log('[Iron-Shield-v82] Connecting:', url);
+            console.log('[Iron-Shield-v83] Standardizing:', url);
             
             let bridge = bridges[scheme];
             if (!bridge) {
@@ -79,9 +79,9 @@
                cleanPayload = 'wc:' + cleanPayload;
             }
 
-            // 4. Final Redirection (Universal Link ONLY - 0xSafePath)
-            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}`;
-            console.log('[Iron-Shield-v82] Target URL:', finalUrl);
+            // 4. Final Redirection (Universal Link + Safe Tag)
+            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}&tma_shield=true`;
+            console.log('[Iron-Shield-v83] Redirecting to:', finalUrl);
 
             // SAVE for Poke
             localStorage.setItem('iron_shield_last_bridge', bridge);
@@ -95,7 +95,7 @@
             return null;
           }
         } catch (err) {
-          console.error('[Iron-Shield-v82] Error:', err);
+          console.error('[Iron-Shield-v83] Error:', err);
         }
         return url;
       };
