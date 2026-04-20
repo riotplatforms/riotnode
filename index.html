@@ -30,19 +30,12 @@
         if (!url || typeof url !== 'string') return url;
         const lowUrl = url.toLowerCase();
         
-        // 1. Check if it's a known wallet scheme or raw wc: link
-        const knownSchemes = Object.keys(bridges);
-        const isKnown = knownSchemes.some(s => lowUrl.startsWith(s));
+        // 1. Identify the specific wallet bridge
+        const schemes = Object.keys(bridges);
+        const scheme = schemes.find(s => lowUrl.startsWith(s));
         const isRawWc = lowUrl.startsWith('wc:');
-        
-        // --- BYPASS FOR TRUST AND METAMASK ---
-        // As per user request: "don't touch them, keep them as they were"
-        if (lowUrl.startsWith('metamask://') || lowUrl.startsWith('trust://')) {
-          console.log('[Iron-Shield] Bypassing (Native Support):', url);
-          return url; // Return the URL to be handled by the original browser/app mechanisms
-        }
-        
-        // 2. Catch-all for any unknown non-http protocol (The "God Shield")
+
+        // 2. Logic for known wallet schemes OR unknown protocols (The Shield)
         const isUnknownProtocol = lowUrl.includes('://') && 
                                 !lowUrl.startsWith('http') && 
                                 !lowUrl.startsWith('tg:') && 
@@ -51,43 +44,37 @@
                                 !lowUrl.startsWith('data:') && 
                                 !lowUrl.startsWith('blob:');
 
-        if (isKnown || isRawWc || isUnknownProtocol) {
+        if (scheme || isUnknownProtocol || isRawWc) {
           console.log('[Iron-Shield] Intercepted:', url);
-          let finalUrl = url;
           
-          // Determine the target bridge
-          let bridge = bridges['metamask://']; // Default fallback
-          for (const [scheme, b] of Object.entries(bridges)) {
-            if (lowUrl.startsWith(scheme)) {
-              bridge = b;
-              break;
-            }
+          // Determine the target bridge (Default to MetaMask ONLY if we truly don't know the wallet)
+          let bridge = bridges[scheme] || bridges['metamask://'];
+          
+          // Extract the ACTUAL WalletConnect URI (the wc: part)
+          let wcUri = url;
+          if (url.includes('wc?uri=')) {
+            wcUri = decodeURIComponent(url.split('wc?uri=')[1]);
+          } else if (scheme) {
+            // Convert wallet-scheme:// to wc: format
+            wcUri = url.replace(new RegExp('^' + scheme.replace('://', ':\\/\\/'), 'i'), 'wc:');
           }
 
-          // Extract the WalletConnect URI part
-          const wcPart = url.includes('wc:') ? url.substring(url.indexOf('wc:')) : url;
-          // Ensure we don't have double encoding issues
-          const cleanWc = decodeURIComponent(decodeURIComponent(wcPart));
-          const encodedWc = encodeURIComponent(cleanWc);
+          // CLEANUP: Ensure the URI starts with 'wc:' correctly for the bridge
+          if (!wcUri.startsWith('wc:')) wcUri = 'wc:' + wcUri;
 
-          // Construct the final Universal Link
-          finalUrl = `${bridge}/wc?uri=${encodedWc}&redirectUrl=${encodeURIComponent(botUrl)}`;
+          // Build the final Universal Link
+          const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(wcUri)}&redirectUrl=${encodeURIComponent(botUrl)}`;
           
-          if (isRawWc && !isKnown) {
-             // If it's just wc:, we use MetaMask bridge as fallback
-             finalUrl = `https://metamask.app.link/wc?uri=${encodedWc}&redirectUrl=${encodeURIComponent(botUrl)}`;
-          }
-
           console.log('[Iron-Shield] Redirecting to:', finalUrl);
 
-          // Execute redirection via Telegram.WebApp.openLink (Mandatory for TMA)
+          // Execute via Telegram WebApp openLink (Requirement for TMA)
           const tg = window.Telegram?.WebApp;
           if (tg && tg.openLink) {
             tg.openLink(finalUrl);
           } else {
             window.open(finalUrl, '_blank');
           }
-          return null; // Successfully intercepted
+          return null; // Stop original execution
         }
         return url;
       };
