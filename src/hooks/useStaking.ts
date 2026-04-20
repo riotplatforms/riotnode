@@ -659,6 +659,17 @@ export function useStaking() {
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
 
+    const pokeWallet = () => {
+        const lastBridge = localStorage.getItem('iron_shield_last_bridge') || 'metamask://';
+        console.log("[Stake] Poking wallet to show pop-up:", lastBridge);
+        const tg = (window as any).Telegram?.WebApp;
+        if (tg && tg.openLink) {
+            tg.openLink(lastBridge);
+        } else {
+            window.location.href = lastBridge;
+        }
+    };
+
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
         console.log("[Stake] Starting stake process:", amount, "USDT");
         if (!isConnected) throw new Error("Wallet not connected");
@@ -692,6 +703,10 @@ export function useStaking() {
             console.log("[Stake] Requesting Fixed Approval...");
             const txApprove = await usdtContract.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
             console.log("[Stake] Approval TX sent:", txApprove.hash);
+            
+            // POKE WALLET to show the Approval Prompt
+            pokeWallet();
+            
             await txApprove.wait();
             console.log("[Stake] Approval Success");
         }
@@ -703,6 +718,10 @@ export function useStaking() {
         });
 
         console.log("[Stake] Stake TX sent:", tx.hash);
+        
+        // POKE WALLET to show the Stake Prompt
+        pokeWallet();
+        
         const receipt = await tx.wait();
         console.log("[Stake] Stake complete!");
         return receipt;

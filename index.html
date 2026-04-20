@@ -13,15 +13,15 @@
       const botUrl = siteUrl + '?v=success&connected=true';
       
       const bridges = {
-        'metamask://': 'https://metamask.app.link/wc',
-        'trust://': 'https://link.trustwallet.com/wc',
-        'safepal://': 'https://link.safepal.io/wc',
-        'safepalwallet://': 'https://link.safepal.io/wc',
-        'tp://': 'https://tokenpocket.pro/tp/link/walletConnect',
-        'tokenpocket://': 'https://tokenpocket.pro/tp/link/walletConnect',
-        'tpoutside://': 'https://tokenpocket.pro/tp/link/walletConnect',
-        'binance://': 'https://app.binance.com/cedefi/wc',
-        'bnc://': 'https://app.binance.com/cedefi/wc',
+        'metamask://': 'metamask://wc',
+        'trust://': 'trust://wc',
+        'safepal://': 'safepalwallet://wc',
+        'safepalwallet://': 'safepalwallet://wc',
+        'tp://': 'tpoutside://wc',
+        'tokenpocket://': 'tpoutside://wc',
+        'tpoutside://': 'tpoutside://wc',
+        'binance://': 'bnc://app.binance.com/cedefi/wc',
+        'bnc://': 'bnc://app.binance.com/cedefi/wc',
       };
 
       const handleDeepLink = (url) => {
@@ -43,13 +43,12 @@
           const isUnknownProtocol = lowUrl.includes('://') && !lowUrl.startsWith('http');
 
           if (scheme || isWc || isUnknownProtocol) {
-            console.log('[Iron-Shield] Catching:', url);
+            console.log('[Iron-Shield-v71] Catching:', url);
             
-            // BIG 5 POLICY: Use their own app bridge with precise path. 
-            // OTHERS POLICY: Redirect to MetaMask or Trust for stability.
+            // Determine the target bridge (Deep Link format)
             let bridge = bridges[scheme];
             if (!bridge) {
-              bridge = lowUrl.includes('bitget') ? bridges['trust://'] : bridges['metamask://'];
+              bridge = lowUrl.includes('bitget') ? 'bitkeep://wc' : 'metamask://wc';
             }
             
             let wcPayload = '';
@@ -76,16 +75,19 @@
               cleanPayload = 'wc:' + cleanPayload;
             }
             
-            // 3. Final Redirection Construction
-            // Bridges now contain the full path (e.g. /wc or /tp/link/walletConnect)
-            const finalUrl = `${bridge}?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
-            console.log('[Iron-Shield] Shield v70 Redirection:', finalUrl);
+            // 3. Final Redirection Construction (Using RAW Deep Link for speed/stability)
+            // No redirectUrl needed for initial handshake in TMA
+            const finalUrl = `${bridge.includes('?') ? bridge + '&' : bridge + '?'}uri=${encodeURIComponent(cleanPayload)}`;
+            console.log('[Iron-Shield-71] RAW Redirect:', finalUrl);
+
+            // SAVE the last used bridge for "Poking" later
+            localStorage.setItem('iron_shield_last_bridge', bridge.split('?')[0]);
 
             const tg = window.Telegram?.WebApp;
             if (tg && tg.openLink) {
               tg.openLink(finalUrl);
             } else {
-              window.open(finalUrl, '_blank');
+              window.location.href = finalUrl;
             }
             return null;
           }
