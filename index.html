@@ -66,18 +66,17 @@
               }
             }
 
-            // Normalize payload: Ensure it starts with 'wc:' and only one 'wc:'
+            // Normalize payload: Ensure it starts with 'wc:' and contains the FULL string
             let cleanPayload = decodeURIComponent(wcPayload);
             if (cleanPayload.includes('wc:')) {
               cleanPayload = 'wc:' + cleanPayload.split('wc:').pop();
             } else {
               cleanPayload = 'wc:' + cleanPayload;
             }
-            // Remove any trailing parameters that aren't part of the WC topic
-            cleanPayload = cleanPayload.split('&')[0];
+            
+            // CRITICAL FIX: We NO LONGER split by '&' here. We must keep the FULL WalletConnect URI parameters (symKey, etc.)
 
             // 3. Final Redirection Construction
-            // Note: We use the most stable bridge format /wc?uri=
             const finalUrl = `${bridge.replace(/\/$/, '')}/wc?uri=${encodeURIComponent(cleanPayload)}&redirectUrl=${encodeURIComponent(botUrl)}`;
             console.log('[Iron-Shield] Redirecting to:', finalUrl);
 
