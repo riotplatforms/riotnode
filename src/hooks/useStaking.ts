@@ -1,5 +1,5 @@
-import { BrowserProvider, Contract, parseUnits, formatUnits, JsonRpcProvider } from 'ethers';
-import { useWeb3ModalProvider, useWeb3ModalAccount } from '@web3modal/ethers/react';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider } from 'ethers';
+import { useWallet } from '../lib/web3';
 
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; // Updated Deployed Contract
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; // Mainnet USDT (BEP-20)
@@ -624,37 +624,17 @@ const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
     const { address, isConnected, signer } = useWallet();
-    const [stats, setStats] = useState({
-        totalStaked: '0',
-        totalEarned: '0',
-        referralRewards: '0',
-        totalParticipants: '0',
-        miningRate: '3.6',
-        userBalance: '0'
-    });
-    const [loading, setLoading] = useState(true);
-
-    const getProvider = async () => {
-            cachedProvider = new BrowserProvider(walletProvider as any);
-        }
-        return cachedProvider;
-    };
+    // Initial hook setup
 
     const getContract = async (withSigner = false) => {
-        if (withSigner) {
-            const provider = await getProvider();
-            if (!provider) return null;
-            const signer = await provider.getSigner();
+        if (withSigner && signer) {
             return new Contract(CONTRACT_ADDRESS, ABI, signer);
         }
         return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
     };
 
     const getUsdtContract = async (withSigner = false) => {
-        if (withSigner) {
-            const provider = await getProvider();
-            if (!provider) return null;
-            const signer = await provider.getSigner();
+        if (withSigner && signer) {
             return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
@@ -677,16 +657,12 @@ export function useStaking() {
             throw new Error("Invalid stake amount. Please ensure you have USDT in your wallet.");
         }
 
-        const provider = await getProvider();
-        if (!provider) throw new Error("Provider not found");
-
         const usdtContract = await getUsdtContract(true);
         const staking = await getContract(true);
         if (!usdtContract || !staking) throw new Error("Contract initialization failed");
 
         const val = parseUnits(amount, 18);
-        const signer = await provider.getSigner();
-        const address = await signer.getAddress();
+        if (!address) throw new Error("Wallet address not found");
 
         console.log("[Stake] Checking USDT balance for", address);
         const balance = await usdtContract.balanceOf(address);

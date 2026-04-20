@@ -1,10 +1,10 @@
-import { BrowserProvider, Contract, parseUnits, formatUnits, JsonRpcProvider } from 'ethers';
-import { useWeb3ModalProvider, useWeb3ModalAccount } from '@web3modal/ethers/react';
-
+import { Contract, parseUnits, formatUnits, JsonRpcProvider } from 'ethers';
+import { useWallet } from '../lib/web3';
 
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const BSC_RPC = 'https://bsc-dataseed.binance.org/';
+const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 
 const ERC20_ABI = [
@@ -58,8 +58,7 @@ const ADMIN_ABI = [
 ];
 
 export function useAdmin() {
-    const { address: adminAddress, isConnected, signer } = useWallet();
-    const [loading, setLoading] = useState(false);
+    const { address: adminAddress, signer } = useWallet();
 
     const getContract = async (withSigner = false) => {
         if (withSigner && signer) {

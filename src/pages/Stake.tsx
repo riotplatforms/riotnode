@@ -22,8 +22,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected } = useWeb3ModalAccount();
-    const { open } = useWeb3Modal();
+    const { address, isConnected, connect } = useWallet();
     const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -272,19 +271,18 @@ const Stake: React.FC = () => {
         return `${days}h ${hours}m ${minutes}s ${seconds}s`; // Using Short format for button
     };
 
-    // Auto-resume upgrade after connection
     useEffect(() => {
         if (isConnected && localStorage.getItem('pending_upgrade')) {
             const data = JSON.parse(localStorage.getItem('pending_upgrade')!);
             localStorage.removeItem('pending_upgrade');
             handleBuy(data.id, data.priceStr);
         }
-    }, [isConnected, address, open, showAlert, stake, referrer]);
+    }, [isConnected, address, showAlert, stake, referrer]);
 
     const handleBuy = async (id: number | string, priceStr: string) => {
         if (!isConnected || !address) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
-            open();
+            connect();
             return;
         }
 

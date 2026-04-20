@@ -19,8 +19,7 @@ const getTierRate = (val: number) => {
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { address, isConnected } = useWeb3ModalAccount();
-    const { open } = useWeb3Modal();
+    const { address, isConnected, connect } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
     const { showAlert, referrer, tg } = useTelegram();
     const { btcPrice } = usePrice();
@@ -57,7 +56,7 @@ const Dashboard: React.FC = () => {
     const handleStartMining = async () => {
         if (!isConnected || !address) {
             localStorage.setItem('pending_mining', 'true');
-            open();
+            connect();
             return;
         }
 
@@ -246,7 +245,7 @@ const Dashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                     {!isConnected ? (
                         <button
-                            onClick={() => open()}
+                            onClick={() => connect()}
                             className="bg-primary/10 hover:bg-primary/20 text-primary px-3 py-1.5 rounded-full border border-primary/20 flex items-center gap-2 shadow-sm transition-all text-[10px] font-bold uppercase tracking-wider"
                         >
                             <span className="material-icons-round text-sm">account_balance_wallet</span>
@@ -254,7 +253,7 @@ const Dashboard: React.FC = () => {
                         </button>
                     ) : (
                         <button
-                            onClick={() => open()}
+                            onClick={() => connect()}
                             className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold"
                         >
                             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>

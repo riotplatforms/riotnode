@@ -150,7 +150,10 @@ const Settings: React.FC = () => {
                 )}
 
                 {/* Logout */}
-                <button className="w-full py-3.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 active:bg-red-500/20 font-semibold transition-colors flex items-center justify-center gap-2 mt-auto mb-4 cursor-pointer">
+                <button 
+                    onClick={() => disconnect()}
+                    className="w-full py-3.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 active:bg-red-500/20 font-semibold transition-all flex items-center justify-center gap-2 mt-auto mb-4 cursor-pointer"
+                >
                     <span className="material-icons-round text-[20px]">logout</span>
                     Log Out
                 </button>

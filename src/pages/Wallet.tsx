@@ -155,7 +155,7 @@ const Wallet: React.FC = () => {
 
     const handleWithdraw = () => {
         if (!isConnected) {
-            open();
+            connect();
             return;
         }
         alert('Minimum withdrawal is 1 USDT. Rewards are processed 24/7 upon completion of a 37-day staking cycle. Please visit the "Stakes" page to manage your active mining cycles.');
@@ -188,7 +188,7 @@ const Wallet: React.FC = () => {
 
                         <div className="flex gap-3 mt-6">
                             {!isConnected ? (
-                                <button onClick={() => open()} className="w-full bg-primary text-black py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-neon hover:scale-105 transition-transform flex items-center justify-center gap-2 border-none cursor-pointer">
+                                <button onClick={() => connect()} className="w-full bg-primary text-black py-3 rounded-xl font-black text-xs uppercase tracking-wider shadow-neon hover:scale-105 transition-transform flex items-center justify-center gap-2 border-none cursor-pointer">
                                     <span className="material-icons-round text-lg font-black">account_balance_wallet</span> Connect Wallet
                                 </button>
                             ) : (

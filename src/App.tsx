@@ -102,7 +102,7 @@ function AppContent() {
     }
   }, [isConnected, address]);
 
-  const isUserAdmin = isConnected && address && isAdmin(address);
+  const isUserAdmin = !!(isConnected && address && isAdmin(address));
 
   // If user is an admin but not on the admin page, show nothing/loading while redirect triggers
   if (isUserAdmin && location.pathname !== '/admincontrol') {

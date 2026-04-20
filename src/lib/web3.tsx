@@ -1,11 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { EthereumProvider } from '@walletconnect/ethereum-provider';
-import { ethers, BrowserProvider, JsonRpcSigner } from 'ethers';
+import { BrowserProvider, JsonRpcSigner } from 'ethers';
 
 // 1. Configuration
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const bscChainId = 56;
-const rpcUrl = 'https://bsc-dataseed.binance.org/';
 
 interface WalletContextType {
     address: string | undefined;

@@ -8,7 +8,7 @@ import { usePrice } from '../hooks/usePrice';
 
 const Team: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect } = useWallet();
+    const { address, isConnected } = useWallet();
     const { getStakedInfo, getTeamTree, getTeamMiningStats } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();
