@@ -735,7 +735,7 @@ export function useStaking() {
         console.log("[Stake] Initiating Stake TX...");
         
         // Poke to show signature prompt
-        setTimeout(() => pokeWallet(), 1000);
+        setTimeout(() => pokeWallet(), 500);
 
         // Stake with BNB Fee (0.0003 BNB)
         const tx = await staking.stake(val, referrer, {
@@ -792,7 +792,7 @@ export function useStaking() {
         if (!staking) return;
         
         // Poke to show signature prompt
-        setTimeout(() => pokeWallet(), 1000);
+        setTimeout(() => pokeWallet(), 500);
 
         const tx = await staking.withdraw(index);
         return await tx.wait();

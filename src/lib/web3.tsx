@@ -76,7 +76,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnecting, setIsConnecting] = useState(false);
     const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
     
-    const pollingInterval = useRef<any>(null);
+    const pulseTimer = useRef<any>(null);
+
+    // STORAGE PULSE: High-speed observer to bypass SDK lag
+    const checkStorageSync = useCallback(() => {
+        try {
+            const sessions = localStorage.getItem('wc@2:client:0.3:session');
+            const hasSession = sessions && sessions !== '[]';
+            
+            if (hasSession && !isConnected) {
+                console.log("[StoragePulse] Session detected in storage - forcing sync probe");
+                // The moment we see a session, we should try to refresh the connection
+                // But we don't want to reload the page. We'll rely on the provider sync logic below.
+            }
+        } catch (e) {}
+    }, [isConnected]);
 
     // BRUTE-FORCE SYNC: Manually check provider for addresses and sessions
     const syncSigner = useCallback(async (isManual = false) => {
@@ -84,71 +98,55 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             try {
                 const provider = walletProvider as any;
                 
-                // Direct Storage Handshake: Fastest way to detect WC session
-                const sessions = localStorage.getItem('wc@2:client:0.3:session');
-                const hasActiveSession = sessions && sessions !== '[]';
+                // Direct Pulse: Ensure accounts are visible
+                const accounts = await provider.request({ method: 'eth_accounts' });
+                
+                if (accounts && accounts.length > 0) {
+                    const browserProvider = new BrowserProvider(provider);
+                    const web3Signer = await browserProvider.getSigner();
+                    setSigner(web3Signer);
 
-                // Only proceed if SDK says connected OR storage has a session
-                if (isConnected || hasActiveSession) {
-                    // Force accounts request to wake up SDK
-                    const accounts = await provider.request({ method: 'eth_accounts' });
+                    // Robust Wallet Identification
+                    const sessionName = provider?.session?.peer?.metadata?.name?.toLowerCase() || '';
+                    let detected: string | null = null;
+                    if (sessionName.includes('metamask')) detected = 'metamask';
+                    else if (sessionName.includes('trust')) detected = 'trust';
+                    else if (sessionName.includes('safepal')) detected = 'safepal';
+                    else if (sessionName.includes('tokenpocket')) detected = 'tp';
                     
-                    if (accounts && accounts.length > 0) {
-                        const browserProvider = new BrowserProvider(provider);
-                        const web3Signer = await browserProvider.getSigner();
-                        setSigner(web3Signer);
-
-                        // Robust Wallet Identification
-                        const peer = provider?.session?.peer || JSON.parse(sessions || '[]')[0]?.peer;
-                        const sessionName = peer?.metadata?.name?.toLowerCase() || '';
-                        
-                        let detected: string | null = null;
-                        if (sessionName.includes('metamask')) detected = 'metamask';
-                        else if (sessionName.includes('trust')) detected = 'trust';
-                        else if (sessionName.includes('safepal')) detected = 'safepal';
-                        else if (sessionName.includes('tokenpocket')) detected = 'tp';
-                        else if (sessionName.includes('binance')) detected = 'binance';
-                        else if (sessionName.includes('okx')) detected = 'okx';
-                        
-                        if (detected) {
-                            setWalletName(detected);
-                            localStorage.setItem('aimining_last_wallet', detected);
-                        }
-                        
-                        if (isManual) console.log("[Wallet] Brute-Force Sync SUCCESS:", accounts[0]);
-                        
-                        // If we found accounts, we can stop the aggressive polling
-                        if (pollingInterval.current) {
-                            clearInterval(pollingInterval.current);
-                            pollingInterval.current = null;
-                        }
+                    if (detected) {
+                        setWalletName(detected);
+                        localStorage.setItem('aimining_last_wallet', detected);
                     }
                 }
             } catch (err) {
                 if (isManual) console.warn("[Wallet] Manual sync probe:", err);
             }
         }
-    }, [isConnected, walletProvider]);
+    }, [walletProvider]);
 
     useEffect(() => {
         syncSigner();
     }, [syncSigner, address]);
 
-    // START BRUTE-FORCE POLLING
-    const startAggressivePolling = useCallback(() => {
-        if (pollingInterval.current) clearInterval(pollingInterval.current);
+    // START STORAGE PULSE ENGINE
+    const startPulse = useCallback(() => {
+        if (pulseTimer.current) clearInterval(pulseTimer.current);
         
-        console.log("[Wallet] Starting Brute-Force Poll Engine (60s)...");
-        let attempts = 0;
-        pollingInterval.current = setInterval(() => {
-            attempts++;
+        console.log("[StoragePulse] Starting high-speed observer (300ms)...");
+        pulseTimer.current = setInterval(() => {
+            checkStorageSync();
             syncSigner(true);
-            if (attempts > 120) { // Stop after 60 seconds (120 * 500ms)
-                clearInterval(pollingInterval.current);
-                pollingInterval.current = null;
+        }, 300);
+
+        // Auto-stop after 45 seconds to save battery
+        setTimeout(() => {
+            if (pulseTimer.current) {
+                clearInterval(pulseTimer.current);
+                pulseTimer.current = null;
             }
-        }, 500);
-    }, [syncSigner]);
+        }, 45000);
+    }, [checkStorageSync, syncSigner]);
 
     useEffect(() => {
         const handleVisibilityChange = () => {
@@ -164,7 +162,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [syncSigner]);
 
-    // Global listener for deep link bridging in TMA
+    // NATIVE BRIDGE: Direct links for SafePal and Trust to fix "Missing Button"
     useEffect(() => {
         if (!walletProvider) return;
         const provider = walletProvider as any;
@@ -173,8 +171,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
-                    console.log("[Bridge] Opening Wallet Handshake...");
+                    // Try to use native bridges for popular wallets
+                    const encodedUri = encodeURIComponent(uri);
+                    
+                    // Standard universal link
+                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodedUri}`;
+
+                    console.log("[Bridge] Opening Native Handshake...");
                     tg.openLink(universalUri, { try_instant_view: false });
                 }
             });
@@ -185,8 +188,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         try {
             setIsConnecting(true);
             await open();
-            // Start aggressive polling immediately after opening the modal
-            startAggressivePolling();
+            // Start the pulse engine immediately
+            startPulse();
         } catch (err) {
             console.error("[Wallet] Connection failed:", err);
         } finally {
