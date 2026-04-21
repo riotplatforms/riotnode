@@ -673,7 +673,7 @@ export function useStaking() {
         const tg = (window as any).Telegram?.WebApp;
         if (!tg || !tg.openLink) return;
 
-        // Use persistent wallet type from localStorage if state is lagging
+        // Use persistent wallet type or probe storage
         const activeType = walletType || localStorage.getItem('aimining_last_wallet');
 
         if (!activeType) {
@@ -685,9 +685,7 @@ export function useStaking() {
             metamask: 'https://metamask.app.link/',
             trust: 'https://link.trustwallet.com/',
             safepal: 'https://link.safepal.io/',
-            tp: 'https://tokenpocket.pro/',
-            binance: 'https://app.binance.com/',
-            okx: 'https://www.okx.com/'
+            tp: 'https://tokens.tokenpocket.pro/' // Updated TP bridge
         };
 
         const target = pokes[activeType] || pokes.metamask;

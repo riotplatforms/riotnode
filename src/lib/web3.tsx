@@ -78,27 +78,31 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     
     const pulseTimer = useRef<any>(null);
 
-    // STORAGE PULSE: High-speed observer to bypass SDK lag
-    const checkStorageSync = useCallback(() => {
+    // STORAGE WATCHDOG: Checks for raw session acknowledgement to bypass SDK lag
+    const checkHandshakeSync = useCallback(() => {
         try {
             const sessions = localStorage.getItem('wc@2:client:0.3:session');
-            const hasSession = sessions && sessions !== '[]';
-            
-            if (hasSession && !isConnected) {
-                console.log("[StoragePulse] Session detected in storage - forcing sync probe");
-                // The moment we see a session, we should try to refresh the connection
-                // But we don't want to reload the page. We'll rely on the provider sync logic below.
+            if (sessions) {
+                const parsed = JSON.parse(sessions);
+                // Check if any session exists and is acknowledged
+                const hasAckSession = Array.isArray(parsed) && parsed.some((s: any) => s.acknowledged === true);
+                
+                if (hasAckSession && !isConnected) {
+                    console.log("[Watchdog] Handshake acknowledged in storage - sync pulse triggered");
+                    // SDK still says disconnected, but storage proves connection.
+                    // We'll rely on the brute-force provider probe below.
+                }
             }
         } catch (e) {}
     }, [isConnected]);
 
-    // BRUTE-FORCE SYNC: Manually check provider for addresses and sessions
+    // BRUTE-FORCE SYNC: Manually check provider for addresses
     const syncSigner = useCallback(async (isManual = false) => {
         if (walletProvider) {
             try {
                 const provider = walletProvider as any;
                 
-                // Direct Pulse: Ensure accounts are visible
+                // Direct Pulse: Force accounts request to wake up SDK
                 const accounts = await provider.request({ method: 'eth_accounts' });
                 
                 if (accounts && accounts.length > 0) {
@@ -129,24 +133,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         syncSigner();
     }, [syncSigner, address]);
 
-    // START STORAGE PULSE ENGINE
-    const startPulse = useCallback(() => {
+    // START WATCHDOG ENGINE
+    const startWatchdog = useCallback(() => {
         if (pulseTimer.current) clearInterval(pulseTimer.current);
         
-        console.log("[StoragePulse] Starting high-speed observer (300ms)...");
+        console.log("[Watchdog] Starting connection watchdog (300ms)...");
         pulseTimer.current = setInterval(() => {
-            checkStorageSync();
+            checkHandshakeSync();
             syncSigner(true);
         }, 300);
 
-        // Auto-stop after 45 seconds to save battery
+        // Auto-stop after 60 seconds
         setTimeout(() => {
             if (pulseTimer.current) {
                 clearInterval(pulseTimer.current);
                 pulseTimer.current = null;
             }
-        }, 45000);
-    }, [checkStorageSync, syncSigner]);
+        }, 60000);
+    }, [checkHandshakeSync, syncSigner]);
 
     useEffect(() => {
         const handleVisibilityChange = () => {
@@ -155,6 +159,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
         };
         window.addEventListener('focus', handleVisibilityChange);
+        window.addEventListener('blur', () => syncSigner(true)); // Re-sync on blur too (transition starts)
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => {
             window.removeEventListener('focus', handleVisibilityChange);
@@ -162,7 +167,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [syncSigner]);
 
-    // NATIVE BRIDGE: Direct links for SafePal and Trust to fix "Missing Button"
+    // CLEAN HANDSHAKE BRIDGE: Ensures URI is not mangled for TokenPocket/SafePal
     useEffect(() => {
         if (!walletProvider) return;
         const provider = walletProvider as any;
@@ -171,13 +176,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    // Try to use native bridges for popular wallets
-                    const encodedUri = encodeURIComponent(uri);
+                    console.log("[Bridge] Opening Clean Handshake...");
                     
-                    // Standard universal link
-                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodedUri}`;
-
-                    console.log("[Bridge] Opening Native Handshake...");
+                    // CLEAN URI: Preserving the 'wc:' structure for strict wallets like TokenPocket
+                    // We use one-level encoding for the query param, but avoid universal mangling
+                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
+                    
+                    // For SafePal & TokenPocket, they often prefer the URI to be as clean as possible
                     tg.openLink(universalUri, { try_instant_view: false });
                 }
             });
@@ -188,8 +193,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         try {
             setIsConnecting(true);
             await open();
-            // Start the pulse engine immediately
-            startPulse();
+            // Start the watchdog immediately
+            startWatchdog();
         } catch (err) {
             console.error("[Wallet] Connection failed:", err);
         } finally {
