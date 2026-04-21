@@ -64,6 +64,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
+    const [walletName, setWalletName] = useState<string | null>(null);
 
     // Sync signer whenever provider changes
     const syncSigner = useCallback(async () => {
@@ -73,15 +74,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const browserProvider = new BrowserProvider(provider);
                 const web3Signer = await browserProvider.getSigner();
                 setSigner(web3Signer);
-                console.log("[Wallet] State Synced:", address);
+
+                // Robust Wallet Identification
+                const sessionName = provider?.session?.peer?.metadata?.name?.toLowerCase() || '';
+                if (sessionName.includes('metamask')) setWalletName('metamask');
+                else if (sessionName.includes('trust')) setWalletName('trust');
+                else if (sessionName.includes('safepal')) setWalletName('safepal');
+                else if (sessionName.includes('tokenpocket')) setWalletName('tp');
+                else if (sessionName) setWalletName(sessionName);
+                
+                console.log("[Wallet] Synced. Detected:", sessionName);
             } catch (err) {
                 console.error("[Wallet] Signer sync failed:", err);
                 setSigner(null);
             }
         } else {
             setSigner(null);
+            setWalletName(null);
         }
-    }, [isConnected, walletProvider, address]);
+    }, [isConnected, walletProvider]);
 
     useEffect(() => {
         syncSigner();
@@ -91,14 +102,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                console.log("[Wallet] User returned to app, checking sync...");
                 syncSigner();
             }
         };
-
         window.addEventListener('focus', handleVisibilityChange);
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        
         return () => {
             window.removeEventListener('focus', handleVisibilityChange);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -114,6 +122,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
+                    // Optimized URI Bridge: Use a direct wrapper that non-Metamask wallets can handle
+                    // TokenPocket/Safepal prefer non-wrapped URIs if possible, so we try a standard deep-link
                     const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
                     tg.openLink(universalUri, { try_instant_view: false });
                 }
@@ -135,7 +145,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const disconnect = async () => {
         try {
             await walletDisconnect();
-            console.log("[Wallet] Disconnected and session cleared.");
         } catch (err) {
             console.error("[Wallet] Disconnect failed:", err);
         }
@@ -149,7 +158,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             connect, 
             disconnect, 
             isConnecting,
-            walletType: (walletProvider as any)?.session?.peer?.metadata?.name?.toLowerCase() || null
+            walletType: walletName
         }}>
             {children}
         </WalletContext.Provider>

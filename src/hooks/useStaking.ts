@@ -626,14 +626,22 @@ export function useStaking() {
     const { address, isConnected, signer, walletType } = useWallet();
 
     const getContract = async (withSigner = false) => {
-        if (withSigner && signer) {
+        if (withSigner) {
+            if (!signer) {
+                console.warn("[Staking] Required Signer missing, falling back to ReadOnly");
+                return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
+            }
             return new Contract(CONTRACT_ADDRESS, ABI, signer);
         }
         return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
     };
 
     const getUsdtContract = async (withSigner = false) => {
-        if (withSigner && signer) {
+        if (withSigner) {
+            if (!signer) {
+                console.warn("[Staking] Required USDT Signer missing, falling back to ReadOnly");
+                return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
+            }
             return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
@@ -641,7 +649,10 @@ export function useStaking() {
 
     const pokeWallet = () => {
         const tg = (window as any).Telegram?.WebApp;
-        if (!tg || !tg.openLink || !walletType) return;
+        if (!tg || !tg.openLink || !walletType) {
+            console.log("[Poke] Skipping - TMA or WalletType not ready:", walletType);
+            return;
+        }
 
         const pokes: Record<string, string> = {
             metamask: 'https://metamask.app.link/',
@@ -650,7 +661,7 @@ export function useStaking() {
             tp: 'https://tokenpocket.pro/'
         };
 
-        const target = pokes[walletType as string] || pokes.metamask;
+        const target = pokes[walletType] || pokes.metamask;
         console.log(`[Poke] Waking up ${walletType} via ${target}`);
         tg.openLink(target, { try_instant_view: false });
     };
