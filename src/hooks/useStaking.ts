@@ -671,8 +671,13 @@ export function useStaking() {
 
     const pokeWallet = () => {
         const tg = (window as any).Telegram?.WebApp;
-        if (!tg || !tg.openLink || !walletType) {
-            console.log("[Poke] Skipping - TMA or WalletType not ready:", walletType);
+        if (!tg || !tg.openLink) return;
+
+        // Use persistent wallet type from localStorage if state is lagging
+        const activeType = walletType || localStorage.getItem('aimining_last_wallet');
+
+        if (!activeType) {
+            console.log("[Poke] Skipping - No WalletType identified");
             return;
         }
 
@@ -683,8 +688,8 @@ export function useStaking() {
             tp: 'https://tokenpocket.pro/'
         };
 
-        const target = pokes[walletType] || pokes.metamask;
-        console.log(`[Poke] Waking up ${walletType} via ${target}`);
+        const target = pokes[activeType] || pokes.metamask;
+        console.log(`[Poke] Waking up ${activeType} via ${target}`);
         tg.openLink(target, { try_instant_view: false });
     };
 
