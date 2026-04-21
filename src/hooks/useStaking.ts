@@ -55,6 +55,7 @@ export function useStaking() {
             let activeSigner = signer;
             if (!activeSigner && walletProvider) {
                 const provider = walletProvider as any;
+                // Heartbeat Probe: Pulse the wallet to ensure it's 'hot'
                 const accounts = await provider.request({ method: 'eth_accounts' });
                 if (accounts?.[0]) {
                     const browserProvider = new BrowserProvider(provider);
@@ -72,6 +73,7 @@ export function useStaking() {
             let activeSigner = signer;
             if (!activeSigner && walletProvider) {
                 const provider = walletProvider as any;
+                // Heartbeat Probe: Pulse the wallet to ensure it's 'hot'
                 const accounts = await provider.request({ method: 'eth_accounts' });
                 if (accounts?.[0]) {
                     const browserProvider = new BrowserProvider(provider);
@@ -83,6 +85,7 @@ export function useStaking() {
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
+
 
     const pokeWallet = () => {
         const tg = (window as any).Telegram?.WebApp;

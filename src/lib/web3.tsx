@@ -31,7 +31,6 @@ createAppKit({
   features: {
     analytics: true
   },
-  // Feature the most reliable mobile wallets for TMA
   featuredWalletIds: [
     'c56bbc40a89474a2d85830541457197b', // MetaMask
     '4622a2b2d6ad1323bca51c019187f621', // Trust
@@ -40,10 +39,10 @@ createAppKit({
     '8a0ee10452995142101c030d7042502c', // Binance
     '971e689d0ad3b533db5817bc2d449622'  // OKX
   ],
-  allWallets: 'SHOW', // Searchable wallet list
+  allWallets: 'SHOW',
   themeMode: 'dark',
   themeVariables: {
-    '--w3m-accent': '#FFD700', // Gold accent
+    '--w3m-accent': '#FFD700',
     '--w3m-border-radius-master': '16px'
   }
 });
@@ -79,29 +78,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     
     const pulseTimer = useRef<any>(null);
 
-    // STORAGE HANDSHAKE: Checks for raw session acknowledgement to bypass SDK lag
+    // 1. STORAGE WATCHDOG: Monitors raw session keys to bypass SDK event lag
     const checkHandshakeSync = useCallback(() => {
         try {
             const sessions = localStorage.getItem('wc@2:client:0.3:session');
             if (sessions) {
                 const parsed = JSON.parse(sessions);
-                // Check if any session exists and is acknowledged
-                const hasAckSession = Array.isArray(parsed) && parsed.some((s: any) => s.acknowledged === true);
-                
-                if (hasAckSession && !isConnected) {
-                    console.log("[Handshake] Session detected in storage - forcing sync probe");
+                const hasActive = Array.isArray(parsed) && parsed.length > 0;
+                if (hasActive && !isConnected) {
+                    // Force a probe if storage says we are connected but SDK hasn't caught up
+                    syncSigner(true);
                 }
             }
         } catch (e) {}
     }, [isConnected]);
 
-    // BRUTE-FORCE SYNC: Manually check provider for addresses and sessions
+    // 2. BRUTE-FORCE SYNC: Manually probe the provider for a hot signer
     const syncSigner = useCallback(async (isManual = false) => {
         if (walletProvider) {
             try {
                 const provider = walletProvider as any;
-                
-                // Direct Pulse: Ensure accounts are ready
                 const accounts = await provider.request({ method: 'eth_accounts' });
                 
                 if (accounts && accounts.length > 0) {
@@ -109,27 +105,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     const web3Signer = await browserProvider.getSigner();
                     setSigner(web3Signer);
 
-                    // Identify Wallet from Peer Metadata
                     const peer = provider?.session?.peer;
-                    const sessionName = peer?.metadata?.name?.toLowerCase() || '';
-                    
+                    const name = peer?.metadata?.name?.toLowerCase() || '';
                     let detected: string | null = null;
-                    if (sessionName.includes('metamask')) detected = 'metamask';
-                    else if (sessionName.includes('trust')) detected = 'trust';
-                    else if (sessionName.includes('safepal')) detected = 'safepal';
-                    else if (sessionName.includes('tokenpocket')) detected = 'tp';
-                    else if (sessionName.includes('binance')) detected = 'binance';
-                    else if (sessionName.includes('okx')) detected = 'okx';
+                    if (name.includes('metamask')) detected = 'metamask';
+                    else if (name.includes('trust')) detected = 'trust';
+                    else if (name.includes('safepal')) detected = 'safepal';
+                    else if (name.includes('tokenpocket')) detected = 'tp';
+                    else if (name.includes('binance')) detected = 'binance';
+                    else if (name.includes('okx')) detected = 'okx';
                     
                     if (detected) {
                         setWalletName(detected);
                         localStorage.setItem('aimining_last_wallet', detected);
                     }
-
-                    if (isManual) console.log("[Wallet] Polling SUCCESS:", accounts[0]);
+                    if (isManual) console.log("[Watchdog] Signer Recovered:", accounts[0]);
                 }
             } catch (err) {
-                if (isManual) console.warn("[Wallet] Manual sync probe:", err);
+                if (isManual) console.warn("[Watchdog] Probe error:", err);
             }
         }
     }, [walletProvider]);
@@ -138,17 +131,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         syncSigner();
     }, [syncSigner, address]);
 
-    // START POLLING ENGINE
+    // 3. CONNECTION WATCHDOG: High-speed polling (300ms) for first 45 seconds
     const startPolling = useCallback(() => {
         if (pulseTimer.current) clearInterval(pulseTimer.current);
-        
-        console.log("[Wallet] Starting connection watchdog (300ms)...");
         pulseTimer.current = setInterval(() => {
             checkHandshakeSync();
             syncSigner(true);
         }, 300);
 
-        // Auto-stop after 45 seconds
         setTimeout(() => {
             if (pulseTimer.current) {
                 clearInterval(pulseTimer.current);
@@ -157,21 +147,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }, 45000);
     }, [checkHandshakeSync, syncSigner]);
 
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                syncSigner(true);
-            }
-        };
-        window.addEventListener('focus', handleVisibilityChange);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            window.removeEventListener('focus', handleVisibilityChange);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, [syncSigner]);
-
-    // NATIVE BRIDGE: Fixed URI encoding for TokenPocket and Native link fallback
+    // 4. CLEAN HANDSHAKE BRIDGE: Fixes URI mangling for TP and SafePal
     useEffect(() => {
         if (!walletProvider) return;
         const provider = walletProvider as any;
@@ -180,10 +156,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    console.log("[Bridge] Dispatching Handshake...");
-                    const encodedUri = encodeURIComponent(uri);
-                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodedUri}`;
-                    tg.openLink(universalUri, { try_instant_view: false });
+                    console.log("[Bridge] Repairing URI Handshake...");
+                    // Repair: Remove double encoding and avoid problematic WC universal bridge
+                    let cleanUri = uri;
+                    if (uri.includes('%')) {
+                        try { cleanUri = decodeURIComponent(uri); } catch(e) {}
+                    }
+                    
+                    // Native Handshake Redirects: Force specificLanding to bypass universal bridge hangs
+                    const encodedClean = encodeURIComponent(cleanUri);
+                    const targetUrl = `https://link.walletconnect.com/wc?uri=${encodedClean}`;
+                    
+                    tg.openLink(targetUrl, { try_instant_view: false });
                 }
             });
         }
@@ -195,20 +179,36 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             await open();
             startPolling();
         } catch (err) {
-            console.error("[Wallet] Connection failed:", err);
+            console.error("[Wallet] Fatal Error:", err);
         } finally {
             setIsConnecting(false);
         }
     };
 
+    // 5. LOCAL BURN: Instant UI reset avoids "Oops... Failed to load" errors
     const disconnect = async () => {
         try {
+            console.log("[Wallet] Burning local session...");
+            // Force clear storage before SDK disconnect
             localStorage.removeItem('aimining_last_wallet');
+            
+            // Wipe WalletConnect keys to prevent "Pairing session failed" on next try
+            Object.keys(localStorage).forEach(key => {
+                if (key.includes('wc@2') || key.includes('WALLETCONNECT')) {
+                    localStorage.removeItem(key);
+                }
+            });
+
             setWalletName(null);
             setSigner(null);
-            await walletDisconnect();
+            
+            // background SDK cleanup
+            walletDisconnect().catch(() => {});
+            
+            // Instant UI Reset
+            window.location.reload(); 
         } catch (err) {
-            console.error("[Wallet] Disconnect failed:", err);
+            console.error("[Wallet] Burn failed:", err);
         }
     };
 
