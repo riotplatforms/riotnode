@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { createAppKit, useAppKitProvider, useAppKitAccount, useAppKit, useDisconnect } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
@@ -64,7 +64,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
-    const [walletName, setWalletName] = useState<string | null>(null);
+    const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
+    const syncCount = useRef(0);
 
     // Sync signer whenever provider changes
     const syncSigner = useCallback(async () => {
@@ -77,32 +78,49 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                 // Robust Wallet Identification
                 const sessionName = provider?.session?.peer?.metadata?.name?.toLowerCase() || '';
-                if (sessionName.includes('metamask')) setWalletName('metamask');
-                else if (sessionName.includes('trust')) setWalletName('trust');
-                else if (sessionName.includes('safepal')) setWalletName('safepal');
-                else if (sessionName.includes('tokenpocket')) setWalletName('tp');
-                else if (sessionName) setWalletName(sessionName);
+                let detected: string | null = null;
+                if (sessionName.includes('metamask')) detected = 'metamask';
+                else if (sessionName.includes('trust')) detected = 'trust';
+                else if (sessionName.includes('safepal')) detected = 'safepal';
+                else if (sessionName.includes('tokenpocket')) detected = 'tp';
                 
-                console.log("[Wallet] Synced. Detected:", sessionName);
+                if (detected) {
+                    setWalletName(detected);
+                    localStorage.setItem('aimining_last_wallet', detected);
+                }
+                
+                console.log("[Wallet] Sync attempt:", syncCount.current, "Address:", address);
             } catch (err) {
                 console.error("[Wallet] Signer sync failed:", err);
                 setSigner(null);
             }
         } else {
             setSigner(null);
-            setWalletName(null);
+            // We don't clear walletName here to allow "poking" the last used wallet during reconnections
         }
-    }, [isConnected, walletProvider]);
+    }, [isConnected, walletProvider, address]);
 
     useEffect(() => {
         syncSigner();
     }, [syncSigner]);
 
-    // SMART SYNC: Force check when user returns to Telegram
+    // SMART SYNC: Fast-Retry logic when user returns to Telegram
+    const fastRetrySync = useCallback(() => {
+        syncCount.current = 0;
+        const retries = [100, 300, 600, 1200, 2500];
+        retries.forEach(delay => {
+            setTimeout(() => {
+                syncCount.current++;
+                syncSigner();
+            }, delay);
+        });
+    }, [syncSigner]);
+
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                syncSigner();
+                console.log("[Wallet] Focus detected - triggering fast-retry sync");
+                fastRetrySync();
             }
         };
         window.addEventListener('focus', handleVisibilityChange);
@@ -111,7 +129,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             window.removeEventListener('focus', handleVisibilityChange);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [syncSigner]);
+    }, [fastRetrySync]);
 
     // Global listener for deep link bridging in TMA
     useEffect(() => {
@@ -122,8 +140,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    // Optimized URI Bridge: Use a direct wrapper that non-Metamask wallets can handle
-                    // TokenPocket/Safepal prefer non-wrapped URIs if possible, so we try a standard deep-link
                     const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
                     tg.openLink(universalUri, { try_instant_view: false });
                 }
@@ -144,6 +160,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const disconnect = async () => {
         try {
+            localStorage.removeItem('aimining_last_wallet');
+            setWalletName(null);
             await walletDisconnect();
         } catch (err) {
             console.error("[Wallet] Disconnect failed:", err);

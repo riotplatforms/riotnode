@@ -19,7 +19,7 @@ const getTierRate = (val: number) => {
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { address, isConnected, connect, disconnect } = useWallet();
+    const { address, isConnected, connect } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
     const { showAlert, referrer, tg } = useTelegram();
     const { btcPrice } = usePrice();
@@ -252,23 +252,13 @@ const Dashboard: React.FC = () => {
                             Connect
                         </button>
                     ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center">
                              <button
                                 onClick={() => connect()} // This will open account view if already connected
-                                className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold active:scale-95"
+                                className="bg-primary text-black px-4 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold active:scale-95"
                             >
                                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                                 {address?.slice(0, 4)}...{address?.slice(-4)}
-                            </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    disconnect();
-                                }}
-                                className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 border border-red-500/20 flex items-center justify-center hover:bg-red-500/20 active:scale-90 transition-all cursor-pointer"
-                                title="Log Out"
-                            >
-                                <span className="material-icons-round text-sm">logout</span>
                             </button>
                         </div>
                     )}

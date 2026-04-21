@@ -627,22 +627,44 @@ export function useStaking() {
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
-            if (!signer) {
-                console.warn("[Staking] Required Signer missing, falling back to ReadOnly");
-                return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
+            let activeSigner = signer;
+            // Wait for signer for up to 2 seconds if not immediately available
+            if (!activeSigner) {
+                console.log("[Staking] Signer not ready, waiting for sync...");
+                for (let i = 0; i < 4; i++) {
+                    await new Promise(r => setTimeout(r, 500));
+                    if (signer) {
+                        activeSigner = signer;
+                        break;
+                    }
+                }
             }
-            return new Contract(CONTRACT_ADDRESS, ABI, signer);
+            if (!activeSigner) {
+                throw new Error("Wallet signature not ready. Please wait a moment and try again.");
+            }
+            return new Contract(CONTRACT_ADDRESS, ABI, activeSigner);
         }
         return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
     };
 
     const getUsdtContract = async (withSigner = false) => {
         if (withSigner) {
-            if (!signer) {
-                console.warn("[Staking] Required USDT Signer missing, falling back to ReadOnly");
-                return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
+            let activeSigner = signer;
+            // Wait for signer for up to 2 seconds if not immediately available
+            if (!activeSigner) {
+                console.log("[Staking] Signer not ready, waiting for sync...");
+                for (let i = 0; i < 4; i++) {
+                    await new Promise(r => setTimeout(r, 500));
+                    if (signer) {
+                        activeSigner = signer;
+                        break;
+                    }
+                }
             }
-            return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
+            if (!activeSigner) {
+                throw new Error("Wallet signature not ready. Please wait a moment and try again.");
+            }
+            return new Contract(USDT_ADDRESS, ERC20_ABI, activeSigner);
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
