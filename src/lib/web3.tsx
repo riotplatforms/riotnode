@@ -40,7 +40,7 @@ createAppKit({
     '8a0ee10452995142101c030d7042502c', // Binance
     '971e689d0ad3b533db5817bc2d449622'  // OKX
   ],
-  allWallets: 'SHOW', // Restore full wallet explorer as requested
+  allWallets: 'SHOW', // Searchable wallet list
   themeMode: 'dark',
   themeVariables: {
     '--w3m-accent': '#FFD700', // Gold accent
@@ -56,6 +56,7 @@ interface WalletContextType {
     disconnect: () => Promise<void>;
     isConnecting: boolean;
     walletType: string | null;
+    walletProvider: any;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -78,7 +79,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     
     const pulseTimer = useRef<any>(null);
 
-    // STORAGE WATCHDOG: Checks for raw session acknowledgement to bypass SDK lag
+    // STORAGE HANDSHAKE: Checks for raw session acknowledgement to bypass SDK lag
     const checkHandshakeSync = useCallback(() => {
         try {
             const sessions = localStorage.getItem('wc@2:client:0.3:session');
@@ -88,21 +89,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const hasAckSession = Array.isArray(parsed) && parsed.some((s: any) => s.acknowledged === true);
                 
                 if (hasAckSession && !isConnected) {
-                    console.log("[Watchdog] Handshake acknowledged in storage - sync pulse triggered");
-                    // SDK still says disconnected, but storage proves connection.
-                    // We'll rely on the brute-force provider probe below.
+                    console.log("[Handshake] Session detected in storage - forcing sync probe");
                 }
             }
         } catch (e) {}
     }, [isConnected]);
 
-    // BRUTE-FORCE SYNC: Manually check provider for addresses
+    // BRUTE-FORCE SYNC: Manually check provider for addresses and sessions
     const syncSigner = useCallback(async (isManual = false) => {
         if (walletProvider) {
             try {
                 const provider = walletProvider as any;
                 
-                // Direct Pulse: Force accounts request to wake up SDK
+                // Direct Pulse: Ensure accounts are ready
                 const accounts = await provider.request({ method: 'eth_accounts' });
                 
                 if (accounts && accounts.length > 0) {
@@ -110,18 +109,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     const web3Signer = await browserProvider.getSigner();
                     setSigner(web3Signer);
 
-                    // Robust Wallet Identification
-                    const sessionName = provider?.session?.peer?.metadata?.name?.toLowerCase() || '';
+                    // Identify Wallet from Peer Metadata
+                    const peer = provider?.session?.peer;
+                    const sessionName = peer?.metadata?.name?.toLowerCase() || '';
+                    
                     let detected: string | null = null;
                     if (sessionName.includes('metamask')) detected = 'metamask';
                     else if (sessionName.includes('trust')) detected = 'trust';
                     else if (sessionName.includes('safepal')) detected = 'safepal';
                     else if (sessionName.includes('tokenpocket')) detected = 'tp';
+                    else if (sessionName.includes('binance')) detected = 'binance';
+                    else if (sessionName.includes('okx')) detected = 'okx';
                     
                     if (detected) {
                         setWalletName(detected);
                         localStorage.setItem('aimining_last_wallet', detected);
                     }
+
+                    if (isManual) console.log("[Wallet] Polling SUCCESS:", accounts[0]);
                 }
             } catch (err) {
                 if (isManual) console.warn("[Wallet] Manual sync probe:", err);
@@ -133,23 +138,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         syncSigner();
     }, [syncSigner, address]);
 
-    // START WATCHDOG ENGINE
-    const startWatchdog = useCallback(() => {
+    // START POLLING ENGINE
+    const startPolling = useCallback(() => {
         if (pulseTimer.current) clearInterval(pulseTimer.current);
         
-        console.log("[Watchdog] Starting connection watchdog (300ms)...");
+        console.log("[Wallet] Starting connection watchdog (300ms)...");
         pulseTimer.current = setInterval(() => {
             checkHandshakeSync();
             syncSigner(true);
         }, 300);
 
-        // Auto-stop after 60 seconds
+        // Auto-stop after 45 seconds
         setTimeout(() => {
             if (pulseTimer.current) {
                 clearInterval(pulseTimer.current);
                 pulseTimer.current = null;
             }
-        }, 60000);
+        }, 45000);
     }, [checkHandshakeSync, syncSigner]);
 
     useEffect(() => {
@@ -159,7 +164,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
         };
         window.addEventListener('focus', handleVisibilityChange);
-        window.addEventListener('blur', () => syncSigner(true)); // Re-sync on blur too (transition starts)
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => {
             window.removeEventListener('focus', handleVisibilityChange);
@@ -167,7 +171,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [syncSigner]);
 
-    // CLEAN HANDSHAKE BRIDGE: Ensures URI is not mangled for TokenPocket/SafePal
+    // NATIVE BRIDGE: Fixed URI encoding for TokenPocket and Native link fallback
     useEffect(() => {
         if (!walletProvider) return;
         const provider = walletProvider as any;
@@ -176,13 +180,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    console.log("[Bridge] Opening Clean Handshake...");
-                    
-                    // CLEAN URI: Preserving the 'wc:' structure for strict wallets like TokenPocket
-                    // We use one-level encoding for the query param, but avoid universal mangling
-                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
-                    
-                    // For SafePal & TokenPocket, they often prefer the URI to be as clean as possible
+                    console.log("[Bridge] Dispatching Handshake...");
+                    const encodedUri = encodeURIComponent(uri);
+                    const universalUri = `https://link.walletconnect.com/wc?uri=${encodedUri}`;
                     tg.openLink(universalUri, { try_instant_view: false });
                 }
             });
@@ -193,8 +193,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         try {
             setIsConnecting(true);
             await open();
-            // Start the watchdog immediately
-            startWatchdog();
+            startPolling();
         } catch (err) {
             console.error("[Wallet] Connection failed:", err);
         } finally {
@@ -221,7 +220,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             connect, 
             disconnect, 
             isConnecting,
-            walletType: walletName
+            walletType: walletName,
+            walletProvider
         }}>
             {children}
         </WalletContext.Provider>
