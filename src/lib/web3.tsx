@@ -197,10 +197,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (!handshakeUri) return;
         const tg = (window as any).Telegram?.WebApp;
         if (tg && tg.openLink) {
+            // Hyper-Compatibility Check: SafePal often prefers raw URIs without extra encoding
             const cleanUri = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
-            const encoded = encodeURIComponent(cleanUri);
-            const finalUrl = `${scheme}wc?uri=${encoded}`;
-            tg.openLink(finalUrl, { try_instant_view: false });
+            
+            // Try raw WC protocol bridge first as it's the most reliable for SafePal/Trust
+            const directUrl = `${scheme}wc?uri=${encodeURIComponent(cleanUri)}`;
+            tg.openLink(directUrl, { try_instant_view: false });
+        }
+    };
+
+    const copyUri = () => {
+        if (!handshakeUri) return;
+        const tg = (window as any).Telegram?.WebApp;
+        if (tg) {
+            // Decode for a clean copy
+            const clean = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(clean);
+            }
+            tg.showAlert("Connection Link Copied! Paste this in SafePal > WalletConnect search bar to connect instantly.");
         }
     };
 
@@ -219,32 +234,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             {/* DIRECT HANDSHAKE BRIDGE UI */}
             {handshakeUri && (
-                <div className="fixed inset-0 z-[9999] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
-                    <div className="bg-[#0f0f0f] border border-primary/20 rounded-[32px] p-8 w-full max-w-sm shadow-glow relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
+                <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
+                    <div className="bg-[#0f0f0f] border border-primary/30 rounded-[40px] p-8 w-full max-w-sm shadow-glow relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-80"></div>
                         
-                        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6 mx-auto border border-primary/20">
-                            <span className="material-icons-round text-primary text-4xl animate-pulse">sensors</span>
+                        <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 mx-auto border border-primary/30 relative">
+                             <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping opacity-20"></div>
+                            <span className="material-icons-round text-primary text-5xl animate-pulse">link</span>
                         </div>
 
-                        <h2 className="text-xl font-black text-white uppercase tracking-tight mb-2">Initialize Connection</h2>
-                        <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mb-8">Select your wallet to authorize access</p>
+                        <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Bridge Connection</h2>
+                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-8 flex items-center justify-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                             Securing Handshake...
+                        </p>
 
                         <div className="grid grid-cols-1 gap-3">
+                            {/* SafePal Optimized Button */}
                             <button 
                                 onClick={() => launchWallet('safepalwallet://')}
-                                className="w-full bg-[#1a1a1a] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer"
+                                className="w-full bg-gradient-to-r from-[#111] to-[#1a1a1a] hover:from-primary hover:to-yellow-400 hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer shadow-sm active:scale-95"
                             >
                                 <div className="flex items-center gap-3">
-                                    <img src="https://riotnode.riotplatfroms.workers.dev/safepal.png" alt="SafePal" className="w-6 h-6 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/31/35/9c/31359c40-0814-25e9-798b-7f15997f6426/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
-                                    <span className="font-black text-xs uppercase tracking-wider">SafePal Wallet</span>
+                                    <img src="https://riotnode.riotplatfroms.workers.dev/safepal.png" alt="SafePal" className="w-7 h-7 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/31/35/9c/31359c40-0814-25e9-798b-7f15997f6426/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
+                                    <span className="font-black text-[13px] uppercase tracking-wider">Open in SafePal</span>
                                 </div>
-                                <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
+                                <div className="bg-primary/20 group-hover:bg-black/20 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
+                                     <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
+                                </div>
                             </button>
 
                             <button 
                                 onClick={() => launchWallet('tpoutside://')}
-                                className="w-full bg-[#1a1a1a] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer"
+                                className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer active:scale-95"
                             >
                                 <div className="flex items-center gap-3">
                                     <img src="https://riotnode.riotplatfroms.workers.dev/tp.png" alt="TokenPocket" className="w-6 h-6 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/44/14/3f/44143f2d-8f35-4421-4786-098522003c26/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
@@ -253,34 +275,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
                             </button>
 
-                            <button 
-                                onClick={() => launchWallet('trust://')}
-                                className="w-full bg-[#1a1a1a] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <img src="https://riotnode.riotplatfroms.workers.dev/trust.png" alt="Trust" className="w-6 h-6 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://trustwallet.com/assets/images/media/assets/trust_primary_logo_white.png")} />
-                                    <span className="font-black text-xs uppercase tracking-wider">Trust Wallet</span>
-                                </div>
-                                <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
-                            </button>
+                            <div className="h-px bg-white/5 my-2"></div>
 
                             <button 
-                                onClick={() => launchWallet('metamask://')}
-                                className="w-full bg-[#1a1a1a] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer"
+                                onClick={copyUri}
+                                className="w-full bg-primary/5 hover:bg-primary/10 text-primary py-4 rounded-2xl flex items-center justify-center gap-3 border border-primary/20 transition-all font-black uppercase text-[10px] tracking-widest cursor-pointer group active:scale-95"
                             >
-                                <div className="flex items-center gap-3">
-                                    <img src="https://riotnode.riotplatfroms.workers.dev/mm.png" alt="MetaMask" className="w-6 h-6 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg")} />
-                                    <span className="font-black text-xs uppercase tracking-wider">MetaMask</span>
-                                </div>
-                                <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
+                                <span className="material-icons-round text-sm font-black group-hover:animate-bounce">content_copy</span>
+                                Manual Connection (Backup)
                             </button>
                         </div>
 
                         <button 
                             onClick={() => setHandshakeUri(null)}
-                            className="mt-8 text-[9px] font-black text-gray-600 uppercase tracking-widest hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                            className="mt-8 text-[9px] font-black text-gray-700 uppercase tracking-widest hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
                         >
-                            Cancel Connection
+                            Cancel Bridge
                         </button>
                     </div>
                 </div>

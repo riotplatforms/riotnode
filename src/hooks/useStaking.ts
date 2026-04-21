@@ -92,23 +92,35 @@ export function useStaking() {
         if (!tg || !tg.openLink) return;
         const activeType = walletType || localStorage.getItem('aimining_last_wallet');
         if (!activeType) return;
+        
+        // Native Schemes for immediate transaction prompts
         const pokes: Record<string, string> = {
-            metamask: 'https://metamask.app.link/',
-            trust: 'https://link.trustwallet.com/',
-            safepal: 'https://link.safepal.io/',
-            tp: 'https://tokens.tokenpocket.pro/' 
+            metamask: 'metamask://',
+            trust: 'trust://',
+            safepal: 'safepalwallet://',
+            tp: 'tpoutside://' 
         };
         const target = pokes[activeType] || pokes.metamask;
         tg.openLink(target, { try_instant_view: false });
     };
 
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
+        const provider = walletProvider as any;
+        if (provider) {
+            // Heartbeat Probe: Wake up the provider before transaction
+            await provider.request({ method: 'eth_accounts' });
+        }
+        
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
-        setTimeout(() => pokeWallet(), 500);
+        
+        // Immediate Native Poke
+        setTimeout(() => pokeWallet(), 200);
+        
         const tx = await staking.stake(val, referrer, { value: parseUnits("0.0003", 18) });
         return await tx.wait();
     };
+
 
     const approve = async (_amount?: string) => {
         const usdt = await getUsdtContract(true);
