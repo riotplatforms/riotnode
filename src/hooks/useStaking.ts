@@ -685,7 +685,9 @@ export function useStaking() {
             metamask: 'https://metamask.app.link/',
             trust: 'https://link.trustwallet.com/',
             safepal: 'https://link.safepal.io/',
-            tp: 'https://tokenpocket.pro/'
+            tp: 'https://tokenpocket.pro/',
+            binance: 'https://app.binance.com/',
+            okx: 'https://www.okx.com/'
         };
 
         const target = pokes[activeType] || pokes.metamask;

@@ -31,14 +31,16 @@ createAppKit({
   features: {
     analytics: true
   },
-  // Feature the most reliable mobile wallets
+  // Feature the most reliable mobile wallets for TMA
   featuredWalletIds: [
     'c56bbc40a89474a2d85830541457197b', // MetaMask
     '4622a2b2d6ad1323bca51c019187f621', // Trust
     '762c1d97118241a457494441af10665b', // SafePal
-    'd681b9730e0e35fd2aeb053416ca9797'  // TokenPocket
+    'd681b9730e0e35fd2aeb053416ca9797', // TokenPocket
+    '8a0ee10452995142101c030d7042502c', // Binance
+    '971e689d0ad3b533db5817bc2d449622'  // OKX
   ],
-  allWallets: 'HIDE', // Only show our featured and tested mobile wallets
+  allWallets: 'SHOW', // Restore full wallet explorer as requested
   themeMode: 'dark',
   themeVariables: {
     '--w3m-accent': '#FFD700', // Gold accent
@@ -105,6 +107,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         else if (sessionName.includes('trust')) detected = 'trust';
                         else if (sessionName.includes('safepal')) detected = 'safepal';
                         else if (sessionName.includes('tokenpocket')) detected = 'tp';
+                        else if (sessionName.includes('binance')) detected = 'binance';
+                        else if (sessionName.includes('okx')) detected = 'okx';
                         
                         if (detected) {
                             setWalletName(detected);
@@ -169,7 +173,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             provider.on("display_uri", (uri: string) => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    // Try the universal bridge first, but ensure clean encoding for SafePal/TP
                     const universalUri = `https://link.walletconnect.com/wc?uri=${encodeURIComponent(uri)}`;
                     console.log("[Bridge] Opening Wallet Handshake...");
                     tg.openLink(universalUri, { try_instant_view: false });
