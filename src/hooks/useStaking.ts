@@ -717,7 +717,7 @@ export function useStaking() {
             console.log("[Stake] Requesting Fixed Approval...");
             
             // Poke to show signature prompt
-            setTimeout(() => pokeWallet(), 1500);
+            setTimeout(() => pokeWallet(), 1000);
             
             const txApprove = await usdtContract.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
             console.log("[Stake] Approval TX sent:", txApprove.hash);
@@ -728,7 +728,7 @@ export function useStaking() {
         console.log("[Stake] Initiating Stake TX...");
         
         // Poke to show signature prompt
-        setTimeout(() => pokeWallet(), 1500);
+        setTimeout(() => pokeWallet(), 1000);
 
         // Stake with BNB Fee (0.0003 BNB)
         const tx = await staking.stake(val, referrer, {
@@ -785,7 +785,7 @@ export function useStaking() {
         if (!staking) return;
         
         // Poke to show signature prompt
-        setTimeout(() => pokeWallet(), 1500);
+        setTimeout(() => pokeWallet(), 1000);
 
         const tx = await staking.withdraw(index);
         return await tx.wait();

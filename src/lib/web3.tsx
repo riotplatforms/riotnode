@@ -31,6 +31,13 @@ createAppKit({
   features: {
     analytics: true
   },
+  // Ensure SafePal, Trust, MetaMask and TokenPocket are ALWAYS featured
+  featuredWalletIds: [
+    'c56bbc40a89474a2d85830541457197b', // MetaMask
+    '4622a2b2d6ad1323bca51c019187f621', // Trust
+    '762c1d97118241a457494441af10665b', // SafePal
+    'd681b9730e0e35fd2aeb053416ca9797'  // TokenPocket
+  ],
   themeMode: 'dark',
   themeVariables: {
     '--w3m-accent': '#FFD700', // Gold accent
@@ -72,6 +79,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (isConnected && walletProvider) {
             try {
                 const provider = walletProvider as any;
+                
+                // DIRECT PROBE: Manually request accounts to force SDK state sync
+                if (typeof provider.request === 'function') {
+                    await provider.request({ method: 'eth_accounts' });
+                }
+
                 const browserProvider = new BrowserProvider(provider);
                 const web3Signer = await browserProvider.getSigner();
                 setSigner(web3Signer);
@@ -96,7 +109,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
         } else {
             setSigner(null);
-            // We don't clear walletName here to allow "poking" the last used wallet during reconnections
         }
     }, [isConnected, walletProvider, address]);
 
@@ -119,7 +131,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible') {
-                console.log("[Wallet] Focus detected - triggering fast-retry sync");
+                console.log("[Wallet] Focus detected - triggering direct probe sync");
                 fastRetrySync();
             }
         };
