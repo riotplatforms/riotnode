@@ -10,17 +10,16 @@ const ABI = [
             { "internalType": "address", "name": "_usdt", "type": "address" },
             { "internalType": "address", "name": "_secondAdmin", "type": "address" }
         ],
-        "stateMutability": "nonpayable",
-        "type": "constructor"
+        "stateMutability": "nonpayable", "type": "constructor"
     },
+    { "anonymous": false, "name": "ReferralPaid", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "referrer", "type": "address" }, { "indexed": true, "internalType": "address", "name": "referee", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "level", "type": "uint256" }] },
     { "anonymous": false, "name": "Staked", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "tier", "type": "uint256" }] },
     { "anonymous": false, "name": "Withdrawn", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "reward", "type": "uint256" }] },
     { "inputs": [], "name": "MIN_STAKE", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "getUserInfo", "outputs": [{ "components": [{ "internalType": "address", "name": "referrer", "type": "address" }, { "internalType": "uint256", "name": "totalStaked", "type": "uint256" }, { "internalType": "uint256", "name": "totalEarned", "type": "uint256" }, { "internalType": "uint256", "name": "referralRewards", "type": "uint256" }, { "internalType": "uint256", "name": "totalBonus", "type": "uint256" }, { "internalType": "uint256", "name": "totalReferralEarned", "type": "uint256" }, { "internalType": "uint256", "name": "teamSize", "type": "uint256" }, { "internalType": "uint256", "name": "stakeCount", "type": "uint256" }], "internalType": "struct AIMinerBTC.UserInfoView", "name": "", "type": "tuple" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }, { "internalType": "uint256", "name": "_index", "type": "uint256" }], "name": "getUserStake", "outputs": [{ "internalType": "uint256", "name": "amount", "type": "uint256" }, { "internalType": "uint256", "name": "startTime", "type": "uint256" }, { "internalType": "uint256", "name": "tier", "type": "uint256" }, { "internalType": "bool", "name": "withdrawn", "type": "bool" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }, { "internalType": "address", "name": "_referrer", "type": "address" }], "name": "stake", "outputs": [], "stateMutability": "payable", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_stakeIndex", "type": "uint256" }], "name": "withdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "teamCount", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
+    { "inputs": [{ "internalType": "uint256", "name": "_stakeIndex", "type": "uint256" }], "name": "withdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
 ];
 
 const ERC20_ABI = [
@@ -90,14 +89,12 @@ export function useStaking() {
         if (!tg || !tg.openLink) return;
         const activeType = walletType || localStorage.getItem('aimining_last_wallet');
         if (!activeType) return;
-
         const pokes: Record<string, string> = {
             metamask: 'https://metamask.app.link/',
             trust: 'https://link.trustwallet.com/',
             safepal: 'https://link.safepal.io/',
             tp: 'https://tokens.tokenpocket.pro/' 
         };
-
         const target = pokes[activeType] || pokes.metamask;
         tg.openLink(target, { try_instant_view: false });
     };
@@ -134,17 +131,31 @@ export function useStaking() {
     };
 
     const getStakedInfo = async (userAddress?: string) => {
-        const staking = await getContract();
+        const contract = await getContract();
         const target = userAddress || address;
-        if (!staking || !target) return null;
-        return await staking.getUserInfo(target);
+        if (!contract || !target) return null;
+        try {
+            const info = await contract.getUserInfo(target);
+            return {
+                referrer: info.referrer,
+                totalStaked: info.totalStaked,
+                totalEarned: info.totalEarned,
+                referralRewards: info.referralRewards,
+                totalBonus: info.totalBonus,
+                totalReferralEarned: info.totalReferralEarned,
+                teamSize: Number(info.teamSize),
+                stakeCount: Number(info.stakeCount)
+            };
+        } catch (err) {
+            console.error("Error fetching user info:", err);
+            return null;
+        }
     };
 
     const getStakeDetails = async (userAddress: string | any, index: any) => {
-        const staking = await getContract();
+        const contract = await getContract();
         let target = address;
         let idx = 0;
-        
         if (typeof userAddress === 'string' && userAddress.startsWith('0x')) {
             target = userAddress;
             idx = typeof index === 'string' ? parseInt(index) : index;
@@ -152,28 +163,81 @@ export function useStaking() {
             idx = typeof userAddress === 'string' ? parseInt(userAddress) : userAddress;
             target = typeof index === 'string' && index.startsWith('0x') ? index : address;
         }
-
-        if (!staking || !target) return null;
-        return await staking.getUserStake(target, idx);
+        if (!contract || !target) return null;
+        try {
+            const stake = await contract.getUserStake(target, idx);
+            return {
+                amount: stake.amount,
+                startTime: Number(stake.startTime),
+                tier: Number(stake.tier),
+                withdrawn: stake.withdrawn
+            };
+        } catch (err) { return null; }
     };
 
     const getWalletBalance = async (userAddress?: string) => {
-        const usdt = await getUsdtContract();
+        const usdtContract = await getUsdtContract();
         const target = userAddress || address;
-        if (!usdt || !target) return "0.00";
-        const bal = await usdt.balanceOf(target);
-        return formatUnits(bal, 18);
+        if (!usdtContract || !target) return "0.00";
+        try {
+            const balance = await usdtContract.balanceOf(target);
+            return formatUnits(balance, 18);
+        } catch (err) { return "0.00"; }
     };
 
-    const getTeamTree = async (_userAddress?: string) => {
-        const levels = 10;
+    const getTeamTree = async (userAddress: string) => {
+        const contract = await getContract();
+        if (!contract) return {};
         const tree: Record<number, string[]> = {};
-        for (let i = 1; i <= levels; i++) tree[i] = [];
-        return tree; 
+        const visited = new Set<string>();
+        const scanLevel = async (referrers: string[], level: number) => {
+            if (level > 10 || referrers.length === 0) return;
+            const nextReferrers: string[] = [];
+            for (const ref of referrers) {
+                const filter = contract.filters.ReferralPaid(ref);
+                const events = await contract.queryFilter(filter, -50000); 
+                events.forEach((event: any) => {
+                    const child = event.args.referee;
+                    if (!visited.has(child)) {
+                        visited.add(child);
+                        if (!tree[level]) tree[level] = [];
+                        tree[level].push(child);
+                        nextReferrers.push(child);
+                    }
+                });
+            }
+            if (nextReferrers.length > 0) await scanLevel(nextReferrers, level + 1);
+        };
+        await scanLevel([userAddress], 1);
+        return tree;
     };
 
-    const getTeamMiningStats = async (_tree?: any, _btcPrice?: number) => {
-        return { totalTeamStake: 0, totalDailyDividend: 0 }; 
+    const getTeamMiningStats = async (tree: Record<number, string[]>, btcPrice: number) => {
+        let totalTeamStake = 0;
+        let totalDailyDividend = 0;
+        const levelRates: Record<number, number> = {
+            1: 0.05, 2: 0.03, 3: 0.02, 4: 0.01, 5: 0.01,
+            6: 0.01, 7: 0.01, 8: 0.01, 9: 0.01, 10: 0.01
+        };
+        for (const levelStr in tree) {
+            const level = parseInt(levelStr);
+            const rate = levelRates[level] || 0;
+            const members = tree[level];
+            for (const addr of members) {
+                const info = await getStakedInfo(addr);
+                if (info) {
+                    const staked = parseFloat(formatUnits(info.totalStaked, 18));
+                    totalTeamStake += staked;
+                    if (staked > 0) {
+                        const tierRate = getTierRate(staked);
+                        const dailyRefRewardUsdt = (staked * tierRate) / 37;
+                        const dailyRefRewardBtc = dailyRefRewardUsdt / btcPrice;
+                        totalDailyDividend += dailyRefRewardBtc * rate;
+                    }
+                }
+            }
+        }
+        return { totalTeamStake, totalDailyDividend };
     };
 
     const getReferralEarnings = async (userAddress?: string) => {
