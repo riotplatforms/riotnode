@@ -174,10 +174,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const schemes: Record<string, string> = {
                 'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                'binance': `https://app.binance.com/wc?uri=${encodedUri}`,
+                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
                 'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                'tp': `tpoutside://wc?uri=${encodedUri}`,
-                'okx': `okx://wc?uri=${encodedUri}`
+                'tp': `https://link.tokenpocket.pro/wc?uri=${encodedUri}`,
+                'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
             const tg = (window as any).Telegram?.WebApp;
