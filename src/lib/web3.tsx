@@ -5,7 +5,6 @@ import { createAppKit, useAppKitProvider, useAppKitAccount, useAppKit, useDiscon
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
-import { EthereumProvider } from '@walletconnect/ethereum-provider';
 
 // 1. Get ProjectId
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
@@ -266,25 +265,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             window.location.reload(); 
         } catch (err) {
             console.error("[Wallet] Disconnect failed:", err);
-        }
-    };
-
-    const launchWallet = (scheme: string) => {
-        if (!handshakeUri) return;
-        const tg = (window as any).Telegram?.WebApp;
-        if (tg && tg.openLink) {
-            const cleanUri = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
-            
-            // SPECIAL HANDLING: SafePal and TokenPocket direct protocols
-            if (scheme.includes('safepal')) {
-                // Try Universal first, then fallback to Native deep-link
-                tg.openLink(`https://link.safepal.io/wc?uri=${encodeURIComponent(cleanUri)}`, { try_instant_view: false });
-                return;
-            }
-
-            const encoded = encodeURIComponent(cleanUri);
-            const target = `${scheme}wc?uri=${encoded}`;
-            tg.openLink(target, { try_instant_view: false });
         }
     };
 
