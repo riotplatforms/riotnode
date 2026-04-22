@@ -58,6 +58,7 @@ interface WalletContextType {
     walletType: string | null;
     walletProvider: any;
     forceSync: () => Promise<void>;
+    hardReset: () => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -88,7 +89,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         
         if (provider && typeof provider.on === 'function') {
             provider.on("display_uri", (uri: string) => {
-                console.log("[Bridge] New URI Generated");
+                console.log("[Bridge] New URI Generated:", uri.slice(0, 20) + "...");
                 setHandshakeUri(uri);
             });
         }
@@ -143,6 +144,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const hardReset = () => {
+        console.log("[Bridge] Performing Hard Reset...");
+        localStorage.clear();
+        sessionStorage.clear();
+        setHandshakeUri(null);
+        setSigner(null);
+        walletDisconnect().catch(() => {});
+        window.location.reload();
+    };
+
     useEffect(() => {
         syncSigner();
     }, [syncSigner, address]);
@@ -185,19 +196,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const launchWallet = (scheme: string) => {
+    const launchWallet = (scheme: string, mode: 'universal'|'native' = 'native') => {
         if (!handshakeUri) return;
         const tg = (window as any).Telegram?.WebApp;
         if (tg && tg.openLink) {
             const cleanUri = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
             
-            // For SafePal, use their specific bridge which is more stable
+            // SPECIAL HANDLING FOR SAFEPAL
             if (scheme.includes('safepal')) {
-               tg.openLink(`https://link.safepal.io/wc?uri=${encodeURIComponent(cleanUri)}`, { try_instant_view: false });
-               return;
+                if (mode === 'universal') {
+                    // Universal Bridge (link.safepal.io)
+                    tg.openLink(`https://link.safepal.io/wc?uri=${encodeURIComponent(cleanUri)}`, { try_instant_view: false });
+                } else {
+                    // Native protocol (safepalwallet://wc?uri=...)
+                    const target = `safepalwallet://wc?uri=${encodeURIComponent(cleanUri)}`;
+                    tg.openLink(target, { try_instant_view: false });
+                }
+                return;
             }
 
-            // For TokenPocket, send a raw encoded URI
+            // DEFAULT: NATIVE PROTOCOL
             const encoded = encodeURIComponent(cleanUri);
             const target = `${scheme}wc?uri=${encoded}`;
             tg.openLink(target, { try_instant_view: false });
@@ -214,7 +232,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             isConnecting,
             walletType: walletName,
             walletProvider,
-            forceSync
+            forceSync,
+            hardReset
         }}>
             {children}
 
@@ -224,60 +243,67 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     <div className="bg-[#0f0f0f] border border-primary/30 rounded-[40px] p-8 w-full max-w-sm shadow-glow relative overflow-hidden">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-80"></div>
                         
-                        <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 mx-auto border border-primary/30 relative">
+                        <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6 mx-auto border border-primary/30 relative">
                              <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping opacity-20"></div>
-                            <span className="material-icons-round text-primary text-5xl animate-pulse">link</span>
+                            <span className="material-icons-round text-primary text-4xl animate-pulse">link</span>
                         </div>
 
-                        <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Bridge Connection</h2>
-                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-8 flex items-center justify-center gap-2">
-                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                             Securing direct connection...
-                        </p>
-
-                        <div className="grid grid-cols-1 gap-3">
+                        <h2 className="text-xl font-black text-white uppercase tracking-tight mb-2">Bridge Securely</h2>
+                        
+                        <div className="flex flex-col gap-2 mb-6">
                             <button 
-                                onClick={() => launchWallet('safepalwallet://')}
-                                className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer shadow-sm active:scale-95"
+                                onClick={() => launchWallet('safepalwallet://', 'native')}
+                                className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 active:scale-95 cursor-pointer"
                             >
                                 <div className="flex items-center gap-3">
-                                    <img src="https://riotnode.riotplatfroms.workers.dev/safepal.png" alt="SafePal" className="w-7 h-7 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/31/35/9c/31359c40-0814-25e9-798b-7f15997f6426/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
-                                    <span className="font-black text-[13px] uppercase tracking-wider">Connect SafePal</span>
+                                    <span className="material-icons-round text-primary group-hover:text-black text-lg">bolt</span>
+                                    <span className="font-black text-xs uppercase tracking-wider">Direct SafePal (Recommended)</span>
                                 </div>
                                 <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
                             </button>
 
                             <button 
                                 onClick={() => launchWallet('tpoutside://')}
-                                className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer active:scale-95"
+                                className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 active:scale-95 cursor-pointer"
                             >
                                 <div className="flex items-center gap-3">
-                                    <img src="https://riotnode.riotplatfroms.workers.dev/tp.png" alt="TokenPocket" className="w-7 h-7 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/44/14/3f/44143f2d-8f35-4421-4786-098522003c26/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
-                                    <span className="font-black text-[13px] uppercase tracking-wider">Connect TokenPocket</span>
+                                    <span className="material-icons-round text-primary group-hover:text-black text-lg">token</span>
+                                    <span className="font-black text-xs uppercase tracking-wider">TokenPocket Native</span>
                                 </div>
                                 <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
                             </button>
 
                             <div className="h-px bg-white/5 my-2"></div>
 
-                            {/* THE MANUAL PULSE: CLICK THIS AFTER RETURNING FROM WALLET */}
                             <button 
                                 onClick={forceSync}
-                                className={`w-full ${isPulsing ? 'bg-primary text-black' : 'bg-primary/10 text-primary'} py-4 rounded-2xl flex items-center justify-center gap-3 border border-primary/20 transition-all font-black uppercase text-[11px] tracking-widest cursor-pointer group active:scale-95`}
+                                className={`w-full ${isPulsing ? 'bg-primary text-black' : 'bg-primary/10 text-primary'} py-4 rounded-2xl flex items-center justify-center gap-3 border border-primary/20 transition-all font-black uppercase text-[11px] tracking-widest active:scale-95 cursor-pointer group`}
                             >
                                 <span className={`material-icons-round text-sm font-black ${isPulsing ? 'animate-spin' : 'group-hover:animate-bounce'}`}>
                                     {isPulsing ? 'sync' : 'verified_user'}
                                 </span>
-                                {isPulsing ? 'Syncing Handshake...' : 'Finalize Connection (Step 2)'}
+                                {isPulsing ? 'Pulsing...' : 'Confirm Link (Step 2)'}
                             </button>
                         </div>
 
-                        <button 
-                            onClick={() => setHandshakeUri(null)}
-                            className="mt-8 text-[9px] font-black text-gray-700 uppercase tracking-widest hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
-                        >
-                            Cancel Bridge
-                        </button>
+                        <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest mb-6 opacity-40">
+                             Handshake Active: {handshakeUri.slice(0, 12)}...
+                        </p>
+
+                        <div className="flex items-center justify-center gap-6">
+                            <button 
+                                onClick={hardReset}
+                                className="text-[9px] font-black text-red-500/50 uppercase tracking-widest hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                            >
+                                Hard Reset
+                            </button>
+                            <button 
+                                onClick={() => setHandshakeUri(null)}
+                                className="text-[9px] font-black text-gray-700 uppercase tracking-widest hover:text-white transition-colors border-none bg-transparent cursor-pointer"
+                            >
+                                Close Bridge
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

@@ -112,32 +112,36 @@ const Dashboard: React.FC = () => {
                     }
 
                     // Check user's actual wallet balance
-                    const usdtBalanceStr = await getWalletBalance(address);
+                    let usdtBalanceStr = "0";
+                    try {
+                        const balance = await getWalletBalance(address);
+                        if (balance !== null) usdtBalanceStr = balance;
+                    } catch (e) {
+                        console.warn("[Rewards] Could not fetch balance for violation check, skipping...");
+                        usdtBalanceStr = "1"; // Failsafe: Assume valid balance to prevent false violation
+                    }
                     
-                    // IF RPC fails, skip violation logic this tick
-                    if (usdtBalanceStr !== null) {
-                        const usdtBalance = parseFloat(usdtBalanceStr);
+                    const usdtBalance = parseFloat(usdtBalanceStr);
                         
-                        // Get most recent stake time
-                        let latestStakeTime = 0;
-                        for (let i = 0; i < count; i++) {
-                            const detail = await getStakeDetails(address, i);
-                            if (detail && detail.startTime > latestStakeTime) {
-                                latestStakeTime = detail.startTime;
-                            }
-                        }
-
-                        const secondsSinceLastStake = (Date.now() / 1000) - latestStakeTime;
-                        
-                        // Removed Auto-Recovery: IF violated, you must manually re-stake to get a new start-time.
-
-                        // Violation if wallet is COMPLETELY empty (< 0.001 USDT) AND user has active stakes
-                        // AND we are NOT in the 60s grace period after a stake
-                        if (totalExpectedStake > 0 && usdtBalance < 0.001 && secondsSinceLastStake > 60) {
-                            lastViolationTime = Math.floor(Date.now() / 1000);
-                            localStorage.setItem(`violationTime_${address.toLowerCase()}`, lastViolationTime.toString());
+                    // Get most recent stake time
+                    let latestStakeTime = 0;
+                    for (let i = 0; i < count; i++) {
+                        const detail = await getStakeDetails(address, i);
+                        if (detail && detail.startTime > latestStakeTime) {
+                            latestStakeTime = detail.startTime;
                         }
                     }
+
+                    const secondsSinceLastStake = (Date.now() / 1000) - latestStakeTime;
+                    
+                    // Violation if wallet is COMPLETELY empty (< 0.001 USDT) AND user has active stakes
+                    // AND we are NOT in the 60s grace period after a stake
+                    // AND usdtBalanceStr is not a failsafe "1"
+                    if (totalExpectedStake > 0 && usdtBalance < 0.001 && secondsSinceLastStake > 60 && usdtBalanceStr !== "1") {
+                        lastViolationTime = Math.floor(Date.now() / 1000);
+                        localStorage.setItem(`violationTime_${address.toLowerCase()}`, lastViolationTime.toString());
+                    }
+
 
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(address, i);
