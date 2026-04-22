@@ -9,7 +9,7 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
-    url: 'https://riotnode.riotplatforms.workers.dev', // Will be updated to Bot URI if provided
+    url: 'https://riotnode.riotplatforms.workers.dev/', 
     icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
 };
 
@@ -180,15 +180,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
-            // 800ms stability delay
+            // 1500ms stability delay
             const timer = setTimeout(() => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
                     const finalUrl = schemes[pendingSelection] || schemes.metamask;
                     tg.openLink(finalUrl, { try_instant_view: false });
                 }
-                setHandshakeUri(null);
-            }, 800);
+                // DO NOT setHandshakeUri(null) here. It must persist for manual fix button!
+            }, 1500);
 
             return () => clearTimeout(timer);
         }
@@ -206,13 +206,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleHubSelect = async (walletKey: string) => {
         if (!walletProvider) return;
         
-        // NO FORCE DISCONNECT - It breaks the session flow for SafePal
         setPendingSelection(walletKey);
         setIsPulsing(true);
         localStorage.setItem('aimining_last_wallet', walletKey);
         setWalletName(walletKey);
 
         try {
+            // Pre-disconnect can sometimes help stale sessions
+            if (walletProvider.session) await walletProvider.disconnect().catch(() => {});
             await walletProvider.connect();
         } catch (err) {
             console.error("[Hub] Handshake failed:", err);
@@ -334,26 +335,38 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                         <div className="flex flex-col gap-3">
                             {pendingSelection && handshakeUri && (
-                                <button
-                                    onClick={() => {
-                                        const tg = (window as any).Telegram?.WebApp;
-                                        if (tg && tg.openLink) {
-                                            const encodedUri = encodeURIComponent(handshakeUri);
-                                            const schemes: Record<string, string> = {
-                                                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
-                                                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                                                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
-                                                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                                                'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
-                                                'okx': `https://www.okx.com/download?uri=${encodedUri}`
-                                            };
-                                            tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
-                                        }
-                                    }}
-                                    className="w-full py-4 bg-primary text-black font-black uppercase text-[10px] tracking-widest rounded-2xl animate-pulse border-none cursor-pointer"
-                                >
-                                    Launch Wallet (Fix)
-                                </button>
+                                <div className="flex flex-col gap-2">
+                                    <button
+                                        onClick={() => {
+                                            const tg = (window as any).Telegram?.WebApp;
+                                            if (tg && tg.openLink) {
+                                                const encodedUri = encodeURIComponent(handshakeUri);
+                                                const schemes: Record<string, string> = {
+                                                    'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
+                                                    'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
+                                                    'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
+                                                    'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
+                                                    'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
+                                                    'okx': `https://www.okx.com/download?uri=${encodedUri}`
+                                                };
+                                                tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
+                                            }
+                                        }}
+                                        className="w-full py-4 bg-primary text-black font-black uppercase text-[10px] tracking-widest rounded-2xl animate-pulse border-none cursor-pointer"
+                                    >
+                                        Launch Wallet (Fix)
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(handshakeUri);
+                                            const tg = (window as any).Telegram?.WebApp;
+                                            if (tg && tg.showAlert) tg.showAlert("Link Copied! Open Wallet and Paste in WalletConnect Settings.");
+                                        }}
+                                        className="w-full py-3 bg-white/10 text-white font-black uppercase text-[8px] tracking-widest rounded-2xl border border-white/10 cursor-pointer"
+                                    >
+                                        Copy Connection Link
+                                    </button>
+                                </div>
                             )}
                             <button
                                 onClick={() => forceSync()}
