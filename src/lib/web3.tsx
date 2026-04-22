@@ -81,6 +81,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
     const [handshakeUri, setHandshakeUri] = useState<string | null>(null);
     const [isPulsing, setIsPulsing] = useState(false);
+    const [showSelectionHub, setShowSelectionHub] = useState(false);
+    const [pendingSelection, setPendingSelection] = useState<string | null>(null);
 
     // 1. Handshake Capture and Synchronization Heartbeat
     useEffect(() => {
@@ -162,9 +164,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => setIsPulsing(false), 2000);
         if (success) {
             setHandshakeUri(null);
+            setShowSelectionHub(false);
             setIsConnecting(false);
         }
     };
+
+    // AUTO-LAUNCHER: When a selection is made and URI arrives, FIRE it immediately
+    useEffect(() => {
+        if (pendingSelection && handshakeUri) {
+            console.log(`[Hub] Auto-launching: ${pendingSelection}`);
+            const schemes: Record<string, string> = {
+                'metamask': 'metamask://',
+                'trust': 'trust://',
+                'binance': 'bnc://',
+                'safepal': 'safepalwallet://',
+                'tp': 'tpoutside://',
+                'okx': 'okx://'
+            };
+            launchWallet(schemes[pendingSelection] || '');
+            // Stay in pulsing state until user returns
+            setPendingSelection(null); 
+        }
+    }, [pendingSelection, handshakeUri]);
+
+    // AGGRESSIVE HEARTBEAT: Pulse every 800ms when bridge is active
+    useEffect(() => {
+        if (!handshakeUri && !showSelectionHub) return;
+        const pulseInterval = setInterval(() => {
+            syncSigner(true);
+        }, 800);
+        return () => clearInterval(pulseInterval);
+    }, [handshakeUri, showSelectionHub, syncSigner]);
 
     const hardReset = () => {
         localStorage.clear();
@@ -176,13 +206,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const connect = async () => {
+        if (isConnected) {
+             await open(); // Open account view
+             return;
+        }
+        setShowSelectionHub(true);
+    };
+
+    const handleHubSelect = async (walletKey: string) => {
+        setPendingSelection(walletKey);
+        setIsConnecting(true);
         try {
-            setIsConnecting(true);
-            await open();
+            await open({ view: 'Connect' });
         } catch (err) {
-            console.error("[Wallet] Connection error:", err);
-        } finally {
-            setIsConnecting(false);
+            console.error("[Hub] Selection failed:", err);
+            setPendingSelection(null);
         }
     };
 
@@ -240,74 +278,86 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             {children}
 
             {/* GOD-MODE CONNECTION BRIDGE */}
-            {handshakeUri && (
-                <div className="fixed inset-0 z-[9999] bg-black/98 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
-                    <div className="bg-[#0a0a0a] border border-primary/20 rounded-[48px] p-10 w-full max-w-sm shadow-2xl relative overflow-hidden">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
+            {/* DIRECT-CONNECT PREMIUM HUB */}
+            {showSelectionHub && (
+                <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
+                    <div className="glass-panel rounded-[40px] p-8 w-full max-w-sm shadow-2xl relative overflow-hidden neon-border">
+                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-30"></div>
                         
-                        <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-8 mx-auto border border-primary/20 relative">
-                             <div className="absolute inset-0 bg-primary/10 rounded-full animate-ping opacity-20"></div>
-                            <span className="material-icons-round text-primary text-5xl animate-pulse">sensors</span>
+                        <div className="flex justify-between items-center mb-8">
+                            <h2 className="text-xl font-bold text-white uppercase tracking-tighter metallic-text">Connection Hub</h2>
+                            <button 
+                                onClick={() => { setShowSelectionHub(false); setPendingSelection(null); }}
+                                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border-none cursor-pointer hover:bg-white/10 transition-colors"
+                            >
+                                <span className="material-icons-round text-sm text-gray-500">close</span>
+                            </button>
                         </div>
 
-                        <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Bridge Protocol</h2>
-                        <p className="text-gray-500 text-[10px] font-black uppercase tracking-[3px] mb-8">Direct Handshake Active</p>
-
-                        <div className="grid grid-cols-1 gap-4">
-                            <button 
-                                onClick={() => launchWallet('safepalwallet://')}
-                                className="w-full bg-primary/5 hover:bg-primary hover:text-black py-4.5 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 active:scale-95 cursor-pointer shadow-sm"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <span className="material-icons-round text-primary group-hover:text-black text-xl">bolt</span>
-                                    <span className="font-black text-xs uppercase tracking-widest">Connect SafePal</span>
-                                </div>
-                                <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
-                            </button>
-
-                            <button 
-                                onClick={() => launchWallet('tpoutside://')}
-                                className="w-full bg-primary/5 hover:bg-primary hover:text-black py-4.5 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 active:scale-95 cursor-pointer"
-                            >
-                                <div className="flex items-center gap-4">
-                                    <span className="material-icons-round text-primary group-hover:text-black text-xl">token</span>
-                                    <span className="font-black text-xs uppercase tracking-widest">TokenPocket</span>
-                                </div>
-                                <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
-                            </button>
-
-                            <div className="flex gap-2">
-                                <button 
-                                    onClick={forceSync}
-                                    className={`flex-1 ${isPulsing ? 'bg-primary text-black' : 'bg-white/5 text-gray-400'} py-4 rounded-2xl flex items-center justify-center gap-3 border border-white/5 transition-all font-black uppercase text-[10px] tracking-widest active:scale-95 cursor-pointer`}
+                        <div className="grid grid-cols-2 gap-4 mb-8">
+                            {[
+                                { id: 'metamask', name: 'MetaMask', icon: 'fox', color: '#F6851B' },
+                                { id: 'trust', name: 'Trust Wallet', icon: 'shield', color: '#3375BB' },
+                                { id: 'binance', name: 'Binance', icon: 'grid_view', color: '#F3BA2F' },
+                                { id: 'safepal', name: 'SafePal', icon: 'security', color: '#E9E9E9' },
+                                { id: 'tp', name: 'TokenPocket', icon: 'account_balance_wallet', color: '#2980B9' },
+                                { id: 'okx', name: 'OKX Wallet', icon: 'toll', color: '#000000' }
+                            ].map(w => (
+                                <button
+                                    key={w.id}
+                                    onClick={() => handleHubSelect(w.id)}
+                                    disabled={!!pendingSelection}
+                                    className={`
+                                        relative group glass-card p-4 rounded-3xl flex flex-col items-center gap-3 transition-all active:scale-95 cursor-pointer border-none
+                                        ${pendingSelection === w.id ? 'bg-primary/10 border-primary shadow-neon' : ''}
+                                    `}
                                 >
-                                    <span className={`material-icons-round text-sm ${isPulsing ? 'animate-spin' : ''}`}>sync</span>
-                                    {isPulsing ? 'Syncing...' : 'Sync Now'}
+                                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden group-hover:bg-white/10 transition-colors">
+                                        <span className="material-icons-round text-3xl" style={{ color: w.color }}>{w.icon}</span>
+                                        {pendingSelection === w.id && (
+                                            <div className="absolute inset-0 bg-primary/20 animate-pulse"></div>
+                                        )}
+                                    </div>
+                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-white transition-colors">{w.name}</span>
                                 </button>
-                                <button 
-                                    onClick={copyUri}
-                                    className="p-4 bg-white/5 text-primary rounded-2xl border border-white/5 active:scale-95 cursor-pointer"
-                                    title="Copy Connection URI"
-                                >
-                                    <span className="material-icons-round text-sm">content_copy</span>
-                                </button>
-                            </div>
+                            ))}
                         </div>
 
-                        <div className="mt-10 flex flex-col gap-4">
+                        <div className="flex flex-col gap-3">
                             <button 
-                                onClick={hardReset}
-                                className="text-[10px] font-black text-red-500/40 uppercase tracking-widest hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
+                                onClick={forceSync}
+                                className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 border-none transition-all active:scale-95 cursor-pointer 
+                                    ${isPulsing ? 'btn-premium' : 'bg-white/5 text-gray-400 font-black uppercase text-[10px] tracking-widest'}`}
                             >
-                                Reset Sessions
+                                <span className={`material-icons-round text-sm ${isPulsing ? 'animate-spin' : ''}`}>sync</span>
+                                {isPulsing ? 'Syncing Session...' : 'I HAVE CONNECTED IN WALLET'}
                             </button>
-                            <button 
-                                onClick={() => setHandshakeUri(null)}
-                                className="text-[10px] font-black text-gray-700 uppercase tracking-widest hover:text-white transition-colors border-none bg-transparent cursor-pointer"
-                            >
-                                Cancel Connection
-                            </button>
+                            <p className="text-[8px] text-gray-600 font-bold uppercase tracking-[4px] text-center mt-2">Protocol V2.5 • RiotNode Alpha</p>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* HANDSHAKE OVERLAY (Hidden until URI generated) */}
+            {handshakeUri && !showSelectionHub && (
+                 <div className="fixed bottom-10 left-6 right-6 z-[10000] animate-in slide-in-from-bottom duration-500">
+                    <div className="bg-primary p-4 rounded-[32px] flex items-center justify-between shadow-neon border-none relative overflow-hidden">
+                        <div className="absolute inset-0 bg-white/10 animate-pulse"></div>
+                        <div className="flex items-center gap-3 relative z-10">
+                             <div className="w-10 h-10 bg-black/10 rounded-2xl flex items-center justify-center">
+                                <span className="material-icons-round text-black animate-spin">refresh</span>
+                             </div>
+                             <div>
+                                <p className="text-[10px] font-black text-black uppercase tracking-tight leading-none">Awaiting Approval</p>
+                                <p className="text-[10px] text-black/60 font-bold uppercase tracking-widest">Connect to finish...</p>
+                             </div>
+                        </div>
+                        <button 
+                            onClick={forceSync}
+                            className="bg-black text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase border-none cursor-pointer active:scale-95 transition-all relative z-10 shadow-lg"
+                        >
+                            Sync Now
+                        </button>
                     </div>
                 </div>
             )}

