@@ -9,8 +9,8 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
-    url: 'https://riotnode.riotplatfroms.workers.dev',
-    icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png']
+    url: 'https://riotnode.riotplatforms.workers.dev',
+    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
 };
 
 interface WalletContextType {
@@ -57,9 +57,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     showQrModal: false,
                     chains: [56],
                     optionalChains: [56],
+                    metadata,
                     methods: ["eth_sendTransaction", "personal_sign"],
-                    events: ["chainChanged", "accountsChanged"],
-                    metadata
+                    events: ["chainChanged", "accountsChanged"]
                 });
 
                 setWalletProvider(provider);
