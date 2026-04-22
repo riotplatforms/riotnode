@@ -172,12 +172,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const encodedUri = encodeURIComponent(handshakeUri);
 
             const schemes: Record<string, string> = {
-                'metamask': `metamask://wc?uri=${encodedUri}`,
-                'trust': `trust://wc?uri=${encodedUri}`,
-                'binance': `bnc://app.binance.com/wc?uri=${encodedUri}`,
-                'safepal': `safepalwallet://wc?uri=${encodedUri}`,
-                'tp': `tpoutside://wc?uri=${encodedUri}`,
-                'okx': `okx://wc?uri=${encodedUri}`
+                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
+                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
+                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
+                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
+                'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
+                'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
             const tg = (window as any).Telegram?.WebApp;
