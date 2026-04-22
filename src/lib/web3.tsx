@@ -255,13 +255,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const copyUri = () => {
-        if (!handshakeUri) return;
-        navigator.clipboard.writeText(handshakeUri);
-        const tg = (window as any).Telegram?.WebApp;
-        if (tg && tg.showAlert) tg.showAlert("Connection Link copied! Paste it in your wallet settings.");
-    };
-
     return (
         <WalletContext.Provider value={{ 
             address: address || signer?.address, 

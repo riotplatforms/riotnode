@@ -122,7 +122,6 @@ const Dashboard: React.FC = () => {
                         if (detail && !detail.withdrawn) {
                             const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                             const timePassed = (Date.now() / 1000) - detail.startTime;
-                            const isCompleted = timePassed >= (37 * 86400);
 
                             // We show all active (not withdrawn) stakes to restore legacy mining visibility
                             activeStaked += stakeAmount;
