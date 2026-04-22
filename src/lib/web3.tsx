@@ -24,6 +24,7 @@ interface WalletContextType {
     walletProvider: any;
     forceSync: () => Promise<void>;
     hardReset: () => void;
+    setIsDisconnectModalOpen: (open: boolean) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -44,6 +45,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [handshakeUri, setHandshakeUri] = useState<string | null>(null);
     const [isPulsing, setIsPulsing] = useState(false);
     const [showSelectionHub, setShowSelectionHub] = useState(false);
+    const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
     const [pendingSelection, setPendingSelection] = useState<string | null>(null);
 
     // Initialize Provider
@@ -233,9 +235,42 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             walletType: walletName,
             walletProvider,
             forceSync,
-            hardReset
+            hardReset,
+            setIsDisconnectModalOpen
         }}>
             {children}
+
+            {/* DISCONNECT MODAL (Global) */}
+            {isDisconnectModalOpen && isConnected && (
+                <div className="fixed inset-0 z-[10000] flex items-end justify-center sm:items-center p-4 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsDisconnectModalOpen(false)}></div>
+                    <div className="glass-panel w-full max-w-sm rounded-[32px] p-6 shadow-2xl relative translate-y-0 animate-in slide-in-from-bottom duration-500 neon-border">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-sm font-black text-white uppercase tracking-widest">Active Wallet</h3>
+                            <button onClick={() => setIsDisconnectModalOpen(false)} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border-none cursor-pointer">
+                                <span className="material-icons-round text-sm text-gray-500">close</span>
+                            </button>
+                        </div>
+
+                        <div className="bg-black/40 rounded-2xl p-4 border border-white/5 mb-6 text-center">
+                            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                                <span className="material-icons-round text-2xl text-primary">account_balance_wallet</span>
+                            </div>
+                            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-1">Network: Binance Smart Chain</p>
+                            <p className="text-xs font-mono text-white break-all">{address}</p>
+                        </div>
+
+                        <button 
+                            onClick={() => { setIsDisconnectModalOpen(false); disconnect(); }}
+                            className="w-full py-4 bg-red-500/10 text-red-500 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-red-500/20 transition-all active:scale-95 border-none cursor-pointer"
+                        >
+                            Disconnect Wallet
+                        </button>
+                        
+                        <p className="text-[8px] text-gray-700 text-center mt-6 uppercase font-bold tracking-[4px]">RiotNode Secure Protocol</p>
+                    </div>
+                </div>
+            )}
 
             {/* GOD-MODE CONNECTION BRIDGE */}
             {/* DIRECT-CONNECT PREMIUM HUB */}

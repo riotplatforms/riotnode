@@ -23,7 +23,7 @@ const getTierRate = (val: number) => {
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { address, isConnected, connect } = useWallet();
+    const { address, isConnected, connect, setIsDisconnectModalOpen } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
     const { showAlert, referrer, tg } = useTelegram();
     const { btcPrice } = usePrice();
@@ -222,8 +222,8 @@ const Dashboard: React.FC = () => {
                     ) : (
                         <div className="flex items-center">
                              <button
-                                onClick={() => connect()} // This will open account view if already connected
-                                className="bg-primary text-black px-4 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold active:scale-95"
+                                onClick={() => setIsDisconnectModalOpen(true)} 
+                                className="bg-primary text-black px-4 py-1.5 rounded-full border border-primary flex items-center gap-2 shadow-neon transition-all text-[10px] font-bold active:scale-95 cursor-pointer"
                             >
                                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                                 {address?.slice(0, 4)}...{address?.slice(-4)}

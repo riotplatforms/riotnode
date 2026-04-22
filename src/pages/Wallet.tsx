@@ -7,7 +7,7 @@ import { usePrice } from '../hooks/usePrice';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect } = useWallet();
+    const { address, isConnected, connect, setIsDisconnectModalOpen } = useWallet();
 
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats } = useStaking();
     const { btcPrice } = usePrice();
@@ -168,12 +168,22 @@ const Wallet: React.FC = () => {
             {/* Header */}
             <header className="flex items-center justify-between px-6 py-5 bg-[#0a0a0a]/80 backdrop-blur-md sticky top-0 z-30 border-b border-gray-800">
                 <button onClick={() => navigate(-1)} className="cursor-pointer hover:text-primary transition-colors border-none bg-transparent flex items-center">
-                    <span className="material-icons-round text-gray-400 hover:text-primary underline">arrow_back</span>
+                    <span className="material-icons-round text-gray-400 hover:text-primary">arrow_back</span>
                 </button>
                 <div className="flex items-center gap-2">
-                    <h1 className="font-display font-black text-xl text-white tracking-[0.1em] uppercase">My Assets</h1>
+                    <h1 className="font-display font-black text-lg text-white tracking-[0.1em] uppercase">My Assets</h1>
                 </div>
-                <div className="w-6"></div>
+                <div className="flex items-center">
+                    {isConnected && (
+                        <button
+                            onClick={() => setIsDisconnectModalOpen(true)} 
+                            className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-1 shadow-neon transition-all text-[9px] font-black active:scale-95 cursor-pointer"
+                        >
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                            {address?.slice(0, 4)}...{address?.slice(-4)}
+                        </button>
+                    )}
+                </div>
             </header>
 
             <main className="flex-1 p-6 space-y-8 overflow-y-auto scrollbar-hide">

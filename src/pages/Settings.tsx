@@ -5,7 +5,7 @@ import { isAdmin } from '../lib/admin';
 
 const Settings: React.FC = () => {
     const navigate = useNavigate();
-    const { address, disconnect } = useWallet();
+    const { address, disconnect, setIsDisconnectModalOpen } = useWallet();
     const [notifications, setNotifications] = useState(true);
 
     // Theme specific colors for Settings page (Yellow/Brown)
@@ -73,18 +73,22 @@ const Settings: React.FC = () => {
                     <h3 className="text-[#bab29c] text-xs font-bold uppercase tracking-wider px-2 pb-1">Finance</h3>
                     <div className="flex flex-col bg-white/5 rounded-xl overflow-hidden shadow-sm border border-white/5">
                         {/* Wallet Address */}
-                        <div className="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-white/5 transition-colors cursor-pointer group">
+                        <div 
+                            onClick={() => setIsDisconnectModalOpen(true)}
+                            className="flex items-center gap-4 px-4 py-3.5 justify-between hover:bg-white/5 transition-colors cursor-pointer group"
+                        >
                             <div className="flex items-center gap-4 overflow-hidden">
                                 <div className="flex items-center justify-center rounded-lg bg-[#f4c025]/10 shrink-0 size-10 group-hover:bg-[#f4c025]/20 transition-colors">
                                     <span className="material-icons-round text-[#f4c025]">account_balance_wallet</span>
                                 </div>
                                 <div className="flex flex-col overflow-hidden">
-                                    <p className="text-base font-medium leading-normal truncate">Wallet Address</p>
+                                    <p className="text-base font-medium leading-normal truncate">Wallet Connection</p>
+                                    <p className="text-[10px] text-[#bab29c] font-black uppercase">Click to Manage</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                                <span className="text-xs text-white/40 font-mono hidden min-[350px]:block">{address ? `${address.slice(0, 6)}...${address.slice(-4)}` : '0x3f...9a2'}</span>
-                                <span className="material-icons-round text-white/30">edit</span>
+                                <span className="text-xs text-white/40 font-mono hidden min-[350px]:block">{address ? `${address.slice(0, 6)}...${address.slice(-4)}` : 'Disconnected'}</span>
+                                <span className="material-icons-round text-white/30">chevron_right</span>
                             </div>
                         </div>
                     </div>
@@ -149,17 +153,8 @@ const Settings: React.FC = () => {
                     </div>
                 )}
 
-                {/* Disconnect Wallet */}
-                <button 
-                    onClick={() => disconnect()}
-                    className="w-full py-3.5 rounded-xl border border-red-500/30 text-red-500 hover:bg-red-500/10 active:bg-red-500/20 font-semibold transition-all flex items-center justify-center gap-2 mt-auto mb-4 cursor-pointer active:scale-95"
-                >
-                    <span className="material-icons-round text-[20px]">logout</span>
-                    Disconnect Wallet
-                </button>
-
                 {/* Version */}
-                <p className="text-center text-xs text-white/20 font-medium">
+                <p className="text-center text-xs text-white/20 font-medium mt-auto">
                     Ai Mining BTC v1.0.4
                 </p>
             </main>
