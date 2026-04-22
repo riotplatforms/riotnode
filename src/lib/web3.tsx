@@ -62,8 +62,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     chains: [56],
                     optionalChains: [1, 56],
                     metadata,
-                    methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
-                    events: ["chainChanged", "accountsChanged"]
+                    methods: ["eth_sendTransaction", "personal_sign", "eth_accounts", "eth_signTypedData_v4"],
+                    events: ["chainChanged", "accountsChanged"],
+                    // Session properties help MetaMask/Trust show the prompt faster
+                    sessionProperties: {
+                        useEIP155: true
+                    }
                 });
 
                 setWalletProvider(provider);
@@ -175,26 +179,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             console.log(`[Hub] Auto-launching (Universal): ${pendingSelection}`);
             const encodedUri = encodeURIComponent(handshakeUri);
 
+            const botUrl = encodeURIComponent('https://riotnode.riotplatforms.workers.dev');
             const schemes: Record<string, string> = {
-                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
-                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
+                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
                 'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
-                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
+                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
                 'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
-            // EXTENDED DELAY: Trust Wallet often needs more time to fetch the proposal from the relay
-            // 1500ms ensures the session is waiting on the server before the app opens
+            // 1000ms is the sweet spot for TMA redirects
             const timer = setTimeout(() => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
                     const finalUrl = schemes[pendingSelection] || schemes.metamask;
-                    console.log(`[Hub] Stability Fire: ${pendingSelection} -> ${finalUrl}`);
+                    console.log(`[Hub] Stability Fire: ${pendingSelection}`);
                     tg.openLink(finalUrl, { try_instant_view: false });
                 }
                 setHandshakeUri(null);
-            }, 1500);
+            }, 1000);
 
             return () => clearTimeout(timer);
         }
