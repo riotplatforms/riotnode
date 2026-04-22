@@ -207,44 +207,41 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const connect = async () => {
         if (isConnected) {
-             await open(); // Open account view if already connected
+             await open(); 
              return;
         }
         setShowSelectionHub(true);
     };
 
     const handleHubSelect = async (walletKey: string) => {
+        if (!walletProvider) {
+            console.error("[Hub] Provider not ready");
+            return;
+        }
+
         setPendingSelection(walletKey);
         setIsConnecting(true);
+        setIsPulsing(true);
         
-        // HEADLESS INJECTION: Suppress the Reown Modal UI via CSS
-        const style = document.createElement('style');
-        style.id = 'reown-suppressor';
-        style.innerHTML = `
-            w3m-modal, w3m-overlay, .w3m-api-modal { 
-                display: none !important; 
-                visibility: hidden !important; 
-                pointer-events: none !important; 
-                opacity: 0 !important;
-            }
-        `;
-        document.head.appendChild(style);
-
         try {
-            // Trigger the connection view - because we suppressed it, the user sees nothing
-            // but the internal state machine will emit the 'display_uri'
-            await open({ view: 'Connect' });
+            const provider = walletProvider as any;
+
+            // DIRECT HANDSHAKE: Instead of open(), we call requestAccounts or connect directly
+            // This triggers the display_uri event in the background immediately
+            console.log(`[Hub] Initiating direct handshake for: ${walletKey}`);
             
-            // Auto-cleanup after some time if it hangs
-            setTimeout(() => {
-                const el = document.getElementById('reown-suppressor');
-                if (el) el.remove();
-            }, 10000);
+            // For WalletConnect v2, we trigger the connection logic
+            if (provider.connect) {
+                await provider.connect();
+            } else {
+                await provider.request({ method: 'eth_requestAccounts' });
+            }
         } catch (err) {
-            console.error("[Hub] Headless handshake failed:", err);
+            console.error("[Hub] Direct handshake failed:", err);
+            // Don't reset everything immediately - let the pulse finish
             setPendingSelection(null);
-            const el = document.getElementById('reown-suppressor');
-            if (el) el.remove();
+            setIsConnecting(false);
+            setIsPulsing(false);
         }
     };
 
