@@ -179,8 +179,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
                 'binance': `https://app.binance.com/wc?uri=${encodedUri}`,
                 'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                'tp': `https://link.tokenpocket.pro/wc?uri=${encodedUri}`,
-                'okx': `https://www.okx.com/wc?uri=${encodedUri}`
+                'tp': `tpoutside://wc?uri=${encodedUri}`,
+                'okx': `okx://wc?uri=${encodedUri}`
             };
 
             const tg = (window as any).Telegram?.WebApp;
