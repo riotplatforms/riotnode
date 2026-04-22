@@ -55,11 +55,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    chains: [56], // FORCING BSC as required to trigger the Connect prompt
-                    optionalChains: [56],
-                    metadata,
-                    methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
-                    events: ["chainChanged", "accountsChanged"]
+                    optionalNamespaces: {
+                        eip155: {
+                            methods: ["eth_sendTransaction", "personal_sign"],
+                            chains: ["eip155:56"],
+                            events: ["chainChanged", "accountsChanged"]
+                        }
+                    },
+                    metadata
                 });
 
                 setWalletProvider(provider);
@@ -174,7 +177,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const schemes: Record<string, string> = {
                 'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                'binance': `https://www.binance.org/en/download?uri=${encodedUri}`,
+                'binance': `https://app.binance.com/wc?uri=${encodedUri}`,
                 'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
                 'tp': `https://link.tokenpocket.pro/wc?uri=${encodedUri}`,
                 'okx': `https://www.okx.com/wc?uri=${encodedUri}`
