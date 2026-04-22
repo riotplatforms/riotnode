@@ -173,18 +173,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // AUTO-LAUNCHER: When a selection is made and URI arrives, FIRE it immediately
     useEffect(() => {
         if (pendingSelection && handshakeUri) {
-            console.log(`[Hub] Auto-launching: ${pendingSelection}`);
+            console.log(`[Hub] Auto-launching (Universal): ${pendingSelection}`);
+            const encodedUri = encodeURIComponent(handshakeUri);
+            
             const schemes: Record<string, string> = {
-                'metamask': 'metamask://',
-                'trust': 'trust://',
-                'binance': 'bnc://',
-                'safepal': 'safepalwallet://',
-                'tp': 'tpoutside://',
-                'okx': 'okx://'
+                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
+                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
+                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
+                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
+                'tp': `https://tokenpocket.platfrom.com/wc?uri=${encodedUri}`,
+                'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
-            launchWallet(schemes[pendingSelection] || '');
-            // Stay in pulsing state until user returns
-            setPendingSelection(null); 
+
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg && tg.openLink) {
+                tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
+            }
+            
+            // Keep pendingSelection for UI status but clear handshake once fired
+            setHandshakeUri(null);
         }
     }, [pendingSelection, handshakeUri]);
 
@@ -216,37 +223,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const handleHubSelect = async (walletKey: string) => {
         setPendingSelection(walletKey);
-        setIsConnecting(true);
         setIsPulsing(true);
         
         try {
-            console.log(`[Hub] Manual handshake starting for: ${walletKey}`);
+            console.log(`[Hub] Initiating Headless Handshake for: ${walletKey}`);
             
-            // 1. Initialize a CLEAN provider without Modal
-            const provider = await EthereumProvider.init({
-                projectId,
-                optionalChains: [56], // BSC
-                showQrModal: false,
-                metadata
-            });
+            // USE APP-KIT CORE: But suppress the UI completely
+            const style = document.createElement('style');
+            style.id = 'reown-suppressor';
+            style.innerHTML = `
+                w3m-modal, w3m-overlay, [class*="w3m-"], .w3m-api-modal { 
+                    display: none !important; 
+                    visibility: hidden !important; 
+                    opacity: 0 !important;
+                }
+            `;
+            document.head.appendChild(style);
 
-            // 2. Catch the URI and FIRE IT immediately
-            provider.on("display_uri", (uri: string) => {
-                console.log("[Hub] Handshake Ready -> Opening Wallet");
-                setHandshakeUri(uri);
-            });
+            // This triggers the display_uri event in the background
+            await open({ view: 'Connect' });
 
-            // 3. Connect (this triggers the display_uri event)
-            await provider.connect();
-            
-            // Once connected, AppKit will sync up
-            setIsConnecting(false);
-            setShowSelectionHub(false);
+            // Cleanup suppressor after handshake
+            setTimeout(() => {
+                const el = document.getElementById('reown-suppressor');
+                if (el) el.remove();
+            }, 5000);
         } catch (err) {
-            console.error("[Hub] Manual handshake failed:", err);
+            console.error("[Hub] Handshake initiation failed:", err);
             setPendingSelection(null);
-            setIsConnecting(false);
             setIsPulsing(false);
+            const el = document.getElementById('reown-suppressor');
+            if (el) el.remove();
         }
     };
 
