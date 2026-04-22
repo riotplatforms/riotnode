@@ -10,7 +10,11 @@ const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
     url: 'https://riotnode.riotplatforms.workers.dev',
-    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
+    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png'],
+    redirect: {
+        native: 'aimining://',
+        universal: 'https://riotnode.riotplatforms.workers.dev'
+    }
 };
 
 interface WalletContextType {
@@ -55,11 +59,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    chains: [56],
-                    optionalChains: [56],
-                    metadata,
-                    methods: ["eth_sendTransaction", "personal_sign"],
-                    events: ["chainChanged", "accountsChanged"]
+                    optionalNamespaces: {
+                        eip155: {
+                            methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
+                            chains: ["eip155:56"],
+                            events: ["chainChanged", "accountsChanged"]
+                        }
+                    },
+                    metadata
                 });
 
                 setWalletProvider(provider);
@@ -180,13 +187,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg && tg.openLink) {
-                tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
-            }
+            // DELAYED LAUNCH: Give the relay 800ms to register the proposal
+            // This fixes the "Missing Connect Button" in Trust/MetaMask
+            const timer = setTimeout(() => {
+                const tg = (window as any).Telegram?.WebApp;
+                if (tg && tg.openLink) {
+                    console.log(`[Hub] Delayed Fire: ${pendingSelection}`);
+                    tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
+                }
+                setHandshakeUri(null);
+            }, 800);
 
-            // Clear URI but keep selection for visual pulse
-            setHandshakeUri(null);
+            return () => clearTimeout(timer);
         }
     }, [pendingSelection, handshakeUri]);
 
@@ -201,6 +213,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const handleHubSelect = async (walletKey: string) => {
         if (!walletProvider) return;
+        
+        // CLEAN START: Clear existing session/handshake attempt
+        try { 
+            if (walletProvider.session) await walletProvider.disconnect();
+            setHandshakeUri(null);
+        } catch (e) {}
+
         setPendingSelection(walletKey);
         setIsPulsing(true);
         localStorage.setItem('aimining_last_wallet', walletKey);
