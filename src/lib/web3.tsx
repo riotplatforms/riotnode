@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
 
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
@@ -7,10 +7,10 @@ import { EthereumProvider } from '@walletconnect/ethereum-provider';
 // 1. Connection Config
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
-  name: 'AI MINING BTC',
-  description: 'AI-powered Bitcoin Staking Platform (RiotNode)',
-  url: 'https://riotnode.riotplatfroms.workers.dev',
-  icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png']
+    name: 'AI MINING BTC',
+    description: 'AI-powered Staking Platform (RiotNode)',
+    url: 'https://riotnode.riotplatfroms.workers.dev',
+    icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png']
 };
 
 interface WalletContextType {
@@ -39,7 +39,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnected, setIsConnected] = useState(() => !!localStorage.getItem('aimining_address'));
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [walletProvider, setWalletProvider] = useState<any>(null);
-    const [isConnecting, setIsConnecting] = useState(false);
+    const [isConnecting] = useState(false);
     const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
     const [handshakeUri, setHandshakeUri] = useState<string | null>(null);
     const [isPulsing, setIsPulsing] = useState(false);
@@ -67,7 +67,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setAddress(addr);
                         setIsConnected(true);
                         localStorage.setItem('aimining_address', addr);
-                        
+
                         const browserProvider = new BrowserProvider(provider);
                         setSigner(await browserProvider.getSigner());
                     }
@@ -160,7 +160,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (pendingSelection && handshakeUri) {
             console.log(`[Hub] Auto-launching (Universal): ${pendingSelection}`);
             const encodedUri = encodeURIComponent(handshakeUri);
-            
+
             const schemes: Record<string, string> = {
                 'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
@@ -174,7 +174,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (tg && tg.openLink) {
                 tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
             }
-            
+
             // Clear URI but keep selection for visual pulse
             setHandshakeUri(null);
         }
@@ -195,7 +195,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setIsPulsing(true);
         localStorage.setItem('aimining_last_wallet', walletKey);
         setWalletName(walletKey);
-        
+
         try {
             await walletProvider.connect();
         } catch (err) {
@@ -212,7 +212,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const disconnect = async () => {
         if (walletProvider) {
-            try { await walletProvider.disconnect(); } catch(e) {}
+            try { await walletProvider.disconnect(); } catch (e) { }
         }
         localStorage.removeItem('aimining_address');
         localStorage.removeItem('aimining_last_wallet');
@@ -223,12 +223,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <WalletContext.Provider value={{ 
-            address: address || signer?.address, 
-            isConnected: isConnected || !!signer, 
-            signer, 
-            connect, 
-            disconnect, 
+        <WalletContext.Provider value={{
+            address: address || signer?.address,
+            isConnected: isConnected || !!signer,
+            signer,
+            connect,
+            disconnect,
             isConnecting,
             walletType: walletName,
             walletProvider,
@@ -243,10 +243,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
                     <div className="glass-panel rounded-[40px] p-8 w-full max-w-sm shadow-2xl relative overflow-hidden neon-border">
                         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-30"></div>
-                        
+
                         <div className="flex justify-between items-center mb-8">
                             <h2 className="text-xl font-bold text-white uppercase tracking-tighter metallic-text">Connection Hub</h2>
-                            <button 
+                            <button
                                 onClick={() => { setShowSelectionHub(false); setPendingSelection(null); }}
                                 className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border-none cursor-pointer hover:bg-white/10 transition-colors"
                             >
@@ -284,8 +284,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <div className="flex flex-col gap-3">
-                            <button 
-                                onClick={forceSync}
+                            <button
+                                onClick={() => forceSync()}
                                 className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 border-none transition-all active:scale-95 cursor-pointer 
                                     ${isPulsing ? 'btn-premium' : 'bg-white/5 text-gray-400 font-black uppercase text-[10px] tracking-widest'}`}
                             >
@@ -300,20 +300,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             {/* HANDSHAKE OVERLAY (Hidden until URI generated) */}
             {handshakeUri && !showSelectionHub && (
-                 <div className="fixed bottom-10 left-6 right-6 z-[10000] animate-in slide-in-from-bottom duration-500">
+                <div className="fixed bottom-10 left-6 right-6 z-[10000] animate-in slide-in-from-bottom duration-500">
                     <div className="bg-primary p-4 rounded-[32px] flex items-center justify-between shadow-neon border-none relative overflow-hidden">
                         <div className="absolute inset-0 bg-white/10 animate-pulse"></div>
                         <div className="flex items-center gap-3 relative z-10">
-                             <div className="w-10 h-10 bg-black/10 rounded-2xl flex items-center justify-center">
+                            <div className="w-10 h-10 bg-black/10 rounded-2xl flex items-center justify-center">
                                 <span className="material-icons-round text-black animate-spin">refresh</span>
-                             </div>
-                             <div>
+                            </div>
+                            <div>
                                 <p className="text-[10px] font-black text-black uppercase tracking-tight leading-none">Awaiting Approval</p>
                                 <p className="text-[10px] text-black/60 font-bold uppercase tracking-widest">Connect to finish...</p>
-                             </div>
+                            </div>
                         </div>
-                        <button 
-                            onClick={forceSync}
+                        <button
+                            onClick={() => forceSync()}
                             className="bg-black text-white px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase border-none cursor-pointer active:scale-95 transition-all relative z-10 shadow-lg"
                         >
                             Sync Now
