@@ -10,11 +10,7 @@ const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
     url: 'https://riotnode.riotplatforms.workers.dev',
-    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png'],
-    redirect: {
-        native: 'aimining://',
-        universal: 'https://riotnode.riotplatforms.workers.dev'
-    }
+    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
 };
 
 interface WalletContextType {
