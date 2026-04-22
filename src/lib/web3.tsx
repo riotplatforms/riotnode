@@ -78,8 +78,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
     const [handshakeUri, setHandshakeUri] = useState<string | null>(null);
     const [isPulsing, setIsPulsing] = useState(false);
-    
-    const pulseTimer = useRef<any>(null);
+
 
     // 1. Handshake Capture: Detects URI and displays it in our direct bridge
     useEffect(() => {
