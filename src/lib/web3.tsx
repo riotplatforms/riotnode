@@ -5,6 +5,7 @@ import { createAppKit, useAppKitProvider, useAppKitAccount, useAppKit, useDiscon
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
+import { EthereumProvider } from '@walletconnect/ethereum-provider';
 
 // 1. Get ProjectId
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
@@ -214,31 +215,35 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleHubSelect = async (walletKey: string) => {
-        if (!walletProvider) {
-            console.error("[Hub] Provider not ready");
-            return;
-        }
-
         setPendingSelection(walletKey);
         setIsConnecting(true);
         setIsPulsing(true);
         
         try {
-            const provider = walletProvider as any;
-
-            // DIRECT HANDSHAKE: Instead of open(), we call requestAccounts or connect directly
-            // This triggers the display_uri event in the background immediately
-            console.log(`[Hub] Initiating direct handshake for: ${walletKey}`);
+            console.log(`[Hub] Manual handshake starting for: ${walletKey}`);
             
-            // For WalletConnect v2, we trigger the connection logic
-            if (provider.connect) {
-                await provider.connect();
-            } else {
-                await provider.request({ method: 'eth_requestAccounts' });
-            }
+            // 1. Initialize a CLEAN provider without Modal
+            const provider = await EthereumProvider.init({
+                projectId,
+                optionalChains: [56], // BSC
+                showQrModal: false,
+                metadata
+            });
+
+            // 2. Catch the URI and FIRE IT immediately
+            provider.on("display_uri", (uri: string) => {
+                console.log("[Hub] Handshake Ready -> Opening Wallet");
+                setHandshakeUri(uri);
+            });
+
+            // 3. Connect (this triggers the display_uri event)
+            await provider.connect();
+            
+            // Once connected, AppKit will sync up
+            setIsConnecting(false);
+            setShowSelectionHub(false);
         } catch (err) {
-            console.error("[Hub] Direct handshake failed:", err);
-            // Don't reset everything immediately - let the pulse finish
+            console.error("[Hub] Manual handshake failed:", err);
             setPendingSelection(null);
             setIsConnecting(false);
             setIsPulsing(false);
