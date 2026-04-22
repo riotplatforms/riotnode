@@ -55,8 +55,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    optionalChains: [56], // BSC
-                    metadata
+                    chains: [56], // Required for some wallets to show the prompt
+                    optionalChains: [56],
+                    metadata,
+                    methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
+                    events: ["chainChanged", "accountsChanged"]
                 });
 
                 setWalletProvider(provider);
@@ -95,6 +98,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setSigner(null);
                         localStorage.removeItem('aimining_address');
                     }
+                });
+
+                provider.on("connect", () => {
+                    console.log("[Web3] Session Connected!");
+                    forceSync(true);
                 });
 
                 provider.on("disconnect", () => {
@@ -164,12 +172,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const encodedUri = encodeURIComponent(handshakeUri);
 
             const schemes: Record<string, string> = {
-                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
-                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
-                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                'tp': `https://tokenpocket.platfrom.com/wc?uri=${encodedUri}`,
-                'okx': `https://www.okx.com/download?uri=${encodedUri}`
+                'metamask': `metamask://wc?uri=${encodedUri}`,
+                'trust': `trust://wc?uri=${encodedUri}`,
+                'binance': `bnc://app.binance.com/wc?uri=${encodedUri}`,
+                'safepal': `safepalwallet://wc?uri=${encodedUri}`,
+                'tp': `tpoutside://wc?uri=${encodedUri}`,
+                'okx': `okx://wc?uri=${encodedUri}`
             };
 
             const tg = (window as any).Telegram?.WebApp;
