@@ -1,53 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 
-import { createAppKit, useAppKitProvider, useAppKitAccount, useAppKit, useDisconnect } from '@reown/appkit/react';
-import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { bsc } from '@reown/appkit/networks';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
+import { EthereumProvider } from '@walletconnect/ethereum-provider';
 
-// 1. Get ProjectId
+// 1. Connection Config
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
-
-// 2. Set networks
-const networks: [any, ...any[]] = [bsc];
-
-// 3. Create a metadata object
 const metadata = {
   name: 'AI MINING BTC',
   description: 'Secure AI-powered Bitcoin Staking Platform.',
   url: 'https://riotnode.riotplatfroms.workers.dev/',
-  icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png'],
-  redirect: {
-    native: 'https://t.me/aiminingbtc_bot',
-    universal: 'https://t.me/aiminingbtc_bot'
-  }
+  icons: ['https://riotnode.riotplatfroms.workers.dev/logo.png']
 };
-
-// 4. Create AppKit
-createAppKit({
-  adapters: [new EthersAdapter()],
-  networks,
-  metadata,
-  projectId,
-  features: {
-    analytics: true
-  },
-  featuredWalletIds: [
-    'c56bbc40a89474a2d85830541457197b', // MetaMask
-    '4622a2b2d6ad1323bca51c019187f621', // Trust
-    '762c1d97118241a457494441af10665b', // SafePal
-    'd681b9730e0e35fd2aeb053416ca9797', // TokenPocket
-    '8a0ee10452995142101c030d7042502c', // Binance
-    '971e689d0ad3b533db5817bc2d449622'  // OKX
-  ],
-  allWallets: 'SHOW',
-  themeMode: 'dark',
-  themeVariables: {
-    '--w3m-accent': '#FFD700',
-    '--w3m-border-radius-master': '16px'
-  }
-});
 
 interface WalletContextType {
     address: string | undefined;
@@ -71,12 +35,10 @@ export const useWallet = () => {
 };
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-    const { address, isConnected } = useAppKitAccount();
-    const { walletProvider } = useAppKitProvider('eip155');
-    const { open } = useAppKit();
-    const { disconnect: walletDisconnect } = useDisconnect();
-    
+    const [address, setAddress] = useState<string | undefined>(() => localStorage.getItem('aimining_address') || undefined);
+    const [isConnected, setIsConnected] = useState(() => !!localStorage.getItem('aimining_address'));
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
+    const [walletProvider, setWalletProvider] = useState<any>(null);
     const [isConnecting, setIsConnecting] = useState(false);
     const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
     const [handshakeUri, setHandshakeUri] = useState<string | null>(null);
@@ -84,89 +46,90 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [showSelectionHub, setShowSelectionHub] = useState(false);
     const [pendingSelection, setPendingSelection] = useState<string | null>(null);
 
-    // 1. Handshake Capture and Synchronization Heartbeat
+    // Initialize Provider
     useEffect(() => {
-        if (!walletProvider) return;
-        const provider = walletProvider as any;
-        
-        if (provider && typeof provider.on === 'function') {
-            provider.on("display_uri", (uri: string) => {
-                console.log("[Bridge] New Handshake Generated");
-                setHandshakeUri(uri);
-            });
-        }
-    }, [walletProvider]);
-
-    const syncSigner = useCallback(async (isManual = false) => {
-        if (walletProvider) {
+        const init = async () => {
             try {
-                const provider = walletProvider as any;
-                // Aggressive Probe: Pulse the provider to wake up the session
-                const accounts = await provider.request({ method: 'eth_accounts' });
-                
-                if (accounts && accounts.length > 0) {
-                    const browserProvider = new BrowserProvider(provider);
-                    const web3Signer = await browserProvider.getSigner();
-                    setSigner(web3Signer);
+                const provider = await EthereumProvider.init({
+                    projectId,
+                    showQrModal: false,
+                    optionalChains: [56], // BSC
+                    metadata
+                });
 
-                    const peer = provider?.session?.peer;
-                    const name = peer?.metadata?.name?.toLowerCase() || '';
-                    let detected: string | null = null;
-                    if (name.includes('metamask')) detected = 'metamask';
-                    else if (name.includes('trust')) detected = 'trust';
-                    else if (name.includes('safepal')) detected = 'safepal';
-                    else if (name.includes('tokenpocket')) detected = 'tp';
-                    
-                    if (detected) {
-                        setWalletName(detected);
-                        localStorage.setItem('aimining_last_wallet', detected);
+                setWalletProvider(provider);
+
+                // Reconnect if session exists
+                if (provider.session) {
+                    const accounts = provider.accounts;
+                    if (accounts.length > 0) {
+                        const addr = accounts[0];
+                        setAddress(addr);
+                        setIsConnected(true);
+                        localStorage.setItem('aimining_address', addr);
+                        
+                        const browserProvider = new BrowserProvider(provider);
+                        setSigner(await browserProvider.getSigner());
                     }
-                    if (isManual) console.log("[Sync] Heartbeat confirmed account:", accounts[0]);
-
-                    setHandshakeUri(null);
-                    setIsConnecting(false);
-                    return true;
                 }
+
+                provider.on("display_uri", (uri: string) => {
+                    setHandshakeUri(uri);
+                });
+
+                provider.on("accountsChanged", async (accounts: string[]) => {
+                    if (accounts.length > 0) {
+                        const addr = accounts[0];
+                        setAddress(addr);
+                        setIsConnected(true);
+                        localStorage.setItem('aimining_address', addr);
+                        const browserProvider = new BrowserProvider(provider);
+                        setSigner(await browserProvider.getSigner());
+                        setShowSelectionHub(false);
+                        setHandshakeUri(null);
+                    } else {
+                        setAddress(undefined);
+                        setIsConnected(false);
+                        setSigner(null);
+                        localStorage.removeItem('aimining_address');
+                    }
+                });
+
+                provider.on("disconnect", () => {
+                    setAddress(undefined);
+                    setIsConnected(false);
+                    setSigner(null);
+                    localStorage.removeItem('aimining_address');
+                    localStorage.removeItem('aimining_last_wallet');
+                });
+
             } catch (err) {
-                if (isManual) console.warn("[Sync] Probe failed:", err);
+                console.error("[Web3] Init failed:", err);
             }
-        }
-        return false;
-    }, [walletProvider]);
-
-    // FOCUS HEARTBEAT: Instant sync on app return
-    useEffect(() => {
-        const handleSync = () => {
-            console.log("[Sync] App Focus/Visibility pulse triggered");
-            syncSigner(true);
         };
-        
-        window.addEventListener('focus', handleSync);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') handleSync();
-        });
-        window.addEventListener('pageshow', handleSync);
-
-        return () => {
-            window.removeEventListener('focus', handleSync);
-            document.removeEventListener('visibilitychange', handleSync);
-            window.removeEventListener('pageshow', handleSync);
-        };
-    }, [syncSigner]);
-
-    useEffect(() => {
-        syncSigner();
-    }, [syncSigner, address]);
+        init();
+    }, []);
 
     const forceSync = async () => {
         setIsPulsing(true);
-        const success = await syncSigner(true);
-        setTimeout(() => setIsPulsing(false), 2000);
-        if (success) {
-            setHandshakeUri(null);
-            setShowSelectionHub(false);
-            setIsConnecting(false);
+        if (walletProvider) {
+            try {
+                const accounts = await walletProvider.request({ method: 'eth_accounts' });
+                if (accounts && accounts.length > 0) {
+                    const addr = accounts[0];
+                    setAddress(addr);
+                    setIsConnected(true);
+                    localStorage.setItem('aimining_address', addr);
+                    const browserProvider = new BrowserProvider(walletProvider);
+                    setSigner(await browserProvider.getSigner());
+                    setShowSelectionHub(false);
+                    setHandshakeUri(null);
+                }
+            } catch (e) {
+                console.warn("[Sync] Fail:", e);
+            }
         }
+        setTimeout(() => setIsPulsing(false), 1500);
     };
 
     // AUTO-LAUNCHER: When a selection is made and URI arrives, FIRE it immediately
@@ -189,83 +152,51 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
             }
             
-            // Keep pendingSelection for UI status but clear handshake once fired
+            // Clear URI but keep selection for visual pulse
             setHandshakeUri(null);
         }
     }, [pendingSelection, handshakeUri]);
 
-    // AGGRESSIVE HEARTBEAT: Pulse every 800ms when bridge is active
-    useEffect(() => {
-        if (!handshakeUri && !showSelectionHub) return;
-        const pulseInterval = setInterval(() => {
-            syncSigner(true);
-        }, 800);
-        return () => clearInterval(pulseInterval);
-    }, [handshakeUri, showSelectionHub, syncSigner]);
-
     const hardReset = () => {
         localStorage.clear();
-        sessionStorage.clear();
         setHandshakeUri(null);
         setSigner(null);
-        walletDisconnect().catch(() => {});
+        setAddress(undefined);
+        setIsConnected(false);
         window.location.reload();
     };
 
-    const connect = async () => {
-        if (isConnected) {
-             await open(); 
-             return;
+    const handleHubSelect = async (walletKey: string) => {
+        if (!walletProvider) return;
+        setPendingSelection(walletKey);
+        setIsPulsing(true);
+        localStorage.setItem('aimining_last_wallet', walletKey);
+        setWalletName(walletKey);
+        
+        try {
+            await walletProvider.connect();
+        } catch (err) {
+            console.error("[Hub] Handshake failed:", err);
+            setPendingSelection(null);
+            setIsPulsing(false);
         }
+    };
+
+    const connect = async () => {
+        if (isConnected) return;
         setShowSelectionHub(true);
     };
 
-    const handleHubSelect = async (walletKey: string) => {
-        setPendingSelection(walletKey);
-        setIsPulsing(true);
-        
-        try {
-            console.log(`[Hub] Initiating Headless Handshake for: ${walletKey}`);
-            
-            // USE APP-KIT CORE: But suppress the UI completely
-            const style = document.createElement('style');
-            style.id = 'reown-suppressor';
-            style.innerHTML = `
-                w3m-modal, w3m-overlay, [class*="w3m-"], .w3m-api-modal { 
-                    display: none !important; 
-                    visibility: hidden !important; 
-                    opacity: 0 !important;
-                }
-            `;
-            document.head.appendChild(style);
-
-            // This triggers the display_uri event in the background
-            await open({ view: 'Connect' });
-
-            // Cleanup suppressor after handshake
-            setTimeout(() => {
-                const el = document.getElementById('reown-suppressor');
-                if (el) el.remove();
-            }, 5000);
-        } catch (err) {
-            console.error("[Hub] Handshake initiation failed:", err);
-            setPendingSelection(null);
-            setIsPulsing(false);
-            const el = document.getElementById('reown-suppressor');
-            if (el) el.remove();
-        }
-    };
-
     const disconnect = async () => {
-        try {
-            localStorage.removeItem('aimining_last_wallet');
-            setWalletName(null);
-            setSigner(null);
-            walletDisconnect().catch(() => {});
-            window.location.reload(); 
-        } catch (err) {
-            console.error("[Wallet] Disconnect failed:", err);
+        if (walletProvider) {
+            try { await walletProvider.disconnect(); } catch(e) {}
         }
+        localStorage.removeItem('aimining_address');
+        localStorage.removeItem('aimining_last_wallet');
+        setAddress(undefined);
+        setIsConnected(false);
+        setSigner(null);
+        window.location.reload();
     };
 
     return (
