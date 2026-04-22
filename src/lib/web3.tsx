@@ -338,6 +338,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <div className="flex flex-col gap-3">
+                            {pendingSelection && handshakeUri && (
+                                <button
+                                    onClick={() => {
+                                        const tg = (window as any).Telegram?.WebApp;
+                                        if (tg && tg.openLink) {
+                                            const encodedUri = encodeURIComponent(handshakeUri);
+                                            const botUrl = encodeURIComponent('https://riotnode.riotplatforms.workers.dev');
+                                            const schemes: Record<string, string> = {
+                                                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                                                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                                                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
+                                                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                                                'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
+                                                'okx': `https://www.okx.com/download?uri=${encodedUri}`
+                                            };
+                                            tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
+                                        }
+                                    }}
+                                    className="w-full py-4 bg-primary text-black font-black uppercase text-[10px] tracking-widest rounded-2xl animate-pulse border-none cursor-pointer"
+                                >
+                                    Open Wallet Again
+                                </button>
+                            )}
                             <button
                                 onClick={() => forceSync()}
                                 className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 border-none transition-all active:scale-95 cursor-pointer 
