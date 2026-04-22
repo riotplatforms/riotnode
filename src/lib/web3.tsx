@@ -79,34 +79,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     
     const pulseTimer = useRef<any>(null);
 
-    // 1. Handshake Handler: Detects when a URI is generated
-    useEffect(() => {
-        if (!walletProvider) return;
-        const provider = walletProvider as any;
-        
-        if (provider && typeof provider.on === 'function') {
-            provider.on("display_uri", (uri: string) => {
-                console.log("[Bridge] New Handshake URI Generated");
-                setHandshakeUri(uri);
-            });
-        }
-    }, [walletProvider]);
-
-    // 2. STORAGE WATCHDOG: Monitors raw session keys to bypass SDK event lag
-    const checkHandshakeSync = useCallback(() => {
-        try {
-            const sessions = localStorage.getItem('wc@2:client:0.3:session');
-            if (sessions) {
-                const parsed = JSON.parse(sessions);
-                const hasActive = Array.isArray(parsed) && parsed.length > 0;
-                if (hasActive && !isConnected) {
-                    syncSigner(true);
-                }
-            }
-        } catch (e) {}
-    }, [isConnected]);
-
-    // 3. BRUTE-FORCE SYNC: Manually probe the provider for a hot signer
+    // 1. Instant Detection: Probes the provider the moment the app is focused
     const syncSigner = useCallback(async (isManual = false) => {
         if (walletProvider) {
             try {
@@ -132,46 +105,72 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setWalletName(detected);
                         localStorage.setItem('aimining_last_wallet', detected);
                     }
-                    if (isManual) console.log("[Watchdog] Signer Recovered:", accounts[0]);
+                    if (isManual) console.log("[Auto-Refresh] Connection Detected:", accounts[0]);
 
-                    // Close bridge on success
+                    // Instantly close the bridge/loading UI
                     setHandshakeUri(null);
+                    setIsConnecting(false);
                 }
             } catch (err) {
-                if (isManual) console.warn("[Watchdog] Probe error:", err);
+                if (isManual) console.warn("[Auto-Refresh] Probe idle:", err);
             }
         }
     }, [walletProvider]);
+
+    // 2. Focus Heartbeat: Force a refresh when user returns from wallet app
+    useEffect(() => {
+        const triggerSync = () => {
+            console.log("[Auto-Refresh] App focused, pulsing provider...");
+            syncSigner(true);
+        };
+        window.addEventListener('focus', triggerSync);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') triggerSync();
+        });
+        return () => {
+            window.removeEventListener('focus', triggerSync);
+            document.removeEventListener('visibilitychange', triggerSync);
+        };
+    }, [syncSigner]);
 
     useEffect(() => {
         syncSigner();
     }, [syncSigner, address]);
 
-    // 4. CONNECTION WATCHDOG: High-speed polling (300ms) for first 45 seconds
-    const startPolling = useCallback(() => {
+    // 3. STORAGE WATCHDOG: High-speed sync logic
+    useEffect(() => {
         if (pulseTimer.current) clearInterval(pulseTimer.current);
         pulseTimer.current = setInterval(() => {
-            checkHandshakeSync();
             syncSigner(true);
-        }, 300);
+        }, 1000); // Pulse every second as a background stabilizer
 
-        setTimeout(() => {
-            if (pulseTimer.current) {
-                clearInterval(pulseTimer.current);
-                pulseTimer.current = null;
-            }
-        }, 45000);
-    }, [checkHandshakeSync, syncSigner]);
+        return () => {
+            if (pulseTimer.current) clearInterval(pulseTimer.current);
+        };
+    }, [syncSigner]);
+
+    // 4. Handshake Handler: Captures URI and displays it in our direct bridge
+    useEffect(() => {
+        if (!walletProvider) return;
+        const provider = walletProvider as any;
+        
+        if (provider && typeof provider.on === 'function') {
+            provider.on("display_uri", (uri: string) => {
+                console.log("[Bridge] Pulse: New Handshake URI Generated");
+                setHandshakeUri(uri);
+            });
+        }
+    }, [walletProvider]);
 
     const connect = async () => {
         try {
             setIsConnecting(true);
             await open();
-            startPolling();
+            // Start aggressive sync during connection process
+            const t = setInterval(() => syncSigner(true), 500);
+            setTimeout(() => clearInterval(t), 30000);
         } catch (err) {
             console.error("[Wallet] Connection failed:", err);
-        } finally {
-            setIsConnecting(false);
         }
     };
 
@@ -192,31 +191,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Helper: Launch Native Link
+    // Helper: Launch Native Link with "God Mode" formatting
     const launchWallet = (scheme: string) => {
         if (!handshakeUri) return;
         const tg = (window as any).Telegram?.WebApp;
         if (tg && tg.openLink) {
-            // Hyper-Compatibility Check: SafePal often prefers raw URIs without extra encoding
+            // Repair: decode and carefully re-encode to prevent "Invalid URI" or "Mangled Params"
             const cleanUri = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
+            const encoded = encodeURIComponent(cleanUri);
             
-            // Try raw WC protocol bridge first as it's the most reliable for SafePal/Trust
-            const directUrl = `${scheme}wc?uri=${encodeURIComponent(cleanUri)}`;
-            tg.openLink(directUrl, { try_instant_view: false });
+            // Native schemes are passed directly to Telegram's link handler
+            const target = `${scheme}wc?uri=${encoded}`;
+            tg.openLink(target, { try_instant_view: false });
         }
     };
 
     const copyUri = () => {
         if (!handshakeUri) return;
-        const tg = (window as any).Telegram?.WebApp;
-        if (tg) {
-            // Decode for a clean copy
-            const clean = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(clean);
-            }
-            tg.showAlert("Connection Link Copied! Paste this in SafePal > WalletConnect search bar to connect instantly.");
+        const clean = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(clean);
         }
+        const tg = (window as any).Telegram?.WebApp;
+        if (tg) tg.showAlert("Connection details copied. If the app doesn't open automatically, paste this into your wallet's WalletConnect section.");
     };
 
     return (
@@ -250,18 +247,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         </p>
 
                         <div className="grid grid-cols-1 gap-3">
-                            {/* SafePal Optimized Button */}
                             <button 
                                 onClick={() => launchWallet('safepalwallet://')}
-                                className="w-full bg-gradient-to-r from-[#111] to-[#1a1a1a] hover:from-primary hover:to-yellow-400 hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer shadow-sm active:scale-95"
+                                className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer shadow-sm active:scale-95"
                             >
                                 <div className="flex items-center gap-3">
                                     <img src="https://riotnode.riotplatfroms.workers.dev/safepal.png" alt="SafePal" className="w-7 h-7 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/31/35/9c/31359c40-0814-25e9-798b-7f15997f6426/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
-                                    <span className="font-black text-[13px] uppercase tracking-wider">Open in SafePal</span>
+                                    <span className="font-black text-[13px] uppercase tracking-wider">SafePal Wallet</span>
                                 </div>
-                                <div className="bg-primary/20 group-hover:bg-black/20 w-8 h-8 rounded-full flex items-center justify-center transition-colors">
-                                     <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
-                                </div>
+                                <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
                             </button>
 
                             <button 
@@ -269,7 +263,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 className="w-full bg-[#111] hover:bg-primary hover:text-black py-4 rounded-2xl flex items-center justify-between px-6 transition-all group border border-white/5 cursor-pointer active:scale-95"
                             >
                                 <div className="flex items-center gap-3">
-                                    <img src="https://riotnode.riotplatfroms.workers.dev/tp.png" alt="TokenPocket" className="w-6 h-6 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/44/14/3f/44143f2d-8f35-4421-4786-098522003c26/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
+                                    <img src="https://riotnode.riotplatfroms.workers.dev/tp.png" alt="TokenPocket" className="w-7 h-7 grayscale group-hover:grayscale-0" onError={(e) => (e.currentTarget.src = "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/44/14/3f/44143f2d-8f35-4421-4786-098522003c26/AppIcon-0-0-1x_U007emarketing-0-5-0-85-220.png/512x512bb.jpg")} />
                                     <span className="font-black text-xs uppercase tracking-wider">TokenPocket</span>
                                 </div>
                                 <span className="material-icons-round text-primary group-hover:text-black text-sm">arrow_forward</span>
@@ -282,7 +276,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 className="w-full bg-primary/5 hover:bg-primary/10 text-primary py-4 rounded-2xl flex items-center justify-center gap-3 border border-primary/20 transition-all font-black uppercase text-[10px] tracking-widest cursor-pointer group active:scale-95"
                             >
                                 <span className="material-icons-round text-sm font-black group-hover:animate-bounce">content_copy</span>
-                                Manual Connection (Backup)
+                                Copy Connection URI
                             </button>
                         </div>
 

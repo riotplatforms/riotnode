@@ -123,11 +123,20 @@ export function useStaking() {
 
 
     const approve = async (_amount?: string) => {
+        if (walletProvider) {
+            // Hot Probe: Wake up the provider immediately before transaction
+            await walletProvider.request({ method: 'eth_accounts' });
+        }
+        
         const usdt = await getUsdtContract(true);
-        setTimeout(() => pokeWallet(), 500);
+        
+        // Immediate Native Poke
+        setTimeout(() => pokeWallet(), 100);
+        
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         return await tx.wait();
     };
+
 
     const getAllowance = async (ownerAddress?: string) => {
         const usdt = await getUsdtContract();
