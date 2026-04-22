@@ -55,13 +55,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    optionalNamespaces: {
-                        eip155: {
-                            methods: ["eth_sendTransaction", "personal_sign"],
-                            chains: ["eip155:56"],
-                            events: ["chainChanged", "accountsChanged"]
-                        }
-                    },
+                    chains: [56],
+                    optionalChains: [56],
+                    methods: ["eth_sendTransaction", "personal_sign"],
+                    events: ["chainChanged", "accountsChanged"],
                     metadata
                 });
 
