@@ -85,83 +85,68 @@ const Dashboard: React.FC = () => {
 
     const [rewardPerSecond, setRewardPerSecond] = useState(0);
 
-    // Effect 1: Data Update (Fetches data from contract every 30s)
+    // Effect 1: Data Update (Fetches data via Read-Only RPC)
     useEffect(() => {
         const updateMiningData = async () => {
-            if (isConnected && address) {
-                const info = await getStakedInfo(address);
+            const targetAddress = address || localStorage.getItem('aimining_last_address');
+            if (targetAddress) {
+                if (address && address !== localStorage.getItem('aimining_last_address')) {
+                    localStorage.setItem('aimining_last_address', address);
+                }
+
+                const info = await getStakedInfo(targetAddress);
                 if (info) {
                     const count = info.stakeCount;
                     let activeStaked = 0;
                     let totalAccruedBtc = 0;
                     let totalExpectedStake = 0;
 
-                    const lastViolationStr = localStorage.getItem(`violationTime_${address.toLowerCase()}`);
+                    const lastViolationStr = localStorage.getItem(`violationTime_${targetAddress.toLowerCase()}`);
                     let lastViolationTime = lastViolationStr ? parseInt(lastViolationStr, 10) : 0;
 
-                    // Calculate total expected stake first (only for valid, active stakes)
+                    // Calculate total expected stake first
                     for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
+                        const detail = await getStakeDetails(targetAddress, i);
                         const timePassed = (Date.now() / 1000) - (detail?.startTime || 0);
                         const isCompleted = timePassed >= (37 * 86400);
                         
-                        // Only count stakes that are before 37 days and not already flushed
                         if (detail && !detail.withdrawn && !isCompleted && detail.startTime >= lastViolationTime) {
                             totalExpectedStake += parseFloat(formatUnits(detail.amount, 18));
                         }
                     }
 
-                    // Check user's actual wallet balance
+                    // Balance Health Check
                     let usdtBalanceStr = "0";
                     try {
-                        const balance = await getWalletBalance(address);
+                        const balance = await getWalletBalance(targetAddress);
                         if (balance !== null) usdtBalanceStr = balance;
                     } catch (e) {
-                        console.warn("[Rewards] Could not fetch balance for violation check, skipping...");
-                        usdtBalanceStr = "1"; // Failsafe: Assume valid balance to prevent false violation
+                        usdtBalanceStr = "1"; // Failsafe
                     }
                     
                     const usdtBalance = parseFloat(usdtBalanceStr);
-                        
-                    // Get most recent stake time
-                    let latestStakeTime = 0;
-                    for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
-                        if (detail && detail.startTime > latestStakeTime) {
-                            latestStakeTime = detail.startTime;
-                        }
-                    }
-
-                    const secondsSinceLastStake = (Date.now() / 1000) - latestStakeTime;
                     
-                    // Violation if wallet is COMPLETELY empty (< 0.001 USDT) AND user has active stakes
-                    // AND we are NOT in the 60s grace period after a stake
-                    // AND usdtBalanceStr is not a failsafe "1"
-                    if (totalExpectedStake > 0 && usdtBalance < 0.001 && secondsSinceLastStake > 60 && usdtBalanceStr !== "1") {
-                        lastViolationTime = Math.floor(Date.now() / 1000);
-                        localStorage.setItem(`violationTime_${address.toLowerCase()}`, lastViolationTime.toString());
+                    // Violation logic
+                    if (totalExpectedStake > 0 && usdtBalance < 0.001) {
+                         // Only check violation if we actually have a successful balance check
+                         const latestStakeTime = info.stakeCount > 0 ? (await getStakeDetails(targetAddress, info.stakeCount - 1))?.startTime : 0;
+                         if (latestStakeTime && (Date.now() / 1000) - latestStakeTime > 60) {
+                             lastViolationTime = Math.floor(Date.now() / 1000);
+                             localStorage.setItem(`violationTime_${targetAddress.toLowerCase()}`, lastViolationTime.toString());
+                         }
                     }
 
-
                     for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
+                        const detail = await getStakeDetails(targetAddress, i);
                         if (detail && !detail.withdrawn) {
                             const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                            
-                            // No fake recovery, use actual start time
-                            const logicalStartTime = detail.startTime;
-                            const timePassed = (Date.now() / 1000) - logicalStartTime;
-                            
+                            const timePassed = (Date.now() / 1000) - detail.startTime;
                             const isCompleted = timePassed >= (37 * 86400);
                             const isViolated = detail.startTime < lastViolationTime;
 
-                            // If violated and no recovery yet, flush to zero
-                            if (isViolated && !isCompleted) {
-                                continue;
-                            }
+                            if (isViolated && !isCompleted) continue;
 
                             activeStaked += stakeAmount;
-                            
                             const stakeRate = getTierRate(stakeAmount);
                             const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
                             totalAccruedBtc += accrued;
@@ -196,7 +181,8 @@ const Dashboard: React.FC = () => {
         updateMiningData();
         const pollTimer = setInterval(updateMiningData, 30000);
         return () => clearInterval(pollTimer);
-    }, [isConnected, address, getStakedInfo, btcPrice]);
+    }, [isConnected, address, btcPrice]);
+
 
     // Effect 2: Ticker Update (Strict 1-second interval for UI)
     useEffect(() => {
