@@ -60,10 +60,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     projectId,
                     showQrModal: false,
                     chains: [56],
-                    optionalChains: [56],
+                    optionalChains: [1, 56],
+                    metadata,
                     methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
-                    events: ["chainChanged", "accountsChanged"],
-                    metadata
+                    events: ["chainChanged", "accountsChanged"]
                 });
 
                 setWalletProvider(provider);
@@ -184,16 +184,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
-            // DELAYED LAUNCH: Give the relay 800ms to register the proposal
-            // This fixes the "Missing Connect Button" in Trust/MetaMask
+            // EXTENDED DELAY: Trust Wallet often needs more time to fetch the proposal from the relay
+            // 1500ms ensures the session is waiting on the server before the app opens
             const timer = setTimeout(() => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
-                    console.log(`[Hub] Delayed Fire: ${pendingSelection}`);
-                    tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
+                    const finalUrl = schemes[pendingSelection] || schemes.metamask;
+                    console.log(`[Hub] Stability Fire: ${pendingSelection} -> ${finalUrl}`);
+                    tg.openLink(finalUrl, { try_instant_view: false });
                 }
                 setHandshakeUri(null);
-            }, 800);
+            }, 1500);
 
             return () => clearTimeout(timer);
         }
