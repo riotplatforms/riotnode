@@ -137,7 +137,6 @@ export function useStaking() {
         return await tx.wait();
     };
 
-
     const getAllowance = async (ownerAddress?: string) => {
         const usdt = await getUsdtContract();
         const owner = ownerAddress || address;
@@ -147,12 +146,21 @@ export function useStaking() {
     };
 
     const withdraw = async (index: any, _unused?: any) => {
+        if (walletProvider) {
+            // Hot Probe: Wake up the provider immediately before transaction
+            await walletProvider.request({ method: 'eth_accounts' });
+        }
+        
         const staking = await getContract(true);
         const i = typeof index === 'string' ? parseInt(index) : index;
-        setTimeout(() => pokeWallet(), 500);
+        
+        // Immediate Native Poke
+        setTimeout(() => pokeWallet(), 100);
+        
         const tx = await staking.withdraw(i);
         return await tx.wait();
     };
+
 
     const getStakedInfo = async (userAddress?: string) => {
         const contract = await getContract();
