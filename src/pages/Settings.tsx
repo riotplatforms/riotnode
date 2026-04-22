@@ -5,7 +5,7 @@ import { isAdmin } from '../lib/admin';
 
 const Settings: React.FC = () => {
     const navigate = useNavigate();
-    const { address, disconnect, setIsDisconnectModalOpen } = useWallet();
+    const { address, setIsDisconnectModalOpen } = useWallet();
     const [notifications, setNotifications] = useState(true);
 
     // Theme specific colors for Settings page (Yellow/Brown)
