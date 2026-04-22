@@ -59,10 +59,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    chains: [], // Empty required namespaces for maximum flexibility
+                    chains: [56],
                     optionalChains: [56],
                     metadata,
-                    methods: ["eth_sendTransaction", "personal_sign", "eth_accounts", "eth_signTypedData_v4"],
+                    methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
                     events: ["chainChanged", "accountsChanged"]
                 });
 
@@ -175,22 +175,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             console.log(`[Hub] Auto-launching (Universal): ${pendingSelection}`);
             const encodedUri = encodeURIComponent(handshakeUri);
 
-            const botUrl = encodeURIComponent('https://riotnode.riotplatforms.workers.dev');
             const schemes: Record<string, string> = {
-                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
-                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
+                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
                 'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
-                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
                 'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
-            // 1000ms is the sweet spot for TMA redirects
+            // 1000ms stability delay
             const timer = setTimeout(() => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
                     const finalUrl = schemes[pendingSelection] || schemes.metamask;
-                    console.log(`[Hub] Stability Fire: ${pendingSelection}`);
                     tg.openLink(finalUrl, { try_instant_view: false });
                 }
                 setHandshakeUri(null);
