@@ -55,7 +55,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    chains: [56], // Required for some wallets to show the prompt
+                    chains: [56], // FORCING BSC as required to trigger the Connect prompt
                     optionalChains: [56],
                     metadata,
                     methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],
@@ -174,10 +174,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const schemes: Record<string, string> = {
                 'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
+                'binance': `https://www.binance.org/en/download?uri=${encodedUri}`,
                 'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
-                'okx': `https://www.okx.com/download?uri=${encodedUri}`
+                'tp': `https://link.tokenpocket.pro/wc?uri=${encodedUri}`,
+                'okx': `https://www.okx.com/wc?uri=${encodedUri}`
             };
 
             const tg = (window as any).Telegram?.WebApp;
