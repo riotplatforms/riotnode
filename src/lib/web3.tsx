@@ -56,6 +56,7 @@ interface WalletContextType {
     isConnecting: boolean;
     walletType: string | null;
     walletProvider: any;
+    forceSync: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -76,10 +77,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [isConnecting, setIsConnecting] = useState(false);
     const [walletName, setWalletName] = useState<string | null>(() => localStorage.getItem('aimining_last_wallet'));
     const [handshakeUri, setHandshakeUri] = useState<string | null>(null);
+    const [isPulsing, setIsPulsing] = useState(false);
     
     const pulseTimer = useRef<any>(null);
 
-    // 1. Handshake Capture: Detects and repairs the connection string
+    // 1. Handshake Capture: Detects URI and displays it in our direct bridge
     useEffect(() => {
         if (!walletProvider) return;
         const provider = walletProvider as any;
@@ -92,7 +94,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     }, [walletProvider]);
 
-    // 2. FOCUS HEARTBEAT: Forces instant connection check when user returns from wallet app
+    // 2. FORCE SYNC: The "Finalize Connection" manual pulse
     const syncSigner = useCallback(async (isManual = false) => {
         if (walletProvider) {
             try {
@@ -118,59 +120,49 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setWalletName(detected);
                         localStorage.setItem('aimining_last_wallet', detected);
                     }
-                    if (isManual) console.log("[Pulse] Connection Ready:", accounts[0]);
+                    if (isManual) console.log("[Watchdog] Signer Recovered:", accounts[0]);
 
-                    // Instantly close the bridge UI
+                    // Instantly close the Loading state
                     setHandshakeUri(null);
                     setIsConnecting(false);
+                    return true;
                 }
             } catch (err) {
-                if (isManual) console.warn("[Pulse] Idle state:", err);
+                if (isManual) console.warn("[Watchdog] Sync error:", err);
             }
         }
+        return false;
     }, [walletProvider]);
 
-    // 3. VISIBILITY TRIGGER: Clear the 'Loading' hang instantly when switching back to Telegram
-    useEffect(() => {
-        const handleFocus = () => {
-            console.log("[Visibility] User returned, pulsing connection...");
-            syncSigner(true);
-        };
-        window.addEventListener('focus', handleFocus);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') handleFocus();
-        });
-        return () => {
-            window.removeEventListener('focus', handleFocus);
-        };
-    }, [syncSigner]);
+    const forceSync = async () => {
+        setIsPulsing(true);
+        const success = await syncSigner(true);
+        setTimeout(() => setIsPulsing(false), 1500);
+        if (success) {
+            setHandshakeUri(null);
+        }
+    };
 
     useEffect(() => {
         syncSigner();
     }, [syncSigner, address]);
 
-    // 4. CONNECTION WATCHDOG: High-speed polling (300ms) for the critical first 30 seconds
-    const startPolling = useCallback(() => {
-        if (pulseTimer.current) clearInterval(pulseTimer.current);
-        pulseTimer.current = setInterval(() => {
-            syncSigner(true);
-        }, 300);
-
-        setTimeout(() => {
-            if (pulseTimer.current) {
-                clearInterval(pulseTimer.current);
-                pulseTimer.current = null;
-            }
-        }, 30000);
-    }, [syncSigner]);
+    // 3. STORAGE WATCHDOG: Periodic session check
+    useEffect(() => {
+        const interval = setInterval(() => {
+           if (!isConnected || !signer) {
+               syncSigner(true);
+           }
+        }, 3000);
+        return () => clearInterval(interval);
+    }, [isConnected, signer, syncSigner]);
 
     const connect = async () => {
         try {
             setIsConnecting(true);
             await open();
-            startPolling();
         } catch (err) {
-            console.error("[Wallet] Fatal Connection Error:", err);
+            console.error("[Wallet] Connection failed:", err);
         } finally {
             setIsConnecting(false);
         }
@@ -193,12 +185,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // 5. DIRECT NATIVE BRIDGE: Solve URI errors and handshake issues
     const launchWallet = (scheme: string) => {
         if (!handshakeUri) return;
         const tg = (window as any).Telegram?.WebApp;
         if (tg && tg.openLink) {
-            // Repair: decode and re-encode correctly to solve TokenPocket pairing errors
             const cleanUri = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
             
             // For SafePal, use their specific bridge which is more stable
@@ -207,21 +197,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                return;
             }
 
-            // For TokenPocket, send a PURE decoded URI string inside the protocol wrapper
+            // For TokenPocket, send a raw encoded URI
             const encoded = encodeURIComponent(cleanUri);
             const target = `${scheme}wc?uri=${encoded}`;
             tg.openLink(target, { try_instant_view: false });
         }
-    };
-
-    const copyUri = () => {
-        if (!handshakeUri) return;
-        const clean = handshakeUri.includes('%') ? decodeURIComponent(handshakeUri) : handshakeUri;
-        if (navigator.clipboard) {
-            navigator.clipboard.writeText(clean);
-        }
-        const tg = (window as any).Telegram?.WebApp;
-        if (tg) tg.showAlert("Connection Bridge Copied. If the app doesn't open automatically, paste this into your WalletConnect settings.");
     };
 
     return (
@@ -233,11 +213,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             disconnect, 
             isConnecting,
             walletType: walletName,
-            walletProvider
+            walletProvider,
+            forceSync
         }}>
             {children}
 
-            {/* UPGRADED HANDSHAKE BRIDGE UI */}
+            {/* DIRECT HANDSHAKE BRIDGE UI */}
             {handshakeUri && (
                 <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
                     <div className="bg-[#0f0f0f] border border-primary/30 rounded-[40px] p-8 w-full max-w-sm shadow-glow relative overflow-hidden">
@@ -245,12 +226,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         
                         <div className="w-24 h-24 bg-primary/10 rounded-full flex items-center justify-center mb-6 mx-auto border border-primary/30 relative">
                              <div className="absolute inset-0 bg-primary/20 rounded-full animate-ping opacity-20"></div>
-                            <span className="material-icons-round text-primary text-5xl animate-pulse">link_off</span>
+                            <span className="material-icons-round text-primary text-5xl animate-pulse">link</span>
                         </div>
 
-                        <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Initialize Handshake</h2>
-                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-8 flex items-center justify-center gap-2 text-primary">
-                             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                        <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-2">Bridge Connection</h2>
+                        <p className="text-gray-400 text-[10px] font-black uppercase tracking-widest mb-8 flex items-center justify-center gap-2">
+                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                              Securing direct connection...
                         </p>
 
@@ -279,12 +260,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                             <div className="h-px bg-white/5 my-2"></div>
 
+                            {/* THE MANUAL PULSE: CLICK THIS AFTER RETURNING FROM WALLET */}
                             <button 
-                                onClick={copyUri}
-                                className="w-full bg-primary/5 hover:bg-primary/10 text-primary py-4 rounded-2xl flex items-center justify-center gap-3 border border-primary/20 transition-all font-black uppercase text-[10px] tracking-widest cursor-pointer group active:scale-95"
+                                onClick={forceSync}
+                                className={`w-full ${isPulsing ? 'bg-primary text-black' : 'bg-primary/10 text-primary'} py-4 rounded-2xl flex items-center justify-center gap-3 border border-primary/20 transition-all font-black uppercase text-[11px] tracking-widest cursor-pointer group active:scale-95`}
                             >
-                                <span className="material-icons-round text-sm font-black group-hover:animate-bounce">content_copy</span>
-                                Manual Handshake (Backup)
+                                <span className={`material-icons-round text-sm font-black ${isPulsing ? 'animate-spin' : 'group-hover:animate-bounce'}`}>
+                                    {isPulsing ? 'sync' : 'verified_user'}
+                                </span>
+                                {isPulsing ? 'Syncing Handshake...' : 'Finalize Connection (Step 2)'}
                             </button>
                         </div>
 
@@ -292,7 +276,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             onClick={() => setHandshakeUri(null)}
                             className="mt-8 text-[9px] font-black text-gray-700 uppercase tracking-widest hover:text-red-500 transition-colors border-none bg-transparent cursor-pointer"
                         >
-                            Cancel Connection
+                            Cancel Bridge
                         </button>
                     </div>
                 </div>

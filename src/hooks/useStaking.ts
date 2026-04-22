@@ -73,7 +73,6 @@ export function useStaking() {
             let activeSigner = signer;
             if (!activeSigner && walletProvider) {
                 const provider = walletProvider as any;
-                // Heartbeat Probe: Pulse the wallet to ensure it's 'hot'
                 const accounts = await provider.request({ method: 'eth_accounts' });
                 if (accounts?.[0]) {
                     const browserProvider = new BrowserProvider(provider);
@@ -86,14 +85,11 @@ export function useStaking() {
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
 
-
     const pokeWallet = () => {
         const tg = (window as any).Telegram?.WebApp;
         if (!tg || !tg.openLink) return;
         const activeType = walletType || localStorage.getItem('aimining_last_wallet');
         if (!activeType) return;
-        
-        // Native Schemes for immediate transaction prompts
         const pokes: Record<string, string> = {
             metamask: 'metamask://',
             trust: 'trust://',
@@ -105,34 +101,18 @@ export function useStaking() {
     };
 
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
-        const provider = walletProvider as any;
-        if (provider) {
-            // Heartbeat Probe: Wake up the provider before transaction
-            await provider.request({ method: 'eth_accounts' });
-        }
-        
+        if (walletProvider) { await (walletProvider as any).request({ method: 'eth_accounts' }); }
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
-        
-        // Immediate Native Poke
-        setTimeout(() => pokeWallet(), 200);
-        
+        setTimeout(() => pokeWallet(), 150);
         const tx = await staking.stake(val, referrer, { value: parseUnits("0.0003", 18) });
         return await tx.wait();
     };
 
-
     const approve = async (_amount?: string) => {
-        if (walletProvider) {
-            // Hot Probe: Wake up the provider immediately before transaction
-            await walletProvider.request({ method: 'eth_accounts' });
-        }
-        
+        if (walletProvider) { await (walletProvider as any).request({ method: 'eth_accounts' }); }
         const usdt = await getUsdtContract(true);
-        
-        // Immediate Native Poke
-        setTimeout(() => pokeWallet(), 100);
-        
+        setTimeout(() => pokeWallet(), 150);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         return await tx.wait();
     };
@@ -146,21 +126,13 @@ export function useStaking() {
     };
 
     const withdraw = async (index: any, _unused?: any) => {
-        if (walletProvider) {
-            // Hot Probe: Wake up the provider immediately before transaction
-            await walletProvider.request({ method: 'eth_accounts' });
-        }
-        
+        if (walletProvider) { await (walletProvider as any).request({ method: 'eth_accounts' }); }
         const staking = await getContract(true);
         const i = typeof index === 'string' ? parseInt(index) : index;
-        
-        // Immediate Native Poke
-        setTimeout(() => pokeWallet(), 100);
-        
+        setTimeout(() => pokeWallet(), 150);
         const tx = await staking.withdraw(i);
         return await tx.wait();
     };
-
 
     const getStakedInfo = async (userAddress?: string) => {
         const contract = await getContract();
@@ -178,10 +150,7 @@ export function useStaking() {
                 teamSize: Number(info.teamSize),
                 stakeCount: Number(info.stakeCount)
             };
-        } catch (err) {
-            console.error("Error fetching user info:", err);
-            return null;
-        }
+        } catch (err) { return null; }
     };
 
     const getStakeDetails = async (userAddress: string | any, index: any) => {
@@ -227,7 +196,7 @@ export function useStaking() {
             const nextReferrers: string[] = [];
             for (const ref of referrers) {
                 const filter = contract.filters.ReferralPaid(ref);
-                const events = await contract.queryFilter(filter, -50000); 
+                const events = await contract.queryFilter(filter, -100000); 
                 events.forEach((event: any) => {
                     const child = event.args.referee;
                     if (!visited.has(child)) {
@@ -261,10 +230,8 @@ export function useStaking() {
                     const staked = parseFloat(formatUnits(info.totalStaked, 18));
                     totalTeamStake += staked;
                     if (staked > 0) {
-                        const tierRate = getTierRate(staked);
-                        const dailyRefRewardUsdt = (staked * tierRate) / 37;
-                        const dailyRefRewardBtc = dailyRefRewardUsdt / btcPrice;
-                        totalDailyDividend += dailyRefRewardBtc * rate;
+                        const dailyRefRewardUsdt = (staked * getTierRate(staked)) / 37;
+                        totalDailyDividend += (dailyRefRewardUsdt / btcPrice) * rate;
                     }
                 }
             }
@@ -278,17 +245,7 @@ export function useStaking() {
     };
 
     return {
-        stake,
-        approve,
-        getAllowance,
-        withdraw,
-        getStakedInfo,
-        getStakeDetails,
-        getWalletBalance,
-        getTeamTree,
-        getTeamMiningStats,
-        getReferralEarnings,
-        address,
-        isConnected
+        stake, approve, getAllowance, withdraw, getStakedInfo, getStakeDetails,
+        getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings, address, isConnected
     };
 }
