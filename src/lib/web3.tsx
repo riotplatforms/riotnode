@@ -207,7 +207,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const connect = async () => {
         if (isConnected) {
-             await open(); // Open account view
+             await open(); // Open account view if already connected
              return;
         }
         setShowSelectionHub(true);
@@ -216,11 +216,35 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleHubSelect = async (walletKey: string) => {
         setPendingSelection(walletKey);
         setIsConnecting(true);
+        
+        // HEADLESS INJECTION: Suppress the Reown Modal UI via CSS
+        const style = document.createElement('style');
+        style.id = 'reown-suppressor';
+        style.innerHTML = `
+            w3m-modal, w3m-overlay, .w3m-api-modal { 
+                display: none !important; 
+                visibility: hidden !important; 
+                pointer-events: none !important; 
+                opacity: 0 !important;
+            }
+        `;
+        document.head.appendChild(style);
+
         try {
+            // Trigger the connection view - because we suppressed it, the user sees nothing
+            // but the internal state machine will emit the 'display_uri'
             await open({ view: 'Connect' });
+            
+            // Auto-cleanup after some time if it hangs
+            setTimeout(() => {
+                const el = document.getElementById('reown-suppressor');
+                if (el) el.remove();
+            }, 10000);
         } catch (err) {
-            console.error("[Hub] Selection failed:", err);
+            console.error("[Hub] Headless handshake failed:", err);
             setPendingSelection(null);
+            const el = document.getElementById('reown-suppressor');
+            if (el) el.remove();
         }
     };
 
