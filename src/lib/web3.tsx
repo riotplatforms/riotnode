@@ -59,6 +59,7 @@ interface WalletContextType {
     forceSync: () => Promise<void>;
     hardReset: () => void;
     setIsDisconnectModalOpen: (open: boolean) => void;
+    setIsConnectModalOpen: (open: boolean) => void;
     stakeNow: (amount: string) => Promise<void>;
     openInWalletBrowser: (type: 'safepal' | 'tokenpocket') => void;
 }
@@ -78,6 +79,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [hasSynced, setHasSynced] = useState(false);
     const [referral, setReferral] = useState<string | null>(null);
+    const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
     const isConnecting = status === 'connecting';
 
@@ -139,25 +141,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
-        
-        // 1. If we are ALREADY inside a Wallet's dApp Browser (SafePal, TokenPocket, etc.)
-        if ((window as any).ethereum || (window as any).safepal) {
-            try {
-                const provider = new BrowserProvider((window as any).ethereum || (window as any).safepal);
-                const accounts = await provider.send("eth_requestAccounts", []);
-                if (accounts.length > 0) {
-                    const s = await provider.getSigner();
-                    setSigner(s);
-                    setHasSynced(true);
-                    return;
-                }
-            } catch (e) {
-                console.log("[Web3] Injected connection failed, falling back to Modal");
-            }
-        }
+        setIsConnectModalOpen(true);
+    };
 
+    const openReownModal = async () => {
+        setIsConnectModalOpen(false);
         try {
-            // 2. Open AppKit Modal for standard connections
             await open({ view: 'Connect' });
         } catch (err) {
             console.error("[Web3] Connect failed:", err);
@@ -233,10 +222,55 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             forceSync,
             hardReset,
             setIsDisconnectModalOpen,
+            setIsConnectModalOpen,
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any
         }}>
             {children}
+
+            {/* CUSTOM CONNECT MODAL (TMA STYLE) */}
+            {isConnectModalOpen && (
+                <div className="fixed inset-0 z-[2000] flex items-end justify-center">
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsConnectModalOpen(false)}></div>
+                    <div className="relative w-full max-w-md bg-[#0f0f0f] border-t border-white/10 rounded-t-[32px] p-6 pb-12 animate-slide-up shadow-2xl transition-all">
+                        <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6"></div>
+                        
+                        <h3 className="text-lg font-black text-white uppercase tracking-widest text-center mb-6">Select Connection</h3>
+                        
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <button 
+                                onClick={openReownModal}
+                                className="bg-primary/10 border border-primary/20 p-4 rounded-3xl flex flex-col items-center gap-2 group hover:bg-primary/20 transition-all cursor-pointer"
+                            >
+                                <span className="material-icons-round text-primary text-3xl">account_balance_wallet</span>
+                                <span className="text-[10px] font-black text-white uppercase">Standard</span>
+                            </button>
+                            <button 
+                                onClick={() => { setIsConnectModalOpen(false); (window as any).openInWalletBrowser('safepal'); }}
+                                className="bg-white/5 border border-white/10 p-4 rounded-3xl flex flex-col items-center gap-2 group hover:bg-white/10 transition-all cursor-pointer"
+                            >
+                                <span className="material-icons-round text-gray-400 text-3xl">shield</span>
+                                <span className="text-[10px] font-black text-white uppercase">SafePal Browser</span>
+                            </button>
+                        </div>
+
+                        <button 
+                            onClick={() => { setIsConnectModalOpen(false); (window as any).openInWalletBrowser('tokenpocket'); }}
+                            className="w-full bg-white/5 border border-white/10 p-4 rounded-3xl flex items-center justify-center gap-3 group hover:bg-white/10 transition-all mb-6 cursor-pointer"
+                        >
+                             <span className="material-icons-round text-gray-400 text-2xl">bolt</span>
+                             <span className="text-[10px] font-black text-white uppercase">Open in TokenPocket Wallet</span>
+                        </button>
+
+                        <button 
+                            onClick={() => setIsConnectModalOpen(false)}
+                            className="w-full text-gray-500 font-bold uppercase text-[10px] tracking-widest border-none bg-transparent cursor-pointer"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
         </WalletContext.Provider>
     );
 }
