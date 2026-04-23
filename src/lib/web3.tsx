@@ -80,7 +80,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [hasSynced, setHasSynced] = useState(false);
     const [referral, setReferral] = useState<string | null>(null);
-    const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+
 
     const isConnecting = status === 'connecting';
 
@@ -139,6 +139,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         return () => {
+            clearTimeout(timeout);
             window.removeEventListener("focus", handleFocus);
         };
     }, [isConnected, walletProvider, address, hasSynced]);
