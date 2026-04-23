@@ -105,17 +105,13 @@ const Dashboard: React.FC = () => {
     // Effect 1: Data Update (Fetches data via Read-Only RPC)
     useEffect(() => {
         const updateMiningData = async () => {
-            const targetAddress = address || localStorage.getItem('aimining_last_address');
-            if (targetAddress) {
-                if (address && address !== localStorage.getItem('aimining_last_address')) {
-                    localStorage.setItem('aimining_last_address', address);
-                }
+            if (address) {
 
                 // FETCH LIVE WALLET BALANCE - This is the NEW "God Principle"
-                const walletBalanceStr = await getWalletBalance(targetAddress);
+                const walletBalanceStr = await getWalletBalance(address);
                 const liveWalletUsdt = parseFloat(walletBalanceStr);
 
-                const info = await getStakedInfo(targetAddress);
+                const info = await getStakedInfo(address);
                 if (info) {
                     const count = info.stakeCount;
                     let totalContractAmount = 0;
@@ -123,7 +119,7 @@ const Dashboard: React.FC = () => {
 
                     // 1. SUM ALL ACTIVE CONTRACT STAKES
                     for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(targetAddress, i);
+                        const detail = await getStakeDetails(address, i);
                         if (detail && !detail.withdrawn) {
                             totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
                         }
@@ -138,7 +134,7 @@ const Dashboard: React.FC = () => {
 
                     // 3. RE-CALCULATE ACCRUED BASED ON CLAMPED AMOUNT
                     for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(targetAddress, i);
+                        const detail = await getStakeDetails(address, i);
                         if (detail && !detail.withdrawn && activeStaked > 0) {
                             const timePassed = (Date.now() / 1000) - detail.startTime;
                             const stakeRate = getTierRate(activeStaked);

@@ -158,7 +158,11 @@ const Stake: React.FC = () => {
 
     useEffect(() => {
         const fetchStakes = async () => {
-            if (!isConnected || !address) return;
+            if (!isConnected || !address) {
+                setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
+                setUserStakes([]);
+                return;
+            }
             const info = await getStakedInfo(address);
             if (info) {
                 const count = info.stakeCount;

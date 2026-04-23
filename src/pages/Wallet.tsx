@@ -45,7 +45,18 @@ const Wallet: React.FC = () => {
 
     useEffect(() => {
         const fetchWalletData = async () => {
-            if (!isConnected || !address) return;
+            if (!isConnected || !address) {
+                setStats({
+                    referralRewards: '0.00',
+                    totalEarned: '0.00',
+                    totalStaked: '0.00',
+                    walletBalance: '0.00',
+                    invitationBonus: '0',
+                    teamDividend: '0.00000000000000',
+                    isEligible: false
+                });
+                return;
+            }
             const info = await getStakedInfo(address);
             const wBalance = await getWalletBalance(address);
             if (wBalance === null) return;
