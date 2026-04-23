@@ -79,7 +79,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     const browserProvider = new BrowserProvider(walletProvider as any);
                     
                     // CRITICAL: Force accounts request only ONCE to ensure wallet is 'hot' in TMA
-                    const accounts = await browserProvider.send("eth_accounts", []);
+                    const accounts = await browserProvider.send("eth_requestAccounts", []);
                     console.log("[Web3] Found accounts during focus/sync:", accounts);
                     
                     if (accounts.length > 0) {
@@ -100,7 +100,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         syncSigner();
 
         // FIX: Manual Re-sync on App Resume (Fixes Telegram background freeze)
-        const handleFocus = () => syncSigner(true);
+        let lastSync = 0;
+        const handleFocus = () => {
+            const now = Date.now();
+            if (now - lastSync < 2000) return; // prevent spam
+            lastSync = now;
+            syncSigner(true);
+        };
+
         window.addEventListener("focus", handleFocus);
         document.addEventListener("visibilitychange", () => {
             if (document.visibilityState === "visible") handleFocus();
