@@ -159,9 +159,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         let url = "";
 
         if (type === 'safepal') {
-            url = `https://www.safepal.com/open_url?url=${encodeURIComponent(dappUrl)}`;
+            url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
         } else if (type === 'tokenpocket') {
-            url = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
+            url = `https://tokenpocket.github.io/applink?dappUrl=${encodeURIComponent(dappUrl)}`;
         }
 
         if (tg) {
@@ -246,7 +246,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 <span className="text-[10px] font-black text-white uppercase">Standard</span>
                             </button>
                             <button 
-                                onClick={() => { setIsConnectModalOpen(false); (window as any).openInWalletBrowser('safepal'); }}
+                                onClick={() => { setIsConnectModalOpen(false); openInWalletBrowser('safepal'); }}
                                 className="bg-white/5 border border-white/10 p-4 rounded-3xl flex flex-col items-center gap-2 group hover:bg-white/10 transition-all cursor-pointer"
                             >
                                 <span className="material-icons-round text-gray-400 text-3xl">shield</span>
@@ -255,7 +255,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <button 
-                            onClick={() => { setIsConnectModalOpen(false); (window as any).openInWalletBrowser('tokenpocket'); }}
+                            onClick={() => { setIsConnectModalOpen(false); openInWalletBrowser('tokenpocket'); }}
                             className="w-full bg-white/5 border border-white/10 p-4 rounded-3xl flex items-center justify-center gap-3 group hover:bg-white/10 transition-all mb-6 cursor-pointer"
                         >
                              <span className="material-icons-round text-gray-400 text-2xl">bolt</span>
