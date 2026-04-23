@@ -160,23 +160,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         try {
             // 2. Open AppKit Modal for standard connections
             await open({ view: 'Connect' });
-
-            if (tg) {
-                const dappUrl = window.location.origin;
-                
-                // Booster Logic: Only trigger if nothing happens for 2.5s
-                setTimeout(() => {
-                    if (!address && !hasSynced) {
-                        tg.openLink(`https://link.trustwallet.com/open_url?protocol=https&url=${encodeURIComponent(dappUrl)}`);
-                    }
-                }, 2500);
-
-                setTimeout(() => {
-                    if (!address && !hasSynced) {
-                        tg.openLink(`https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`);
-                    }
-                }, 5000);
-            }
         } catch (err) {
             console.error("[Web3] Connect failed:", err);
         }
