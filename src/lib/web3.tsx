@@ -9,7 +9,7 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
-    url: 'https://riotnode.riotplatforms.workers.dev/', 
+    url: 'https://t.me/AiMiningBTC_bot/app', 
     icons: ['https://riotnode.riotplatforms.workers.dev/logo.png'],
     redirect: {
         native: 'tg://resolve?domain=AiMiningBTC_bot',
@@ -178,10 +178,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const schemes: Record<string, string> = {
                 'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
+                'binance': `https://app.binance.com/wc?uri=${encodedUri}`,
                 'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                'tp': `tpoutside://wc?uri=${encodedUri}`,
-                'okx': `okx://wc?uri=${encodedUri}`
+                'tp': `https://tp-lab.tokenpocket.pro/wc?uri=${encodedUri}`,
+                'okx': `https://www.okx.com/download?uri=${encodedUri}`,
+                'bitget': `https://bkcode.vip/wc?uri=${encodedUri}`,
+                'bybit': `https://www.bybit.com/download?uri=${encodedUri}`
             };
 
             // 1500ms stability delay
@@ -294,43 +296,51 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             {/* GOD-MODE CONNECTION BRIDGE */}
             {/* DIRECT-CONNECT PREMIUM HUB */}
             {showSelectionHub && (
-                <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
-                    <div className="glass-panel rounded-[40px] p-8 w-full max-w-sm shadow-2xl relative overflow-hidden neon-border">
-                        <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-30"></div>
+                <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-3xl flex flex-col items-center justify-center p-6 animate-in fade-in duration-500">
+                    <div className="glass-panel rounded-[48px] p-8 w-full max-w-sm shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden border border-white/10">
+                        {/* Premium Glow Accents */}
+                        <div className="absolute -top-24 -left-24 w-48 h-48 bg-primary/20 rounded-full blur-[80px]"></div>
+                        <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-primary/10 rounded-full blur-[80px]"></div>
 
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-xl font-bold text-white uppercase tracking-tighter metallic-text">Connection Hub</h2>
+                        <div className="flex justify-between items-center mb-8 relative z-10">
+                            <div>
+                                <h2 className="text-2xl font-black text-white uppercase tracking-tighter metallic-text leading-none">Security Hub</h2>
+                                <p className="text-[9px] text-primary font-bold uppercase tracking-[0.3em] mt-1">Multi-Chain Connect</p>
+                            </div>
                             <button
                                 onClick={() => { setShowSelectionHub(false); setPendingSelection(null); }}
-                                className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center border-none cursor-pointer hover:bg-white/10 transition-colors"
+                                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center border border-white/10 cursor-pointer hover:bg-white/10 transition-colors"
                             >
-                                <span className="material-icons-round text-sm text-gray-500">close</span>
+                                <span className="material-icons-round text-lg text-gray-400">close</span>
                             </button>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 mb-8">
+                        <div className="grid grid-cols-3 gap-3 mb-8 relative z-10">
                             {[
-                                { id: 'metamask', name: 'MetaMask', icon: '/assets/metamask.png' },
-                                { id: 'trust', name: 'Trust Wallet', icon: '/assets/trust.png' },
-                                { id: 'binance', name: 'Binance', icon: '/assets/binance.png' },
-                                { id: 'safepal', name: 'SafePal', icon: '/assets/safepal.png' },
-                                { id: 'tp', name: 'TokenPocket', icon: '/assets/tp.png' },
-                                { id: 'okx', name: 'OKX Wallet', icon: '/assets/okx.png' }
+                                { id: 'metamask', name: 'MetaMask', color: '#F6851B', icon: 'https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg' },
+                                { id: 'trust', name: 'Trust', color: '#3375BB', icon: 'https://trustwallet.com/assets/images/media/assets/TWT.png' },
+                                { id: 'binance', name: 'Binance', color: '#F3BA2F', icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png' },
+                                { id: 'safepal', name: 'SafePal', color: '#3156F3', icon: 'https://link.safepal.io/asset/logo.png' },
+                                { id: 'okx', name: 'OKX', color: '#FFFFFF', icon: 'https://static.okx.com/cdn/assets/imgs/247/C67E2941BC70E904.png' },
+                                { id: 'tp', name: 'TokenPocket', color: '#2980B9', icon: 'https://www.tokenpocket.pro/assets/images/tokenpocket_logo.png' },
+                                { id: 'bitget', name: 'Bitget', color: '#1ADAD9', icon: 'https://img.bitgetimg.com/multi-lang/6232537703816192/1689150000000.png' },
+                                { id: 'bybit', name: 'Bybit', color: '#F7A600', icon: 'https://www.bybit.com/favicon.ico' },
+                                { id: 'any', name: 'Any Wallet', color: '#FFD700', icon: 'https://walletconnect.network/logo.svg' }
                             ].map(w => (
                                 <button
                                     key={w.id}
-                                    onClick={() => handleHubSelect(w.id)}
-                                    disabled={!!pendingSelection}
+                                    onClick={() => w.id === 'any' ? (handshakeUri && (window as any).Telegram?.WebApp?.openLink(`wc:${encodeURIComponent(handshakeUri)}`)) : handleHubSelect(w.id)}
+                                    disabled={!!pendingSelection && w.id !== 'any'}
                                     className={`
-                                        relative group glass-card p-4 rounded-3xl flex flex-col items-center gap-3 transition-all active:scale-95 cursor-pointer border-none
-                                        ${pendingSelection === w.id ? 'bg-primary/10 border-primary shadow-neon' : 'hover:bg-white/5'}
+                                        relative group glass-card p-3 rounded-[28px] flex flex-col items-center gap-2 transition-all active:scale-90 cursor-pointer border border-white/5
+                                        ${pendingSelection === w.id ? 'bg-primary/20 border-primary ring-2 ring-primary/50' : 'hover:bg-white/10'}
                                     `}
                                 >
-                                    <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden group-hover:bg-white/10 transition-colors p-2.5">
+                                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden group-hover:transform group-hover:scale-110 transition-transform p-2">
                                         <img 
                                             src={w.icon} 
                                             alt={w.name} 
-                                            className="w-full h-full object-contain drop-shadow-lg"
+                                            className="w-full h-full object-contain filter drop-shadow-md"
                                             onError={(e) => {
                                                 const target = e.target as HTMLImageElement;
                                                 target.src = 'https://via.placeholder.com/64/222222/ffffff?text=' + w.name[0];
@@ -340,55 +350,64 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                             <div className="absolute inset-0 bg-primary/20 animate-pulse"></div>
                                         )}
                                     </div>
-                                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-white transition-colors">{w.name}</span>
+                                    <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest text-center truncate w-full group-hover:text-white transition-colors">{w.name}</span>
                                 </button>
                             ))}
                         </div>
 
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-3 relative z-10">
                             {pendingSelection && handshakeUri && (
-                                <div className="flex flex-col gap-2">
-                                    <button
-                                        onClick={() => {
-                                            const tg = (window as any).Telegram?.WebApp;
-                                            if (tg && tg.openLink) {
-                                                const encodedUri = encodeURIComponent(handshakeUri);
-                                                const schemes: Record<string, string> = {
-                                                    'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
-                                                    'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
-                                                    'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
-                                                    'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                                                    'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
-                                                    'okx': `https://www.okx.com/download?uri=${encodedUri}`
-                                                };
-                                                tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
-                                            }
-                                        }}
-                                        className="w-full py-4 bg-primary text-black font-black uppercase text-[10px] tracking-widest rounded-2xl animate-pulse border-none cursor-pointer"
-                                    >
-                                        Launch Wallet (Fix)
-                                    </button>
-                                    <button
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(handshakeUri);
-                                            const tg = (window as any).Telegram?.WebApp;
-                                            if (tg && tg.showAlert) tg.showAlert("Link Copied! Open Wallet and Paste in WalletConnect Settings.");
-                                        }}
-                                        className="w-full py-3 bg-white/10 text-white font-black uppercase text-[8px] tracking-widest rounded-2xl border border-white/10 cursor-pointer"
-                                    >
-                                        Copy Connection Link
-                                    </button>
+                                <div className="flex flex-col gap-3 p-4 bg-primary/5 rounded-3xl border border-primary/10 mb-2 animate-in slide-in-from-top duration-300">
+                                    <p className="text-[10px] text-center text-primary/80 font-bold uppercase tracking-widest">Connect to {pendingSelection.toUpperCase()}...</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => {
+                                                const tg = (window as any).Telegram?.WebApp;
+                                                if (tg && tg.openLink) {
+                                                    const encodedUri = encodeURIComponent(handshakeUri);
+                                                    const schemes: Record<string, string> = {
+                                                        'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
+                                                        'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
+                                                        'binance': `https://app.binance.com/wc?uri=${encodedUri}`,
+                                                        'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
+                                                        'tp': `https://tp-lab.tokenpocket.pro/wc?uri=${encodedUri}`,
+                                                        'okx': `https://www.okx.com/download?uri=${encodedUri}`,
+                                                        'bitget': `https://bkcode.vip/wc?uri=${encodedUri}`,
+                                                        'bybit': `https://www.bybit.com/download?uri=${encodedUri}`
+                                                    };
+                                                    tg.openLink(schemes[pendingSelection] || schemes.metamask, { try_instant_view: false });
+                                                }
+                                            }}
+                                            className="grow py-4 bg-primary text-black font-black uppercase text-[10px] tracking-widest rounded-2xl border-none cursor-pointer active:scale-95 transition-all shadow-[0_0_20px_rgba(255,215,0,0.3)] animate-pulse"
+                                        >
+                                            Launch Now
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(handshakeUri);
+                                                const tg = (window as any).Telegram?.WebApp;
+                                                if (tg && tg.showAlert) tg.showAlert("Link Copied!");
+                                            }}
+                                            className="p-4 bg-white/10 text-white rounded-2xl border border-white/10 cursor-pointer active:scale-95"
+                                        >
+                                            <span className="material-icons-round text-sm">content_copy</span>
+                                        </button>
+                                    </div>
                                 </div>
                             )}
+                            
                             <button
                                 onClick={() => forceSync()}
-                                className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 border-none transition-all active:scale-95 cursor-pointer 
+                                className={`w-full py-4 rounded-2xl flex items-center justify-center gap-3 border-none transition-all active:scale-95 cursor-pointer 
                                     ${isPulsing ? 'btn-premium' : 'bg-white/5 text-gray-400 font-black uppercase text-[10px] tracking-widest'}`}
                             >
-                                <span className={`material-icons-round text-sm ${isPulsing ? 'animate-spin' : ''}`}>sync</span>
-                                {isPulsing ? 'Syncing Session...' : 'I HAVE CONNECTED IN WALLET'}
+                                <span className={`material-icons-round text-lg ${isPulsing ? 'animate-spin' : ''}`}>sync</span>
+                                {isPulsing ? 'Detecting Session...' : 'Sync Wallet After Approval'}
                             </button>
-                            <p className="text-[8px] text-gray-600 font-bold uppercase tracking-[4px] text-center mt-2">Protocol V2.5 • RiotNode Alpha</p>
+                            
+                            <div className="pt-2 text-center">
+                                <p className="text-[7px] text-gray-700 font-bold uppercase tracking-[0.5em] opacity-50">Authorized Mining Protocol • BSC Mainnet</p>
+                            </div>
                         </div>
                     </div>
                 </div>
