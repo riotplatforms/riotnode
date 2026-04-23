@@ -1,4 +1,4 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider } from 'ethers';
 import { useWallet } from '../lib/web3';
 
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
@@ -36,7 +36,7 @@ export const getTierRate = (val: number) => {
     if (val >= 2000) return 0.07;
     if (val >= 1000) return 0.065;
     if (val >= 500) return 0.0625;
-    if (val >= 400) return 0.06;
+    if (val >= 400) return 0.061;
     if (val >= 300) return 0.0575;
     if (val >= 200) return 0.056;
     if (val >= 100) return 0.055;
@@ -48,7 +48,7 @@ const BSC_RPC = 'https://bsc-dataseed1.binance.org/'; // Higher reliability endp
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
-    const { address, isConnected, signer, walletProvider } = useWallet();
+    const { address, isConnected, signer } = useWallet();
 
     const getContract = async (withSigner = false) => {
         if (withSigner && signer) {
@@ -62,21 +62,6 @@ export function useStaking() {
             return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
-    };
-
-    const pokeWallet = () => {
-        const tg = (window as any).Telegram?.WebApp;
-        if (!tg || !tg.openLink) return;
-        const activeType = walletType || localStorage.getItem('aimining_last_wallet');
-        if (!activeType) return;
-        const pokes: Record<string, string> = {
-            metamask: 'metamask://',
-            trust: 'trust://',
-            safepal: 'safepalwallet://',
-            tp: 'tpoutside://' 
-        };
-        const target = pokes[activeType] || pokes.metamask;
-        tg.openLink(target, { try_instant_view: false });
     };
 
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
@@ -103,10 +88,9 @@ export function useStaking() {
     };
 
     const withdraw = async (index: any, _unused?: any) => {
-        if (walletProvider) { await (walletProvider as any).request({ method: 'eth_accounts' }); }
+        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
         const staking = await getContract(true);
         const i = typeof index === 'string' ? parseInt(index) : index;
-        setTimeout(() => pokeWallet(), 150);
         const tx = await staking.withdraw(i);
         return await tx.wait();
     };
