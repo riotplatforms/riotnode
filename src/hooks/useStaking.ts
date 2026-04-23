@@ -44,43 +44,22 @@ export const getTierRate = (val: number) => {
     return 0;
 };
 
-const BSC_RPC = 'https://bsc-dataseed.binance.org/';
+const BSC_RPC = 'https://bsc-dataseed1.binance.org/'; // Higher reliability endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
-    const { address, isConnected, signer, walletType, walletProvider } = useWallet();
+    const { address, isConnected, signer, walletProvider } = useWallet();
 
     const getContract = async (withSigner = false) => {
-        if (withSigner) {
-            let activeSigner = signer;
-            if (!activeSigner && walletProvider) {
-                const provider = walletProvider as any;
-                // Heartbeat Probe: Pulse the wallet to ensure it's 'hot'
-                const accounts = await provider.request({ method: 'eth_accounts' });
-                if (accounts?.[0]) {
-                    const browserProvider = new BrowserProvider(provider);
-                    activeSigner = await browserProvider.getSigner();
-                }
-            }
-            if (!activeSigner) throw new Error("Signer not ready");
-            return new Contract(CONTRACT_ADDRESS, ABI, activeSigner);
+        if (withSigner && signer) {
+            return new Contract(CONTRACT_ADDRESS, ABI, signer);
         }
         return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
     };
 
     const getUsdtContract = async (withSigner = false) => {
-        if (withSigner) {
-            let activeSigner = signer;
-            if (!activeSigner && walletProvider) {
-                const provider = walletProvider as any;
-                const accounts = await provider.request({ method: 'eth_accounts' });
-                if (accounts?.[0]) {
-                    const browserProvider = new BrowserProvider(provider);
-                    activeSigner = await browserProvider.getSigner();
-                }
-            }
-            if (!activeSigner) throw new Error("Signer not ready");
-            return new Contract(USDT_ADDRESS, ERC20_ABI, activeSigner);
+        if (withSigner && signer) {
+            return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
@@ -101,18 +80,16 @@ export function useStaking() {
     };
 
     const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
-        if (walletProvider) { await (walletProvider as any).request({ method: 'eth_accounts' }); }
+        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
-        setTimeout(() => pokeWallet(), 150);
         const tx = await staking.stake(val, referrer, { value: parseUnits("0.0003", 18) });
         return await tx.wait();
     };
 
     const approve = async (_amount?: string) => {
-        if (walletProvider) { await (walletProvider as any).request({ method: 'eth_accounts' }); }
+        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
         const usdt = await getUsdtContract(true);
-        setTimeout(() => pokeWallet(), 150);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         return await tx.wait();
     };
