@@ -4,6 +4,14 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
 import { EthereumProvider } from '@walletconnect/ethereum-provider';
 
+// Local Assets
+import metamaskLogo from '../assets/metamask.png';
+import trustLogo from '../assets/trust.png';
+import binanceLogo from '../assets/binance.png';
+import safepalLogo from '../assets/safepal.png';
+import tpLogo from '../assets/tp.png';
+import okxLogo from '../assets/okx.png';
+
 // 1. Connection Config
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
@@ -186,15 +194,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'bybit': `https://www.bybit.com/download?uri=${encodedUri}`
             };
 
-            // 1500ms stability delay
+            // 300ms stability delay (reduced for snappier launch)
             const timer = setTimeout(() => {
                 const tg = (window as any).Telegram?.WebApp;
                 if (tg && tg.openLink) {
                     const finalUrl = schemes[pendingSelection] || schemes.metamask;
+                    console.log(`[Hub] Launching final URL: ${finalUrl}`);
                     tg.openLink(finalUrl, { try_instant_view: false });
                 }
-                // DO NOT setHandshakeUri(null) here. It must persist for manual fix button!
-            }, 1500);
+            }, 300);
 
             return () => clearTimeout(timer);
         }
@@ -317,12 +325,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                         <div className="grid grid-cols-3 gap-3 mb-8 relative z-10">
                             {[
-                                { id: 'metamask', name: 'MetaMask', color: '#F6851B', icon: 'https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg' },
-                                { id: 'trust', name: 'Trust', color: '#3375BB', icon: 'https://trustwallet.com/assets/images/media/assets/TWT.png' },
-                                { id: 'binance', name: 'Binance', color: '#F3BA2F', icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/binance/info/logo.png' },
-                                { id: 'safepal', name: 'SafePal', color: '#3156F3', icon: 'https://link.safepal.io/asset/logo.png' },
-                                { id: 'okx', name: 'OKX', color: '#FFFFFF', icon: 'https://static.okx.com/cdn/assets/imgs/247/C67E2941BC70E904.png' },
-                                { id: 'tp', name: 'TokenPocket', color: '#2980B9', icon: 'https://www.tokenpocket.pro/assets/images/tokenpocket_logo.png' },
+                                { id: 'metamask', name: 'MetaMask', color: '#F6851B', icon: metamaskLogo },
+                                { id: 'trust', name: 'Trust', color: '#3375BB', icon: trustLogo },
+                                { id: 'binance', name: 'Binance', color: '#F3BA2F', icon: binanceLogo },
+                                { id: 'safepal', name: 'SafePal', color: '#3156F3', icon: safepalLogo },
+                                { id: 'okx', name: 'OKX', color: '#FFFFFF', icon: okxLogo },
+                                { id: 'tp', name: 'TokenPocket', color: '#2980B9', icon: tpLogo },
                                 { id: 'bitget', name: 'Bitget', color: '#1ADAD9', icon: 'https://img.bitgetimg.com/multi-lang/6232537703816192/1689150000000.png' },
                                 { id: 'bybit', name: 'Bybit', color: '#F7A600', icon: 'https://www.bybit.com/favicon.ico' },
                                 { id: 'any', name: 'Any Wallet', color: '#FFD700', icon: 'https://walletconnect.network/logo.svg' }
