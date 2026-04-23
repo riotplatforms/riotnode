@@ -43,6 +43,7 @@ const Wallet: React.FC = () => {
         return `${days}d ${hours}h ${minutes}m ${seconds}s`;
     };
 
+    useEffect(() => {
         const fetchWalletData = async () => {
             if (!isConnected || !address) return;
             const info = await getStakedInfo(address);
