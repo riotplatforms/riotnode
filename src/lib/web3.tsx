@@ -55,7 +55,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await EthereumProvider.init({
                     projectId,
                     showQrModal: false,
-                    chains: [56],
+                    chains: [], // Moving everything to optional for strict TMA wallets
                     optionalChains: [56],
                     metadata,
                     methods: ["eth_sendTransaction", "personal_sign", "eth_accounts"],

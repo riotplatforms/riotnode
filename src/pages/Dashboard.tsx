@@ -111,22 +111,36 @@ const Dashboard: React.FC = () => {
                     localStorage.setItem('aimining_last_address', address);
                 }
 
+                // FETCH LIVE WALLET BALANCE - This is the NEW "God Principle"
+                const walletBalanceStr = await getWalletBalance(targetAddress);
+                const liveWalletUsdt = parseFloat(walletBalanceStr);
+
                 const info = await getStakedInfo(targetAddress);
                 if (info) {
                     const count = info.stakeCount;
                     let activeStaked = 0;
                     let totalAccruedBtc = 0;
-                    // Filter active stakes and calculate accrued rewards
+
+                    // Logic: Mining Power is ONLY allowed up to the live wallet balance
+                    // If user withdraws funds from wallet, mining must flash-stop
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(targetAddress, i);
                         if (detail && !detail.withdrawn) {
-                            const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                            const timePassed = (Date.now() / 1000) - detail.startTime;
+                            const contractAmount = parseFloat(formatUnits(detail.amount, 18));
+                            
+                            // IF wallet balance is lower than contract amount, it's a violation
+                            // MINING STOPS IMMEDIATELY if funds are not in wallet
+                            if (liveWalletUsdt < 50) {
+                                activeStaked = 0;
+                                break;
+                            }
 
-                            // We show all active (not withdrawn) stakes to restore legacy mining visibility
-                            activeStaked += stakeAmount;
-                            const stakeRate = getTierRate(stakeAmount);
-                            const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
+                            // Use the live balance as the ceiling for computing power
+                            activeStaked = Math.min(contractAmount, liveWalletUsdt);
+                            
+                            const timePassed = (Date.now() / 1000) - detail.startTime;
+                            const stakeRate = getTierRate(activeStaked);
+                            const accrued = ((activeStaked * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
                             totalAccruedBtc += accrued;
                         }
                     }
@@ -134,13 +148,15 @@ const Dashboard: React.FC = () => {
                     const earned = parseFloat(formatUnits(info.totalEarned, 18));
                     const rate = getTierRate(activeStaked);
                     const finalizedEarnedBtc = earned / btcPrice;
-                    const currentTotalBalance = finalizedEarnedBtc + totalAccruedBtc;
-                    const dailyProfitBtc = ((activeStaked * rate) / (37 * btcPrice));
+                    
+                    // FLUSH LOGIC: If activeStaked is 0 (funds removed), set balance to 0
+                    const currentTotalBalance = activeStaked > 0 ? (finalizedEarnedBtc + totalAccruedBtc) : 0;
+                    const dailyProfitBtc = activeStaked > 0 ? ((activeStaked * rate) / (37 * btcPrice)) : 0;
 
                     setStats(prev => ({
                         ...prev,
                         miningPower: activeStaked > 0 ? (activeStaked * 2.5).toFixed(1) : '0.0',
-                        balance: currentTotalBalance.toFixed(14),
+                        balance: activeStaked > 0 ? currentTotalBalance.toFixed(14) : '0.00000000000000',
                         dailyProfit: dailyProfitBtc.toFixed(14)
                     }));
 
@@ -157,7 +173,7 @@ const Dashboard: React.FC = () => {
         };
 
         updateMiningData();
-        const pollTimer = setInterval(updateMiningData, 30000);
+        const pollTimer = setInterval(updateMiningData, 20000); // Faster sync (20s)
         return () => clearInterval(pollTimer);
     }, [isConnected, address, btcPrice]);
 
