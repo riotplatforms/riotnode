@@ -118,26 +118,28 @@ const Dashboard: React.FC = () => {
                 const info = await getStakedInfo(targetAddress);
                 if (info) {
                     const count = info.stakeCount;
-                    let activeStaked = 0;
+                    let totalContractAmount = 0;
                     let totalAccruedBtc = 0;
 
-                    // Logic: Mining Power is ONLY allowed up to the live wallet balance
-                    // If user withdraws funds from wallet, mining must flash-stop
+                    // 1. SUM ALL ACTIVE CONTRACT STAKES
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(targetAddress, i);
                         if (detail && !detail.withdrawn) {
-                            const contractAmount = parseFloat(formatUnits(detail.amount, 18));
-                            
-                            // IF wallet balance is lower than contract amount, it's a violation
-                            // MINING STOPS IMMEDIATELY if funds are not in wallet
-                            if (liveWalletUsdt < 50) {
-                                activeStaked = 0;
-                                break;
-                            }
+                            totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
+                        }
+                    }
 
-                            // Use the live balance as the ceiling for computing power
-                            activeStaked = Math.min(contractAmount, liveWalletUsdt);
-                            
+                    // 2. APPLY THE CLAMP: You only mine what you actually hold in wallet
+                    // If balance drops below 50, EVERYTHING flushes to zero
+                    let activeStaked = 0;
+                    if (liveWalletUsdt >= 50) {
+                        activeStaked = Math.min(totalContractAmount, liveWalletUsdt);
+                    }
+
+                    // 3. RE-CALCULATE ACCRUED BASED ON CLAMPED AMOUNT
+                    for (let i = 0; i < count; i++) {
+                        const detail = await getStakeDetails(targetAddress, i);
+                        if (detail && !detail.withdrawn && activeStaked > 0) {
                             const timePassed = (Date.now() / 1000) - detail.startTime;
                             const stakeRate = getTierRate(activeStaked);
                             const accrued = ((activeStaked * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
@@ -149,7 +151,6 @@ const Dashboard: React.FC = () => {
                     const rate = getTierRate(activeStaked);
                     const finalizedEarnedBtc = earned / btcPrice;
                     
-                    // FLUSH LOGIC: If activeStaked is 0 (funds removed), set balance to 0
                     const currentTotalBalance = activeStaked > 0 ? (finalizedEarnedBtc + totalAccruedBtc) : 0;
                     const dailyProfitBtc = activeStaked > 0 ? ((activeStaked * rate) / (37 * btcPrice)) : 0;
 

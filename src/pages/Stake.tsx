@@ -163,84 +163,55 @@ const Stake: React.FC = () => {
             if (info) {
                 const count = info.stakeCount;
                 
-                const lastViolationStr = localStorage.getItem(`violationTime_${address.toLowerCase()}`);
-                let lastViolationTime = lastViolationStr ? parseInt(lastViolationStr, 10) : 0;
-
-                // Calculate expected active stakes first
-                let totalExpectedStake = 0;
-                for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    const timePassed = (Date.now() / 1000) - (detail?.startTime || 0);
-                    const isCompleted = timePassed >= (37 * 86400);
-                    if (detail && !detail.withdrawn && !isCompleted && detail.startTime >= lastViolationTime) {
-                        totalExpectedStake += parseFloat(formatUnits(detail.amount, 18));
-                    }
-                }
-
-                // Check wallet balance for violation
+                // FETCH LIVE WALLET BALANCE - One Truth Policy
                 const usdtBalanceStr = await getWalletBalance(address);
                 if (usdtBalanceStr === null) return;
                 const usdtBalance = parseFloat(usdtBalanceStr);
-                
-                // Get most recent stake time
-                let latestStakeTime = 0;
-                for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && detail.startTime > latestStakeTime) {
-                        latestStakeTime = detail.startTime;
-                    }
-                }
 
-                const secondsSinceLastStake = (Date.now() / 1000) - latestStakeTime;
-                
-                // Removed Auto-Recovery: IF violated, you must manually re-stake to get a new start-time.
-
-                // Violation if wallet balance drops below total expected stake (any withdrawal)
-                // AND we are NOT in the 60s grace period after a stake
-                const violationThreshold = Math.max(0.01, totalExpectedStake - 0.1); 
-                if (totalExpectedStake > 0 && usdtBalance < violationThreshold && secondsSinceLastStake > 60) {
-                    lastViolationTime = Math.floor(Date.now() / 1000);
-                    localStorage.setItem(`violationTime_${address.toLowerCase()}`, lastViolationTime.toString());
-                    showAlert(`Alert: Withdrawal detected. Staking cycle stoped. Please restake to resume.`);
-                }
-
-                let validStaked = 0;
+                let totalContractAmount = 0;
                 let dailyUsdtYield = 0;
                 const details = [];
 
+                // 1. Calculate Contract Totals
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
-                        const stakeAmountStr = formatUnits(detail.amount, 18);
-                        const stakeAmount = parseFloat(stakeAmountStr);
-                        
-                        // No fake recovery, use actual start time
-                        const logicalStartTime = detail.startTime;
-                        const timePassed = (Date.now() / 1000) - logicalStartTime;
-                        
-                        const isCompleted = timePassed >= (37 * 86400);
-                        const isViolated = detail.startTime < lastViolationTime;
+                       totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
+                    }
+                }
 
-                        if (isViolated && !isCompleted) {
-                            // Violated: flush amounts to zero as per user request
-                            // Staking is "OFF" - user must restake for a new Day 1 cycle
-                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true, logicalStartTime });
-                        } else {
-                            // If user holds less than stake but not violated yet (grace period), 
-                            // we show rewards for actual held amount (proportional)
+                // 2. Apply the Global Synchronized Clamp
+                // If balance drops below 50, mining state is FLUSHED globally
+                let activeStaked = 0;
+                if (usdtBalance >= 50) {
+                    activeStaked = Math.min(totalContractAmount, usdtBalance);
+                }
+
+                // 3. Populate Details for UI
+                for (let i = 0; i < count; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail && !detail.withdrawn) {
+                        const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                        const rate = getTierRate(stakeAmount); 
+                        
+                        // If balance is 0 or less than 50, mining is marked as Violated (Flushed)
+                        const isViolated = usdtBalance < 50;
+                        
+                        if (!isViolated) {
+                            // Pro-rata yield calculation if balance is lower than stake (clamped)
                             const effectiveAmount = Math.min(stakeAmount, usdtBalance);
-                            validStaked += effectiveAmount;
-                            const rate = getTierRate(stakeAmount); // Use the tier they purchased
                             dailyUsdtYield += (effectiveAmount * rate) / 37;
-                            details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: effectiveAmount, isViolated: false, logicalStartTime });
+                            details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: effectiveAmount, isViolated: false });
+                        } else {
+                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
                         }
                     }
                 }
 
                 setStats({
-                    totalStaked: validStaked.toFixed(2),
+                    totalStaked: activeStaked.toFixed(2),
                     dailyYield: (dailyUsdtYield / btcPrice).toFixed(14),
-                    totalTP: (validStaked * 2.5).toFixed(0)
+                    totalTP: (activeStaked * 2.5).toFixed(0)
                 });
                 setUserStakes(details);
             }

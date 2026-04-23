@@ -43,76 +43,47 @@ const Wallet: React.FC = () => {
         return `${days}d ${hours}h ${minutes}m ${seconds}s`;
     };
 
-    useEffect(() => {
         const fetchWalletData = async () => {
             if (!isConnected || !address) return;
             const info = await getStakedInfo(address);
             const wBalance = await getWalletBalance(address);
             if (wBalance === null) return;
+            const wBalanceNum = parseFloat(wBalance);
 
             if (info) {
-                // Calculate internal staking
-                let totalAccruedBtc = 0;
-                let activeStaked = 0;
-                let minMaturity = Infinity;
-                let totalExpectedStake = 0;
                 const count = info.stakeCount;
+                let totalContractAmount = 0;
+                let totalAccruedBtc = 0;
+                let minMaturity = Infinity;
 
-                const lastViolationStr = localStorage.getItem(`violationTime_${address.toLowerCase()}`);
-                let lastViolationTime = lastViolationStr ? parseInt(lastViolationStr, 10) : 0;
-
-                // Calculate total expected stake first
+                // 1. Calculate Contract Totals
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
-                    const timePassed = (Date.now() / 1000) - (detail?.startTime || 0);
-                    const isCompleted = timePassed >= (37 * 86400);
-                    
-                    if (detail && !detail.withdrawn && !isCompleted && detail.startTime >= lastViolationTime) {
-                        totalExpectedStake += parseFloat(formatUnits(detail.amount, 18));
+                    if (detail && !detail.withdrawn) {
+                        totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
                     }
                 }
 
-                const wBalanceNum = parseFloat(wBalance);
-                
-                // Get most recent stake time
-                let latestStakeTime = 0;
-                for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && detail.startTime > latestStakeTime) {
-                        latestStakeTime = detail.startTime;
-                    }
+                // 2. Apply the Global Synchronized Clamp
+                let activeStaked = 0;
+                if (wBalanceNum >= 50) {
+                    activeStaked = Math.min(totalContractAmount, wBalanceNum);
                 }
 
-                const secondsSinceLastStake = (Date.now() / 1000) - latestStakeTime;
-
-                // Removed Auto-Recovery: IF violated, you must manually re-stake to get a new start-time.
-
-                // Violation if wallet is COMPLETELY empty (< 0.001 USDT) AND user has active stakes
-                // AND we are NOT in the 60s grace period after a stake
-                if (totalExpectedStake > 0 && wBalanceNum < 0.001 && secondsSinceLastStake > 60) {
-                    lastViolationTime = Math.floor(Date.now() / 1000);
-                    localStorage.setItem(`violationTime_${address.toLowerCase()}`, lastViolationTime.toString());
-                }
-
-                totalAccruedBtc = 0;
+                // 3. Calculate Accrued Rewards & Maturity based on Clamp
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                        
-                        // No fake recovery, use actual start time
-                        const logicalStartTime = detail.startTime;
-                        const timePassed = (Date.now() / 1000) - logicalStartTime;
-                        
-                        const isCompleted = timePassed >= (37 * 86400);
-                        const isViolated = detail.startTime < lastViolationTime;
-
-                        if (isViolated && !isCompleted) continue;
-
                         const rate = getTierRate(stakeAmount);
-                        const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / btcPrice;
-                        totalAccruedBtc += accrued;
-                        activeStaked += stakeAmount;
+                        
+                        // Only add to rewards if wallet has enough fund (global state check)
+                        if (activeStaked > 0) {
+                            const logicalStartTime = detail.startTime;
+                            const timePassed = (Date.now() / 1000) - logicalStartTime;
+                            const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / btcPrice;
+                            totalAccruedBtc += accrued;
+                        }
 
                         const maturity = detail.startTime + (37 * 86400);
                         if (maturity < minMaturity) minMaturity = maturity;
@@ -121,17 +92,16 @@ const Wallet: React.FC = () => {
                 setNextMaturity(minMaturity === Infinity ? null : minMaturity);
 
                 const finalizedEarnedBtc = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
-                const currentTotalBtc = finalizedEarnedBtc + totalAccruedBtc;
+                const currentTotalBtc = activeStaked > 0 ? (finalizedEarnedBtc + totalAccruedBtc) : 0;
 
                 // Networking Logic
                 const isEligible = activeStaked >= 200;
                 
-                // Initial update
                 setStats({
                     referralRewards: formatUnits(info.referralRewards, 18),
                     totalEarned: currentTotalBtc.toFixed(14),
                     totalStaked: activeStaked.toFixed(2),
-                    walletBalance: parseFloat(wBalance).toFixed(2),
+                    walletBalance: wBalanceNum.toFixed(2),
                     invitationBonus: '0',
                     teamDividend: '0.00000000000000',
                     isEligible
