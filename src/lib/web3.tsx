@@ -34,7 +34,13 @@ if (!appKitInitialized) {
         themeVariables: {
             '--w3m-accent': '#FFD700',
             '--w3m-border-radius-master': '1px'
-        }
+        },
+        featuredWalletIds: [
+            'c53b2160100a74836696b4ef61012a67', // MetaMask
+            '4622a2b2d6ad1297d0d0ed7963d330c6', // Trust Wallet
+            '225affb17671854898148b0d46d2f3d2', // SafePal
+            'd681b9790ca427f9103c8091da93f0b4'  // TokenPocket
+        ]
     });
     appKitInitialized = true;
 }
@@ -132,37 +138,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
-        console.log("[Web3] Initiating connection...");
-        const tg = (window as any).Telegram?.WebApp;
-        
         try {
-            // First Priority: Use the official AppKit Modal (Most stable)
+            // Priority: Only open the Modal and let user choose
             await open({ view: 'Connect' });
-
-            // If in TMA, apply smart boosters to help deep links
-            if (tg) {
-                const dappUrl = window.location.origin;
-                
-                // Booster 1: Trust Wallet Universal Link (0.5s delay)
-                setTimeout(() => {
-                    if (!address) {
-                        tg.openLink(`https://link.trustwallet.com/open_url?protocol=https&url=${encodeURIComponent(dappUrl)}`);
-                    }
-                }, 500);
-                
-                // Booster 2: MetaMask Universal Link (2s delay)
-                setTimeout(() => {
-                    if (!address) {
-                        tg.openLink(`https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`);
-                    }
-                }, 2000);
-            }
         } catch (err) {
             console.error("[Web3] Connect failed:", err);
-            // Fallback for unexpected errors
-            if (tg) {
-                tg.openLink(`https://metamask.app.link/dapp/${window.location.origin.replace(/^https?:\/\//, '')}`);
-            }
         }
     };
 
