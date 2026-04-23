@@ -38,6 +38,7 @@ if (!appKitInitialized) {
         featuredWalletIds: [
             'c53b2160100a74836696b4ef61012a67', // MetaMask
             '4622a2b2d6ad1297d0d0ed7963d330c6', // Trust Wallet
+            '971e689d0a5955a868f3b13fdb2742e4', // Binance Wallet
             '225affb17671854898148b0d46d2f3d2', // SafePal
             'd681b9790ca427f9103c8091da93f0b4'  // TokenPocket
         ]
@@ -109,13 +110,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 localStorage.removeItem('aimining_address');
             }
         };
-        syncSigner();
+        
+        // Slightly delayed sync to avoid hangs during TMA transition
+        const timeout = setTimeout(() => syncSigner(), 800);
 
         // FIX: Manual Re-sync on App Resume (Fixes Telegram background freeze)
         let lastSync = 0;
         const handleFocus = () => {
             const now = Date.now();
-            if (now - lastSync < 2000) return; // prevent spam
+            if (now - lastSync < 3000) return; // 3s throttle for stability
             lastSync = now;
             syncSigner(true);
         };
