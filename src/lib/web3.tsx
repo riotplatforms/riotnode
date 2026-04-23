@@ -144,11 +144,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
-        setIsConnectModalOpen(true);
-    };
-
-    const openReownModal = async () => {
-        setIsConnectModalOpen(false);
         try {
             await open({ view: 'Connect' });
         } catch (err) {
@@ -225,60 +220,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             forceSync,
             hardReset,
             setIsDisconnectModalOpen,
-            setIsConnectModalOpen,
+            setIsConnectModalOpen: () => {}, // No-op
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any
         }}>
             {children}
-
-            {/* CUSTOM CONNECT MODAL (TMA STYLE) */}
-            {isConnectModalOpen && (
-                <div className="fixed inset-0 z-[2000] flex items-end justify-center">
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setIsConnectModalOpen(false)}></div>
-                    <div className="relative w-full max-w-md bg-[#0f0f0f] border-t border-white/10 rounded-t-[32px] p-6 pb-12 animate-slide-up shadow-2xl transition-all">
-                        <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-6"></div>
-                        
-                        <h3 className="text-lg font-black text-white uppercase tracking-widest text-center mb-6">Select Connection</h3>
-                        
-                        <button 
-                            onClick={openReownModal}
-                            className="w-full bg-primary text-black p-4 rounded-3xl flex items-center justify-center gap-3 group active:scale-95 transition-all mb-8 cursor-pointer border-none font-black uppercase tracking-widest text-sm"
-                        >
-                            <span className="material-icons-round">account_balance_wallet</span>
-                            Connect Wallet
-                        </button>
-                        
-                        <div className="bg-white/5 border border-white/10 rounded-3xl p-5 mb-8">
-                            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                <span className="material-icons-round text-xs">info</span>
-                                SafePal / TokenPocket Users
-                            </h4>
-                            <p className="text-[11px] text-gray-400 font-medium leading-relaxed mb-4">
-                                If connection stalls, copy this URL and open it inside your wallet's built-in dApp Browser (SafePal/TokenPocket/OKX).
-                            </p>
-                            <button 
-                                onClick={() => {
-                                    navigator.clipboard.writeText(window.location.origin);
-                                    const tg = (window as any).Telegram?.WebApp;
-                                    if (tg?.showAlert) tg.showAlert("URL Copied! Now paste it in your Wallet's Browser.");
-                                    else alert("URL Copied!");
-                                }}
-                                className="w-full bg-white/10 hover:bg-white/20 text-white p-3 rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer border-none font-bold text-[10px] uppercase tracking-wider"
-                            >
-                                <span className="material-icons-round text-sm">content_copy</span>
-                                Copy Website Link
-                            </button>
-                        </div>
-
-                        <button 
-                            onClick={() => setIsConnectModalOpen(false)}
-                            className="w-full text-gray-500 font-bold uppercase text-[10px] tracking-widest border-none bg-transparent cursor-pointer"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            )}
         </WalletContext.Provider>
     );
 }
