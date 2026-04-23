@@ -310,12 +310,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                         <div className="grid grid-cols-2 gap-4 mb-8">
                             {[
-                                { id: 'metamask', name: 'MetaMask', icon: 'https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg' },
-                                { id: 'trust', name: 'Trust Wallet', icon: 'https://trustwallet.com/assets/images/media/assets/TWT.png' },
-                                { id: 'binance', name: 'Binance', icon: 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png' },
-                                { id: 'safepal', name: 'SafePal', icon: 'https://files.coinmarketcap.com/static/img/coins/64x64/7356.png' },
-                                { id: 'tp', name: 'TokenPocket', icon: 'https://files.coinmarketcap.com/static/img/coins/64x64/7342.png' },
-                                { id: 'okx', name: 'OKX Wallet', icon: 'https://files.coinmarketcap.com/static/img/coins/64x64/3897.png' }
+                                { id: 'metamask', name: 'MetaMask', icon: '/assets/metamask.png' },
+                                { id: 'trust', name: 'Trust Wallet', icon: '/assets/trust.png' },
+                                { id: 'binance', name: 'Binance', icon: '/assets/binance.png' },
+                                { id: 'safepal', name: 'SafePal', icon: '/assets/safepal.png' },
+                                { id: 'tp', name: 'TokenPocket', icon: '/assets/tp.png' },
+                                { id: 'okx', name: 'OKX Wallet', icon: '/assets/okx.png' }
                             ].map(w => (
                                 <button
                                     key={w.id}
@@ -327,7 +327,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     `}
                                 >
                                     <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden group-hover:bg-white/10 transition-colors p-2.5">
-                                        <img src={w.icon} alt={w.name} className="w-full h-full object-contain drop-shadow-lg" />
+                                        <img 
+                                            src={w.icon} 
+                                            alt={w.name} 
+                                            className="w-full h-full object-contain drop-shadow-lg"
+                                            onError={(e) => {
+                                                const target = e.target as HTMLImageElement;
+                                                target.src = 'https://via.placeholder.com/64/222222/ffffff?text=' + w.name[0];
+                                            }}
+                                        />
                                         {pendingSelection === w.id && (
                                             <div className="absolute inset-0 bg-primary/20 animate-pulse"></div>
                                         )}
