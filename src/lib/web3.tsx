@@ -230,6 +230,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any
         }}>
+            {children}
             {isConnectModalOpen && (
                 <div className="fixed inset-0 z-[2000] flex items-end justify-center">
                     <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsConnectModalOpen(false)}></div>
