@@ -87,25 +87,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const isConnecting = status === 'connecting';
 
-    // Sync Signer when connection changes (Optimized to prevent redundant popups)
+    // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
         const syncSigner = async (isManual = false) => {
-            if (isConnected && walletProvider && (!hasSynced || isManual)) {
+            if (isConnected && walletProvider && address && (!hasSynced || isManual)) {
                 try {
                     const browserProvider = new BrowserProvider(walletProvider as any);
                     
-                    // PERFORMANCE: Use eth_accounts for resume, eth_requestAccounts for initial
-                    const method = isManual ? "eth_accounts" : "eth_requestAccounts";
-                    const accounts = await browserProvider.send(method, []);
+                    // PERFORMANCE: Directly get signer using the address we already have from AppKit
+                    // This avoids the 'eth_requestAccounts' hang in Telegram Mini Apps
+                    const s = await browserProvider.getSigner(address);
                     
-                    if (accounts.length > 0) {
-                        const s = await browserProvider.getSigner(accounts[0]);
+                    if (s) {
                         setSigner(s);
                         setHasSynced(true);
-                        if (address) localStorage.setItem('aimining_address', address);
+                        localStorage.setItem('aimining_address', address);
                     }
                 } catch (e) {
-                    console.error("[Web3] Signer sync failed:", e);
+                    console.error("[Web3] High-speed signer sync failed:", e);
                 }
             } else if (!isConnected) {
                 setSigner(null);
@@ -115,7 +114,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
         
         // Slightly delayed sync to avoid hangs during TMA transition
-        const timeout = setTimeout(() => syncSigner(), 800);
+        const timeout = setTimeout(() => syncSigner(), 1200);
 
         // FIX: Manual Re-sync on App Resume (Fixes Telegram background freeze)
         let lastSync = 0;
