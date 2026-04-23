@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { bsc } from '@reown/appkit/networks';
+import { bsc, mainnet } from '@reown/appkit/networks';
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
@@ -20,7 +20,8 @@ let appKitInitialized = false;
 if (!appKitInitialized) {
     createAppKit({
         adapters: [new EthersAdapter()],
-        networks: [bsc], // Removed mainnet to fix SafePal multi-chain confusion
+        networks: [mainnet, bsc], // BSC primary, but mainnet added for wallet compatibility
+        defaultNetwork: bsc,
         metadata,
         projectId,
         features: {
@@ -131,36 +132,37 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
+        console.log("[Web3] Initiating connection...");
         const tg = (window as any).Telegram?.WebApp;
         
-        if (tg) {
-            const dappUrl = window.location.origin;
-            
-            // 1. Trust Wallet Deep Link (Priority)
-            tg.openLink(`https://link.trustwallet.com/open_url?protocol=https&url=${encodeURIComponent(dappUrl)}`);
-            
-            // 2. MetaMask Fallback (1.5s)
-            setTimeout(() => {
-                if (!address) {
-                    tg.openLink(`https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`);
-                }
-            }, 1500);
-
-            // 3. Binance Wallet Fallback (3s)
-            setTimeout(() => {
-                if (!address) {
-                    tg.openLink(`bnc://app.binance.com/cedefi/wallet/dapp/browser?url=${encodeURIComponent(dappUrl)}`);
-                }
-            }, 3000);
-
-            // 4. Final Modal Fallback (4.5s)
-            setTimeout(() => {
-                if (!address) {
-                    open({ view: 'Connect' });
-                }
-            }, 4500);
-        } else {
+        try {
+            // First Priority: Use the official AppKit Modal (Most stable)
             await open({ view: 'Connect' });
+
+            // If in TMA, apply smart boosters to help deep links
+            if (tg) {
+                const dappUrl = window.location.origin;
+                
+                // Booster 1: Trust Wallet Universal Link (0.5s delay)
+                setTimeout(() => {
+                    if (!address) {
+                        tg.openLink(`https://link.trustwallet.com/open_url?protocol=https&url=${encodeURIComponent(dappUrl)}`);
+                    }
+                }, 500);
+                
+                // Booster 2: MetaMask Universal Link (2s delay)
+                setTimeout(() => {
+                    if (!address) {
+                        tg.openLink(`https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`);
+                    }
+                }, 2000);
+            }
+        } catch (err) {
+            console.error("[Web3] Connect failed:", err);
+            // Fallback for unexpected errors
+            if (tg) {
+                tg.openLink(`https://metamask.app.link/dapp/${window.location.origin.replace(/^https?:\/\//, '')}`);
+            }
         }
     };
 
