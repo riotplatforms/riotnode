@@ -80,7 +80,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [hasSynced, setHasSynced] = useState(false);
     const [referral, setReferral] = useState<string | null>(null);
-
+    const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
     const isConnecting = status === 'connecting';
 
@@ -148,12 +148,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setIsConnectModalOpen(true);
     };
 
-    const handleDirectConnect = async (walletId?: string) => {
+    const handleDirectConnect = async () => {
         setIsConnectModalOpen(false);
         try {
             await open({ view: 'Connect' });
         } catch (err) {
-            console.warn("[Web3] Reown Modal failed, falling back to universal link");
+            console.warn("[Web3] Reown Modal failed");
         }
     };
 
@@ -226,7 +226,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             forceSync,
             hardReset,
             setIsDisconnectModalOpen,
-            setIsConnectModalOpen: () => {}, // No-op
+            setIsConnectModalOpen,
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any
         }}>
