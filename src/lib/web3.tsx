@@ -20,7 +20,7 @@ let appKitInitialized = false;
 if (!appKitInitialized) {
     createAppKit({
         adapters: [new EthersAdapter()],
-        networks: [bsc, mainnet],
+        networks: [bsc], // Removed mainnet to fix SafePal multi-chain confusion
         metadata,
         projectId,
         features: {
@@ -72,21 +72,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     // Sync Signer when connection changes (Optimized to prevent redundant popups)
     useEffect(() => {
-        const syncSigner = async () => {
-            if (isConnected && walletProvider && !hasSynced) {
+        const syncSigner = async (isManual = false) => {
+            if (isConnected && walletProvider && (!hasSynced || isManual)) {
                 console.log("[Web3] Starting Signer Sync...");
                 try {
                     const browserProvider = new BrowserProvider(walletProvider as any);
                     
                     // CRITICAL: Force accounts request only ONCE to ensure wallet is 'hot' in TMA
-                    const accounts = await browserProvider.send("eth_requestAccounts", []);
-                    console.log("[Web3] Found accounts:", accounts);
+                    const accounts = await browserProvider.send("eth_accounts", []);
+                    console.log("[Web3] Found accounts during focus/sync:", accounts);
                     
-                    const s = await browserProvider.getSigner(accounts[0]);
-                    setSigner(s);
-                    setHasSynced(true);
-                    
-                    if (address) localStorage.setItem('aimining_address', address);
+                    if (accounts.length > 0) {
+                        const s = await browserProvider.getSigner(accounts[0]);
+                        setSigner(s);
+                        setHasSynced(true);
+                        if (address) localStorage.setItem('aimining_address', address);
+                    }
                 } catch (e) {
                     console.error("[Web3] Signer sync failed:", e);
                 }
@@ -97,11 +98,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
         };
         syncSigner();
+
+        // FIX: Manual Re-sync on App Resume (Fixes Telegram background freeze)
+        const handleFocus = () => syncSigner(true);
+        window.addEventListener("focus", handleFocus);
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "visible") handleFocus();
+        });
+
+        return () => {
+            window.removeEventListener("focus", handleFocus);
+        };
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
         try {
             await open({ view: 'Connect' });
+            
+            // Force focus check after 2 seconds to catch early approving
+            setTimeout(() => {
+                window.dispatchEvent(new Event('focus'));
+            }, 2000);
         } catch (err) {
             console.error("[Web3] Connect failed:", err);
         }
@@ -142,7 +159,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             signer,
             connect,
             disconnect,
-            isConnecting,
+            isConnecting: isConnecting && !address, // Refined spinner state
             walletType: 'AppKit',
             walletProvider,
             forceSync,
