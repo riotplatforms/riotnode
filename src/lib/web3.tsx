@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { bsc, mainnet } from '@reown/appkit/networks';
+import { bsc } from '@reown/appkit/networks';
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
