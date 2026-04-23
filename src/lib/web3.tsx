@@ -3,6 +3,9 @@ import { BrowserProvider, JsonRpcSigner } from 'ethers';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc, mainnet } from '@reown/appkit/networks';
+import metamaskLogo from '../assets/metamask.png';
+import trustLogo from '../assets/trust.png';
+import binanceLogo from '../assets/binance.png';
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
@@ -243,19 +246,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         <div className="grid grid-cols-3 gap-6 mb-12">
                             <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
                                 <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
-                                    <img src="https://metamask.io/images/metamask-logo.png" className="w-10 h-10 object-contain" alt="MetaMask" />
+                                    <img src={metamaskLogo} className="w-10 h-10 object-contain" alt="MetaMask" />
                                 </div>
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">MetaMask</span>
                             </button>
                             <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
                                 <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
-                                    <img src="https://trustwallet.com/assets/images/media/assets/trust_primary_logo_stacked_blue.png" className="w-10 h-10 object-contain" alt="Trust" />
+                                    <img src={trustLogo} className="w-10 h-10 object-contain" alt="Trust" />
                                 </div>
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Trust Wallet</span>
                             </button>
                             <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
                                 <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
-                                    <img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" className="w-10 h-10 object-contain" alt="Binance" />
+                                    <img src={binanceLogo} className="w-10 h-10 object-contain" alt="Binance" />
                                 </div>
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Binance</span>
                             </button>
