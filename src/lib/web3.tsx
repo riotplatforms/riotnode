@@ -139,7 +139,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
-        const tg = (window as any).Telegram?.WebApp;
         
         // 1. If we are ALREADY inside a Wallet's dApp Browser (SafePal, TokenPocket, etc.)
         if ((window as any).ethereum || (window as any).safepal) {
