@@ -10,8 +10,8 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform',
-    url: 'https://riotnode.riotplatforms.workers.dev/', 
-    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
+    url: window.location.origin, 
+    icons: [`${window.location.origin}/logo.png`]
 };
 
 // Initialize AppKit with Instance Guard
@@ -47,10 +47,12 @@ interface WalletContextType {
     isConnecting: boolean;
     walletType: string | null;
     walletProvider: any;
+    referral: string | null;
     // Compatibility properties
     forceSync: () => Promise<void>;
     hardReset: () => void;
     setIsDisconnectModalOpen: (open: boolean) => void;
+    stakeNow: (amount: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -67,6 +69,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { walletProvider } = useAppKitProvider('eip155');
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [hasSynced, setHasSynced] = useState(false);
+    const [referral, setReferral] = useState<string | null>(null);
 
     const isConnecting = status === 'connecting';
 
@@ -74,13 +77,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const syncSigner = async (isManual = false) => {
             if (isConnected && walletProvider && (!hasSynced || isManual)) {
-                console.log("[Web3] Starting Signer Sync...");
                 try {
                     const browserProvider = new BrowserProvider(walletProvider as any);
                     
-                    // CRITICAL: Force accounts request only ONCE to ensure wallet is 'hot' in TMA
-                    const accounts = await browserProvider.send("eth_requestAccounts", []);
-                    console.log("[Web3] Found accounts during focus/sync:", accounts);
+                    // PERFORMANCE: Use eth_accounts for resume, eth_requestAccounts for initial
+                    const method = isManual ? "eth_accounts" : "eth_requestAccounts";
+                    const accounts = await browserProvider.send(method, []);
                     
                     if (accounts.length > 0) {
                         const s = await browserProvider.getSigner(accounts[0]);
@@ -113,21 +115,52 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (document.visibilityState === "visible") handleFocus();
         });
 
+        // Referral Injection Logic
+        const urlParams = new URLSearchParams(window.location.search);
+        const ref = urlParams.get('ref');
+        if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
+            localStorage.setItem('aimining_referrer', ref);
+            setReferral(ref);
+        } else {
+            setReferral(localStorage.getItem('aimining_referrer'));
+        }
+
         return () => {
             window.removeEventListener("focus", handleFocus);
         };
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
-        try {
-            await open({ view: 'Connect' });
+        const tg = (window as any).Telegram?.WebApp;
+        
+        if (tg) {
+            const dappUrl = window.location.origin;
             
-            // Force focus check after 2 seconds to catch early approving
+            // 1. Trust Wallet Deep Link (Priority)
+            tg.openLink(`https://link.trustwallet.com/open_url?protocol=https&url=${encodeURIComponent(dappUrl)}`);
+            
+            // 2. MetaMask Fallback (1.5s)
             setTimeout(() => {
-                window.dispatchEvent(new Event('focus'));
-            }, 2000);
-        } catch (err) {
-            console.error("[Web3] Connect failed:", err);
+                if (!address) {
+                    tg.openLink(`https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`);
+                }
+            }, 1500);
+
+            // 3. Binance Wallet Fallback (3s)
+            setTimeout(() => {
+                if (!address) {
+                    tg.openLink(`bnc://app.binance.com/cedefi/wallet/dapp/browser?url=${encodeURIComponent(dappUrl)}`);
+                }
+            }, 3000);
+
+            // 4. Final Modal Fallback (4.5s)
+            setTimeout(() => {
+                if (!address) {
+                    open({ view: 'Connect' });
+                }
+            }, 4500);
+        } else {
+            await open({ view: 'Connect' });
         }
     };
 
@@ -159,6 +192,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const stakeNow = async (amount: string) => {
+        if (!isConnected || !address) {
+            await connect();
+            return;
+        }
+        // This will be implemented using useStaking in components, 
+        // but can be routed here for generalized 'One Click' logic if needed.
+    };
+
     return (
         <WalletContext.Provider value={{
             address,
@@ -169,9 +211,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             isConnecting: isConnecting && !address, // Refined spinner state
             walletType: 'AppKit',
             walletProvider,
+            referral,
             forceSync,
             hardReset,
-            setIsDisconnectModalOpen
+            setIsDisconnectModalOpen,
+            stakeNow
         }}>
             {children}
         </WalletContext.Provider>

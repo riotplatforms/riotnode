@@ -64,12 +64,19 @@ export function useStaking() {
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
 
-    const stake = async (amount: string, referrer: string = '0x0000000000000000000000000000000000000000') => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
+    const stake = async (amount: string, customReferrer?: string) => {
+        if (!signer) throw new Error("Connection lost. Please reconnect your wallet.");
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
-        const tx = await staking.stake(val, referrer, { value: parseUnits("0.0003", 18) });
-        return await tx.wait();
+        
+        // Use provided referrer, or fallback to stored one, or zero address
+        const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
+
+        console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
+        const tx = await staking.stake(val, refAddress, { value: parseUnits("0.0003", 18) });
+        
+        console.log("[Staking] Transaction Sent:", tx.hash);
+        return tx; // Return tx so components can wait for it
     };
 
     const approve = async (_amount?: string) => {

