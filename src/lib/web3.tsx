@@ -60,6 +60,7 @@ interface WalletContextType {
     hardReset: () => void;
     setIsDisconnectModalOpen: (open: boolean) => void;
     stakeNow: (amount: string) => Promise<void>;
+    openInWalletBrowser: (type: 'safepal' | 'tokenpocket') => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -138,11 +139,64 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
+        const tg = (window as any).Telegram?.WebApp;
+        
+        // 1. If we are ALREADY inside a Wallet's dApp Browser (SafePal, TokenPocket, etc.)
+        if ((window as any).ethereum || (window as any).safepal) {
+            try {
+                const provider = new BrowserProvider((window as any).ethereum || (window as any).safepal);
+                const accounts = await provider.send("eth_requestAccounts", []);
+                if (accounts.length > 0) {
+                    const s = await provider.getSigner();
+                    setSigner(s);
+                    setHasSynced(true);
+                    return;
+                }
+            } catch (e) {
+                console.log("[Web3] Injected connection failed, falling back to Modal");
+            }
+        }
+
         try {
-            // Priority: Only open the Modal and let user choose
+            // 2. Open AppKit Modal for standard connections
             await open({ view: 'Connect' });
+
+            if (tg) {
+                const dappUrl = window.location.origin;
+                
+                // Booster Logic: Only trigger if nothing happens for 2.5s
+                setTimeout(() => {
+                    if (!address && !hasSynced) {
+                        tg.openLink(`https://link.trustwallet.com/open_url?protocol=https&url=${encodeURIComponent(dappUrl)}`);
+                    }
+                }, 2500);
+
+                setTimeout(() => {
+                    if (!address && !hasSynced) {
+                        tg.openLink(`https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`);
+                    }
+                }, 5000);
+            }
         } catch (err) {
             console.error("[Web3] Connect failed:", err);
+        }
+    };
+
+    const openInWalletBrowser = (type: 'safepal' | 'tokenpocket') => {
+        const tg = (window as any).Telegram?.WebApp;
+        const dappUrl = window.location.origin;
+        let url = "";
+
+        if (type === 'safepal') {
+            url = `https://www.safepal.com/open_url?url=${encodeURIComponent(dappUrl)}`;
+        } else if (type === 'tokenpocket') {
+            url = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
+        }
+
+        if (tg) {
+            tg.openLink(url);
+        } else {
+            window.location.href = url;
         }
     };
 
@@ -197,7 +251,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             forceSync,
             hardReset,
             setIsDisconnectModalOpen,
-            stakeNow
+            stakeNow,
+            openInWalletBrowser: openInWalletBrowser as any
         }}>
             {children}
         </WalletContext.Provider>

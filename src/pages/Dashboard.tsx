@@ -250,6 +250,25 @@ const Dashboard: React.FC = () => {
                 </div>
             </header>
 
+            {!isConnected && (
+                <div className="px-4 py-2 flex gap-2 overflow-x-auto no-scrollbar">
+                    <button 
+                        onClick={() => (useWallet as any)().openInWalletBrowser('safepal')}
+                        className="flex-shrink-0 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-[10px] font-bold text-gray-400 flex items-center gap-2 hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                        <span className="material-icons-round text-xs">shield</span>
+                        Open in SafePal
+                    </button>
+                    <button 
+                        onClick={() => (useWallet as any)().openInWalletBrowser('tokenpocket')}
+                        className="flex-shrink-0 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl text-[10px] font-bold text-gray-400 flex items-center gap-2 hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                        <span className="material-icons-round text-xs">account_balance_wallet</span>
+                        TokenPocket Help
+                    </button>
+                </div>
+            )}
+
             {/* Main Stats Grid */}
             <section className="px-4 grid grid-cols-2 gap-3 mb-4">
                 <div className="bg-card-dark p-3 rounded-2xl shadow-card border border-gray-800 relative overflow-hidden group">
