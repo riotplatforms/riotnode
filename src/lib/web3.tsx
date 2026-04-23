@@ -14,24 +14,29 @@ const metadata = {
     icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
 };
 
-// Initialize AppKit
-createAppKit({
-    adapters: [new EthersAdapter()],
-    networks: [bsc, mainnet],
-    metadata,
-    projectId,
-    features: {
-        analytics: true,
-        email: false,
-        socials: false,
-        allWallets: true // Support 600+ wallets
-    },
-    themeMode: 'dark',
-    themeVariables: {
-        '--w3m-accent': '#FFD700',
-        '--w3m-border-radius-master': '1px'
-    }
-});
+// Initialize AppKit with Instance Guard
+let appKitInitialized = false;
+
+if (!appKitInitialized) {
+    createAppKit({
+        adapters: [new EthersAdapter()],
+        networks: [bsc, mainnet],
+        metadata,
+        projectId,
+        features: {
+            analytics: true,
+            email: false,
+            socials: false,
+            allWallets: true // Support 600+ wallets
+        },
+        themeMode: 'dark',
+        themeVariables: {
+            '--w3m-accent': '#FFD700',
+            '--w3m-border-radius-master': '1px'
+        }
+    });
+    appKitInitialized = true;
+}
 
 interface WalletContextType {
     address: string | undefined;
@@ -61,36 +66,38 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
+    const [hasSynced, setHasSynced] = useState(false);
 
     const isConnecting = status === 'connecting';
 
+    // Sync Signer when connection changes (Optimized to prevent redundant popups)
     useEffect(() => {
         const syncSigner = async () => {
-            console.log("[Web3] isConnected:", isConnected);
-            console.log("[Web3] walletProvider:", walletProvider);
-            console.log("[Web3] address:", address);
-
-            if (isConnected && walletProvider) {
+            if (isConnected && walletProvider && !hasSynced) {
+                console.log("[Web3] Starting Signer Sync...");
                 try {
                     const browserProvider = new BrowserProvider(walletProvider as any);
                     
-                    // CRITICAL: Force accounts request to ensure wallet is 'hot' in TMA
+                    // CRITICAL: Force accounts request only ONCE to ensure wallet is 'hot' in TMA
                     const accounts = await browserProvider.send("eth_requestAccounts", []);
                     console.log("[Web3] Found accounts:", accounts);
                     
                     const s = await browserProvider.getSigner(accounts[0]);
                     setSigner(s);
+                    setHasSynced(true);
+                    
                     if (address) localStorage.setItem('aimining_address', address);
                 } catch (e) {
                     console.error("[Web3] Signer sync failed:", e);
                 }
-            } else {
+            } else if (!isConnected) {
                 setSigner(null);
-                if (!isConnected) localStorage.removeItem('aimining_address');
+                setHasSynced(false);
+                localStorage.removeItem('aimining_address');
             }
         };
         syncSigner();
-    }, [isConnected, walletProvider, address]);
+    }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
         try {
@@ -100,8 +107,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    // Auto-reconnect on boot
+    useEffect(() => {
+        const saved = localStorage.getItem('aimining_address');
+        if (saved && !isConnected) {
+            connect();
+        }
+    }, []);
+
     const disconnect = async () => {
-        await open({ view: 'Account' });
+        localStorage.clear();
+        window.location.reload();
     };
 
     const forceSync = async () => {
