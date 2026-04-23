@@ -17,7 +17,7 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
-    url: 'https://t.me/AiMiningBTC_bot/app', 
+    url: 'https://riotnode.riotplatforms.workers.dev/', 
     icons: ['https://riotnode.riotplatforms.workers.dev/logo.png'],
     redirect: {
         native: 'tg://resolve?domain=AiMiningBTC_bot',
@@ -170,20 +170,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (!silent) setTimeout(() => setIsPulsing(false), 800);
     };
 
-    // HIGH-SPEED HEARTBEAT: Pulse every 600ms when waiting
+    // HIGH-SPEED HEARTBEAT: Increased sync rate for TMA reliability
     useEffect(() => {
         if (!handshakeUri && !showSelectionHub) return;
-        const interval = setInterval(() => forceSync(true), 600);
+        const interval = setInterval(() => forceSync(true), 1500); 
         return () => clearInterval(interval);
     }, [handshakeUri, showSelectionHub, walletProvider]);
 
-    // AUTO-LAUNCHER: When a selection is made and URI arrives, FIRE it immediately
+    // URI & Scheme Resolver
+    const [schemes, setSchemes] = useState<Record<string, string>>({});
     useEffect(() => {
-        if (pendingSelection && handshakeUri) {
-            console.log(`[Hub] Auto-launching (Universal): ${pendingSelection}`);
+        if (handshakeUri) {
             const encodedUri = encodeURIComponent(handshakeUri);
-
-            const schemes: Record<string, string> = {
+            setSchemes({
                 'metamask': `https://metamask.app.link/wc?uri=${encodedUri}`,
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
                 'binance': `https://app.binance.com/wc?uri=${encodedUri}`,
@@ -192,21 +191,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'okx': `https://www.okx.com/download?uri=${encodedUri}`,
                 'bitget': `https://bkcode.vip/wc?uri=${encodedUri}`,
                 'bybit': `https://www.bybit.com/download?uri=${encodedUri}`
-            };
-
-            // 300ms stability delay (reduced for snappier launch)
-            const timer = setTimeout(() => {
-                const tg = (window as any).Telegram?.WebApp;
-                if (tg && tg.openLink) {
-                    const finalUrl = schemes[pendingSelection] || schemes.metamask;
-                    console.log(`[Hub] Launching final URL: ${finalUrl}`);
-                    tg.openLink(finalUrl, { try_instant_view: false });
-                }
-            }, 300);
-
-            return () => clearTimeout(timer);
+            });
         }
-    }, [pendingSelection, handshakeUri]);
+    }, [handshakeUri]);
+
+    // AUTO-LAUNCHER: When a selection is made and URI arrives, FIRE it immediately
+    useEffect(() => {
+        if (pendingSelection && handshakeUri) {
+            // FAST TRACK: Launch immediately to prevent session timeout
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg && tg.openLink) {
+                const finalUrl = schemes[pendingSelection] || schemes.metamask;
+                console.log(`[Hub] Auto-launching: ${finalUrl}`);
+                tg.openLink(finalUrl, { try_instant_view: false });
+            }
+        }
+    }, [pendingSelection, handshakeUri, schemes]);
 
     const hardReset = () => {
         localStorage.clear();
@@ -220,19 +220,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleHubSelect = async (walletKey: string) => {
         if (!walletProvider) return;
         
+        console.log(`[Hub] Selection: ${walletKey}`);
         setPendingSelection(walletKey);
         setIsPulsing(true);
         localStorage.setItem('aimining_last_wallet', walletKey);
         setWalletName(walletKey);
 
         try {
-            // Pre-disconnect can sometimes help stale sessions
-            if (walletProvider.session) await walletProvider.disconnect().catch(() => {});
+            // FORCE RE-HANDSHAKE: Clear old sessions to fix "unresponsive" apps
+            if (walletProvider.session) {
+                console.log("[Hub] Disconnecting old session...");
+                await walletProvider.disconnect().catch(() => {});
+            }
+            
+            // Trigger connection
+            console.log("[Hub] Requesting target URI...");
             await walletProvider.connect();
         } catch (err) {
-            console.error("[Hub] Handshake failed:", err);
+            console.error("[Hub] Connection flow failed:", err);
             setPendingSelection(null);
             setIsPulsing(false);
+            // If user cancelled, they can try again. If it's a real error, hard reset might be needed.
         }
     };
 
