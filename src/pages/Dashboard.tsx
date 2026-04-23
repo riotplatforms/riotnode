@@ -25,7 +25,7 @@ const Dashboard: React.FC = () => {
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
-    const { showAlert, referrer, tg } = useTelegram();
+    const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
 

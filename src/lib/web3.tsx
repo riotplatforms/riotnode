@@ -192,7 +192,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const stakeNow = async (amount: string) => {
+    const stakeNow = async (_amount: string) => {
         if (!isConnected || !address) {
             await connect();
             return;
