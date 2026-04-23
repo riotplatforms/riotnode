@@ -250,28 +250,7 @@ const Dashboard: React.FC = () => {
                 </div>
             </header>
 
-            {!isConnected && (
-                <div className="px-4 py-2">
-                    <div className="bg-primary/5 border border-primary/10 rounded-2xl p-4 flex items-center justify-between gap-4">
-                        <div className="flex items-start gap-3">
-                            <span className="material-icons-round text-primary text-sm mt-0.5">info</span>
-                            <p className="text-[10px] text-gray-400 font-medium leading-relaxed uppercase tracking-tight">
-                                Issues connecting? Copy & paste link in SafePal/TokenPocket browser.
-                            </p>
-                        </div>
-                        <button 
-                            onClick={() => {
-                                navigator.clipboard.writeText(window.location.origin);
-                                if (tg?.showAlert) tg.showAlert("URL Copied! Paste it in your Wallet Browser.");
-                                else alert("URL Copied!");
-                            }}
-                            className="bg-primary/20 hover:bg-primary/30 text-primary px-3 py-1.5 rounded-xl border-none font-black text-[9px] uppercase tracking-widest cursor-pointer whitespace-nowrap"
-                        >
-                            Copy Link
-                        </button>
-                    </div>
-                </div>
-            )}
+
             <section className="px-4 grid grid-cols-2 gap-3 mb-4">
                 <div className="bg-card-dark p-3 rounded-2xl shadow-card border border-gray-800 relative overflow-hidden group">
                     <div className="absolute top-0 right-0 p-2 opacity-10">

@@ -145,10 +145,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced]);
 
     const connect = async () => {
+        setIsConnectModalOpen(true);
+    };
+
+    const handleDirectConnect = async (walletId?: string) => {
+        setIsConnectModalOpen(false);
         try {
             await open({ view: 'Connect' });
         } catch (err) {
-            console.error("[Web3] Connect failed:", err);
+            console.warn("[Web3] Reown Modal failed, falling back to universal link");
         }
     };
 
@@ -225,7 +230,75 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any
         }}>
-            {children}
+            {isConnectModalOpen && (
+                <div className="fixed inset-0 z-[2000] flex items-end justify-center">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsConnectModalOpen(false)}></div>
+                    <div className="relative w-full max-w-lg bg-[#0a0a0a] border-t border-white/10 rounded-t-[40px] p-8 pb-14 animate-slide-up shadow-2xl transition-all">
+                        <div className="w-16 h-1.5 bg-white/10 rounded-full mx-auto mb-8"></div>
+                        
+                        <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Miner</h3>
+                        
+                        {/* Direct Wallet Icons (Optimized for TMA) */}
+                        <div className="grid grid-cols-3 gap-6 mb-12">
+                            <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
+                                    <img src="https://metamask.io/images/metamask-logo.png" className="w-10 h-10 object-contain" alt="MetaMask" />
+                                </div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">MetaMask</span>
+                            </button>
+                            <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
+                                    <img src="https://trustwallet.com/assets/images/media/assets/trust_primary_logo_stacked_blue.png" className="w-10 h-10 object-contain" alt="Trust" />
+                                </div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Trust Wallet</span>
+                            </button>
+                            <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
+                                    <img src="https://bin.bnbstatic.com/static/images/common/favicon.ico" className="w-10 h-10 object-contain" alt="Binance" />
+                                </div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Binance</span>
+                            </button>
+                        </div>
+
+                        <button 
+                            onClick={handleDirectConnect}
+                            className="w-full bg-white/5 hover:bg-white/10 border border-white/10 p-5 rounded-3xl flex items-center justify-between group transition-all mb-10 cursor-pointer text-white font-bold"
+                        >
+                            <span className="flex items-center gap-3 font-black uppercase tracking-widest text-[11px]">
+                                <span className="material-icons-round text-primary">account_balance_wallet</span>
+                                Other Wallets
+                            </span>
+                            <span className="material-icons-round text-gray-600">chevron_right</span>
+                        </button>
+                        
+                        {/* Copy Link Helper (Inside Popup as requested) */}
+                        <div className="bg-primary/5 border border-primary/10 rounded-3xl p-6 mb-8 text-center">
+                            <p className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mb-4">
+                                Connection slow? Paste the link in your Wallet's dApp browser.
+                            </p>
+                            <button 
+                                onClick={() => {
+                                    navigator.clipboard.writeText(window.location.origin);
+                                    const tg = (window as any).Telegram?.WebApp;
+                                    if (tg?.showAlert) tg.showAlert("Link Copied! Now open your Wallet App and paste it.");
+                                    else alert("URL Copied!");
+                                }}
+                                className="w-full bg-primary text-black p-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 cursor-pointer border-none font-black text-[12px] uppercase tracking-widest shadow-neon"
+                            >
+                                <span className="material-icons-round text-lg">content_copy</span>
+                                COPY MINING LINK
+                            </button>
+                        </div>
+
+                        <button 
+                            onClick={() => setIsConnectModalOpen(false)}
+                            className="w-full text-gray-600 font-bold uppercase text-[10px] tracking-[4px] border-none bg-transparent cursor-pointer mt-2"
+                        >
+                            CLOSE
+                        </button>
+                    </div>
+                </div>
+            )}
         </WalletContext.Provider>
     );
 }
