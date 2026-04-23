@@ -9,13 +9,9 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 
 const metadata = {
     name: 'AI MINING BTC',
-    description: 'AI-powered Staking Platform (RiotNode)',
+    description: 'AI-powered Staking Platform',
     url: 'https://riotnode.riotplatforms.workers.dev/', 
-    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png'],
-    redirect: {
-        native: 'tg://resolve?domain=AiMiningBTC_bot',
-        universal: 'https://t.me/AiMiningBTC_bot/app'
-    }
+    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
 };
 
 // Initialize AppKit
@@ -70,10 +66,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         const syncSigner = async () => {
+            console.log("[Web3] isConnected:", isConnected);
+            console.log("[Web3] walletProvider:", walletProvider);
+            console.log("[Web3] address:", address);
+
             if (isConnected && walletProvider) {
                 try {
                     const browserProvider = new BrowserProvider(walletProvider as any);
-                    const s = await browserProvider.getSigner();
+                    
+                    // CRITICAL: Force accounts request to ensure wallet is 'hot' in TMA
+                    const accounts = await browserProvider.send("eth_requestAccounts", []);
+                    console.log("[Web3] Found accounts:", accounts);
+                    
+                    const s = await browserProvider.getSigner(accounts[0]);
                     setSigner(s);
                     if (address) localStorage.setItem('aimining_address', address);
                 } catch (e) {
@@ -89,9 +94,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const connect = async () => {
         try {
-            await open();
+            await open({ view: 'Connect' });
         } catch (err) {
-            console.error("[Web3] Open modal failed:", err);
+            console.error("[Web3] Connect failed:", err);
         }
     };
 

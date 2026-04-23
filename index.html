@@ -22,6 +22,11 @@
 
 <body class="bg-black text-white antialiased">
   <div id="root"></div>
+  <script>
+    if (window.Telegram?.WebApp) {
+      window.Telegram.WebApp.expand();
+    }
+  </script>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 
