@@ -40,6 +40,10 @@ interface WalletContextType {
     isConnecting: boolean;
     walletType: string | null;
     walletProvider: any;
+    // Compatibility properties
+    forceSync: () => Promise<void>;
+    hardReset: () => void;
+    setIsDisconnectModalOpen: (open: boolean) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -52,16 +56,18 @@ export const useWallet = () => {
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { open } = useAppKit();
-    const { address, isConnected, isConnecting } = useAppKitAccount();
+    const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
+
+    const isConnecting = status === 'connecting';
 
     // Sync Signer when connection changes
     useEffect(() => {
         const syncSigner = async () => {
             if (isConnected && walletProvider) {
                 try {
-                    const browserProvider = new BrowserProvider(walletProvider);
+                    const browserProvider = new BrowserProvider(walletProvider as any);
                     const s = await browserProvider.getSigner();
                     setSigner(s);
                     // Persist address for app logic
@@ -86,8 +92,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const disconnect = async () => {
-        // AppKit handles internal disconnect, but we can trigger modal disconnect
         await open({ view: 'Account' });
+    };
+
+    const forceSync = async () => {
+        // AppKit handles sync automatically
+    };
+
+    const hardReset = () => {
+        localStorage.clear();
+        window.location.reload();
+    };
+
+    const setIsDisconnectModalOpen = (isOpen: boolean) => {
+        if (isOpen) {
+            open({ view: 'Account' });
+        }
     };
 
     return (
@@ -99,7 +119,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             disconnect,
             isConnecting,
             walletType: 'AppKit',
-            walletProvider
+            walletProvider,
+            forceSync,
+            hardReset,
+            setIsDisconnectModalOpen
         }}>
             {children}
         </WalletContext.Provider>
