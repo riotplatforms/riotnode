@@ -10,7 +10,11 @@ const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform (RiotNode)',
     url: 'https://riotnode.riotplatforms.workers.dev/', 
-    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png']
+    icons: ['https://riotnode.riotplatforms.workers.dev/logo.png'],
+    redirect: {
+        native: 'tg://resolve?domain=AiMiningBTC_bot',
+        universal: 'https://t.me/AiMiningBTC_bot/app'
+    }
 };
 
 interface WalletContextType {
@@ -176,8 +180,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 'trust': `https://link.trustwallet.com/wc?uri=${encodedUri}`,
                 'binance': `https://www.binance.com/en/download?uri=${encodedUri}`,
                 'safepal': `https://link.safepal.io/wc?uri=${encodedUri}`,
-                'tp': `https://tokenpocket.platform.com/wc?uri=${encodedUri}`,
-                'okx': `https://www.okx.com/download?uri=${encodedUri}`
+                'tp': `tpoutside://wc?uri=${encodedUri}`,
+                'okx': `okx://wc?uri=${encodedUri}`
             };
 
             // 1500ms stability delay
@@ -306,12 +310,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                         <div className="grid grid-cols-2 gap-4 mb-8">
                             {[
-                                { id: 'metamask', name: 'MetaMask', icon: 'fox', color: '#F6851B' },
-                                { id: 'trust', name: 'Trust Wallet', icon: 'shield', color: '#3375BB' },
-                                { id: 'binance', name: 'Binance', icon: 'grid_view', color: '#F3BA2F' },
-                                { id: 'safepal', name: 'SafePal', icon: 'security', color: '#E9E9E9' },
-                                { id: 'tp', name: 'TokenPocket', icon: 'account_balance_wallet', color: '#2980B9' },
-                                { id: 'okx', name: 'OKX Wallet', icon: 'toll', color: '#000000' }
+                                { id: 'metamask', name: 'MetaMask', icon: 'https://raw.githubusercontent.com/MetaMask/brand-resources/master/SVG/metamask-fox.svg' },
+                                { id: 'trust', name: 'Trust Wallet', icon: 'https://trustwallet.com/assets/images/media/assets/TWT.png' },
+                                { id: 'binance', name: 'Binance', icon: 'https://cryptologos.cc/logos/binance-coin-bnb-logo.png' },
+                                { id: 'safepal', name: 'SafePal', icon: 'https://files.coinmarketcap.com/static/img/coins/64x64/7356.png' },
+                                { id: 'tp', name: 'TokenPocket', icon: 'https://files.coinmarketcap.com/static/img/coins/64x64/7342.png' },
+                                { id: 'okx', name: 'OKX Wallet', icon: 'https://files.coinmarketcap.com/static/img/coins/64x64/3897.png' }
                             ].map(w => (
                                 <button
                                     key={w.id}
@@ -319,11 +323,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     disabled={!!pendingSelection}
                                     className={`
                                         relative group glass-card p-4 rounded-3xl flex flex-col items-center gap-3 transition-all active:scale-95 cursor-pointer border-none
-                                        ${pendingSelection === w.id ? 'bg-primary/10 border-primary shadow-neon' : ''}
+                                        ${pendingSelection === w.id ? 'bg-primary/10 border-primary shadow-neon' : 'hover:bg-white/5'}
                                     `}
                                 >
-                                    <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden group-hover:bg-white/10 transition-colors">
-                                        <span className="material-icons-round text-3xl" style={{ color: w.color }}>{w.icon}</span>
+                                    <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center relative overflow-hidden group-hover:bg-white/10 transition-colors p-2.5">
+                                        <img src={w.icon} alt={w.name} className="w-full h-full object-contain drop-shadow-lg" />
                                         {pendingSelection === w.id && (
                                             <div className="absolute inset-0 bg-primary/20 animate-pulse"></div>
                                         )}
