@@ -83,7 +83,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [manualWalletProvider, setManualWalletProvider] = useState<any>(null);
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-    const [isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
+    const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
 
     const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address && !manualAddress;
     const finalAddress = address || manualAddress;
@@ -290,9 +290,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         window.location.reload();
     };
 
-    const forceSync = async () => {};
+    const forceSync = async () => { console.log("Force sync"); };
     const hardReset = () => { localStorage.clear(); window.location.reload(); };
-    const stakeNow = async () => {};
+    const stakeNow = async () => { console.log("Stake now"); };
 
     const setIsDisconnectModalOpen = (isOpen: boolean) => {
         _setIsDisconnectModalOpen(isOpen);
@@ -312,11 +312,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             walletType: 'Hybrid',
             walletProvider: walletProvider || manualWalletProvider,
             referral,
-            forceSync: async () => { console.log("Force sync triggered"); },
-            hardReset: () => { localStorage.clear(); window.location.reload(); },
+            forceSync,
+            hardReset,
             setIsDisconnectModalOpen,
             setIsConnectModalOpen,
-            stakeNow: async () => { console.log("Stake now triggered"); },
+            stakeNow,
             openInWalletBrowser: openInWalletBrowser as any
         }}>
             {children}
