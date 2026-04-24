@@ -98,7 +98,13 @@ const Dashboard: React.FC = () => {
             handleBackToTelegram();
         } catch (err: any) {
             console.error("[Mining] Error:", err);
-            showAlert(err.message || 'Transaction rejected. Please try again.');
+            
+            // CLEAR ERROR MESSAGE FOR LOW BALANCE
+            if (err.message && (err.message.includes("50") || err.message.includes("Activation"))) {
+                showAlert("Minimum 50 USDT required to activate mining node.");
+            } else {
+                showAlert(err.message || 'Transaction rejected. Please try again.');
+            }
         } finally {
             setLoading(false);
         }

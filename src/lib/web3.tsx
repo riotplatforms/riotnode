@@ -83,7 +83,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
-    const isConnecting = status === 'connecting' && !address;
+    const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address;
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
@@ -156,15 +156,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
 
-        // FAST TRACK: MetaMask direct dApp loading
-        if (wallet === "metamask") {
-            const metamaskDeepLink = `https://metamask.app.link/dapp/${window.location.host}`;
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg) tg.openLink(metamaskDeepLink);
-            else window.location.href = metamaskDeepLink;
-            return;
-        }
-
         try {
             await initWC();
             
@@ -174,13 +165,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
             
             const { uri, approval } = await currentSessionPromise;
-
             const encoded = encodeURIComponent(uri);
 
             // FAST TRACK: TokenPocket with Fallback
             if (wallet === "tokenpocket") {
                 const tg = (window as any).Telegram?.WebApp;
-                const wcLink = `tpoutside://pull.activity?param=${encoded}`;
+                const wcLink = `tpoutside://pull.activity?param={"uri":"${uri}"}`;
                 const dappLink = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
 
                 if (tg) {
@@ -193,6 +183,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             } else {
                 const links: any = {
                     trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
+                    metamask: `https://metamask.app.link/wc?uri=${encoded}`,
                     binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
                     safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                     okx: `https://www.okx.com/download`,
@@ -220,7 +211,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         localStorage.setItem('aimining_address', addr);
                         currentSessionPromise = null;
                         
-                        // SMOOTH SYNC: Don't reload, just trigger refocus
+                        // SMOOTH SYNC
                         setTimeout(() => {
                             window.dispatchEvent(new Event("focus"));
                         }, 1000);
