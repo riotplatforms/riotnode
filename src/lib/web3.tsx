@@ -83,7 +83,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
-    const isConnecting = status === 'connecting';
+    const isConnecting = status === 'connecting' && !address;
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
@@ -91,9 +91,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (isConnected && walletProvider && address && (!hasSynced || isManual)) {
                 try {
                     const browserProvider = new BrowserProvider(walletProvider as any);
-                    
-                    // PERFORMANCE: Directly get signer using the address we already have from AppKit
-                    // This avoids the 'eth_requestAccounts' hang in Telegram Mini Apps
                     const s = await browserProvider.getSigner(address);
                     
                     if (s) {
@@ -138,8 +135,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setReferral(localStorage.getItem('aimining_referrer'));
         }
 
+        // Global Sync Interval for Injected Wallets (MetaMask)
+        const interval = setInterval(() => {
+            if ((window as any).ethereum?.selectedAddress) {
+                localStorage.setItem('aimining_address', (window as any).ethereum.selectedAddress);
+            }
+        }, 1500);
+
         return () => {
             clearTimeout(timeout);
+            clearInterval(interval);
             window.removeEventListener("focus", handleFocus);
         };
     }, [isConnected, walletProvider, address, hasSynced]);
@@ -150,6 +155,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
+
+        // FAST TRACK: MetaMask direct dApp loading
+        if (wallet === "metamask") {
+            const metamaskDeepLink = `https://metamask.app.link/dapp/${window.location.host}`;
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg) tg.openLink(metamaskDeepLink);
+            else window.location.href = metamaskDeepLink;
+            return;
+        }
 
         try {
             await initWC();
@@ -162,26 +176,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
 
             const encoded = encodeURIComponent(uri);
-            const links: any = {
-                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
-                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
-                tokenpocket: `tpoutside://pull.activity?param=${encoded}`,
-                okx: `https://www.okx.com/download`,
-                bitget: `https://web3.bitget.com/en`
-            };
 
-            const tg = (window as any).Telegram?.WebApp;
-            const link = links[wallet];
+            // FAST TRACK: TokenPocket with Fallback
+            if (wallet === "tokenpocket") {
+                const tg = (window as any).Telegram?.WebApp;
+                const wcLink = `tpoutside://pull.activity?param=${encoded}`;
+                const dappLink = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
 
-            if (tg && link) {
-                // Delay fix for Telegram openLink stability
-                setTimeout(() => {
-                    tg.openLink(link);
-                }, 300);
-            } else if (link) {
-                window.location.href = link;
+                if (tg) {
+                    setTimeout(() => tg.openLink(wcLink), 300);
+                    setTimeout(() => tg.openLink(dappLink), 2000);
+                } else {
+                    window.location.href = wcLink;
+                    setTimeout(() => { window.location.href = dappLink; }, 2000);
+                }
+            } else {
+                const links: any = {
+                    trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
+                    binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                    safepal: `https://link.safepal.io/wc?uri=${encoded}`,
+                    okx: `https://www.okx.com/download`,
+                    bitget: `https://web3.bitget.com/en`
+                };
+
+                const tg = (window as any).Telegram?.WebApp;
+                const link = links[wallet];
+
+                if (tg && link) {
+                    setTimeout(() => {
+                        tg.openLink(link);
+                    }, 300);
+                } else if (link) {
+                    window.location.href = link;
+                }
             }
 
             // NON-BLOCKING APPROVAL HANDLING
@@ -191,9 +218,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     if (accs && accs.length > 0) {
                         const addr = accs[0].split(":")[2];
                         localStorage.setItem('aimining_address', addr);
-                        // Reset promise for next attempt if needed, or just reload
                         currentSessionPromise = null;
-                        window.location.reload();
+                        
+                        // SMOOTH SYNC: Don't reload, just trigger refocus
+                        setTimeout(() => {
+                            window.dispatchEvent(new Event("focus"));
+                        }, 1000);
                     }
                 }
             }).catch((err: any) => {
