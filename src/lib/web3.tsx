@@ -273,7 +273,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (type === 'safepal') {
             url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
         } else if (type === 'tokenpocket') {
-            url = `https://tokenpocket.github.io/applink?dappUrl=${encodeURIComponent(dappUrl)}`;
+            url = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
         }
 
         if (tg) {
