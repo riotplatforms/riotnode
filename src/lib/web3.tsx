@@ -174,23 +174,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
-            // FAST TRACK: TokenPocket with Optimized Android/iOS Protocol
+            // FAST TRACK: TokenPocket - Open in Wallet's internal Browser
             if (wallet === "tokenpocket") {
-                const tg = (window as any).Telegram?.WebApp;
-
-                // Double-encoded JSON for tpoutside (Android/iOS stable)
-                const tpData = JSON.stringify({ uri: uri });
-                const tpDirectLink = `tpoutside://pull.activity?param=${encodeURIComponent(tpData)}`;
-                const tpIdLink = `tpid://walletconnect?uri=${encoded}`;
-
-                if (tg) {
-                    setTimeout(() => tg.openLink(tpDirectLink), 300);
-                    // Native protocol fallback
-                    setTimeout(() => tg.openLink(tpIdLink), 1500);
-                } else {
-                    window.location.href = tpDirectLink;
-                    setTimeout(() => { window.location.href = tpIdLink; }, 1500);
-                }
+                openInWalletBrowser('tokenpocket');
+                return;
             } else {
                 const links: any = {
                     trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
@@ -303,14 +290,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         window.location.reload();
     };
 
-    const forceSync = async () => {
-        // Handled by AppKit
-    };
-
-    const hardReset = () => {
-        localStorage.clear();
-        window.location.reload();
-    };
+    const forceSync = async () => {};
+    const hardReset = () => { localStorage.clear(); window.location.reload(); };
+    const stakeNow = async () => {};
 
     const setIsDisconnectModalOpen = (isOpen: boolean) => {
         _setIsDisconnectModalOpen(isOpen);
@@ -318,10 +300,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             open({ view: 'Account' });
         }
     };
-    
-    const forceSync = async () => {};
-    const hardReset = () => { localStorage.clear(); window.location.reload(); };
-    const stakeNow = async () => {};
 
     return (
         <WalletContext.Provider value={{
