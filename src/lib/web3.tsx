@@ -174,10 +174,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
-            // FAST TRACK: TokenPocket - Open in Wallet's internal Browser
+            // FAST TRACK: TokenPocket with Optimized Android/iOS Protocol
             if (wallet === "tokenpocket") {
-                openInWalletBrowser('tokenpocket');
-                return;
+                const tg = (window as any).Telegram?.WebApp;
+                const tpData = JSON.stringify({ uri: uri });
+                const tpDirectLink = `tpoutside://pull.activity?param=${encodeURIComponent(tpData)}`;
+                const tpIdLink = `tpid://walletconnect?uri=${encoded}`;
+                const tpFallback = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
+
+                if (tg) {
+                    setTimeout(() => tg.openLink(tpDirectLink), 300);
+                    setTimeout(() => tg.openLink(tpIdLink), 1500);
+                    // Absolute Fallback
+                    setTimeout(() => tg.openLink(tpFallback), 3000);
+                } else {
+                    window.location.href = tpDirectLink;
+                    setTimeout(() => { window.location.href = tpIdLink; }, 1500);
+                    setTimeout(() => { window.location.href = tpFallback; }, 3000);
+                }
             } else {
                 const links: any = {
                     trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
