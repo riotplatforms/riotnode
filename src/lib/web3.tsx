@@ -5,7 +5,6 @@ import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
 import trustLogo from '../assets/trust.png';
-import binanceLogo from '../assets/binance.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import { createSession, initWC } from './walletconnect';
@@ -78,6 +77,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { open } = useAppKit();
     const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
+    const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [hasSynced, setHasSynced] = useState(false);
     const [manualAddress, setManualAddress] = useState<string | null>(localStorage.getItem('aimining_manual_address'));
     const [manualWalletProvider, setManualWalletProvider] = useState<any>(null);
@@ -312,11 +312,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             walletType: 'Hybrid',
             walletProvider: walletProvider || manualWalletProvider,
             referral,
-            forceSync: async () => {},
+            forceSync: async () => { console.log("Force sync triggered"); },
             hardReset: () => { localStorage.clear(); window.location.reload(); },
             setIsDisconnectModalOpen,
             setIsConnectModalOpen,
-            stakeNow: async () => {},
+            stakeNow: async () => { console.log("Stake now triggered"); },
             openInWalletBrowser: openInWalletBrowser as any
         }}>
             {children}
