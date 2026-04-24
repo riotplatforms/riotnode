@@ -355,7 +355,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             {[
                                 { id: 'metamask', name: 'MetaMask', icon: metamaskLogo },
                                 { id: 'trust', name: 'Trust Wallet', icon: trustLogo },
-                                { id: 'binance', name: 'Binance', icon: binanceLogo },
                                 { id: 'safepal', name: 'SafePal', icon: safepalLogo },
                                 { id: 'tokenpocket', name: 'TP Wallet', icon: tpLogo }
                             ].map((w) => (
