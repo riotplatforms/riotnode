@@ -4,7 +4,6 @@ import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@r
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
-import trustLogo from '../assets/trust.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import { createSession, initWC } from './walletconnect';
