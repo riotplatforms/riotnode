@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
-import { bsc, mainnet } from '@reown/appkit/networks';
+import { bsc } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
 import trustLogo from '../assets/trust.png';
 import binanceLogo from '../assets/binance.png';
