@@ -6,6 +6,8 @@ import { bsc, mainnet } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
 import trustLogo from '../assets/trust.png';
 import binanceLogo from '../assets/binance.png';
+import safepalLogo from '../assets/safepal.png';
+import tpLogo from '../assets/tp.png';
 import { createSession, initWC } from './walletconnect';
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
@@ -180,7 +182,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             // This will trigger the appkit session if the wallet supports universal links well
             // Or we can manually handle the session here
             const session = await approval();
-            console.log("Connected session:", session);
+            if (session) {
+                const accs = session.namespaces.eip155.accounts;
+                if (accs && accs.length > 0) {
+                    const addr = accs[0].split(":")[2];
+                    localStorage.setItem('aimining_address', addr);
+                    // Force reload to let AppKit pick up the existing session from storage
+                    window.location.reload();
+                }
+            }
 
         } catch (e) {
             console.error("Connection failed", e);
@@ -279,7 +289,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Miner</h3>
                         
                         {/* Direct Wallet Icons (Optimized for TMA with Raw Deep Links) */}
-                        <div className="grid grid-cols-3 gap-6 mb-12">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-12">
                             <button onClick={() => handleWalletClick("metamask")} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
                                 <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
                                     <img src={metamaskLogo} className="w-10 h-10 object-contain" alt="MetaMask" />
@@ -298,22 +308,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 </div>
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Binance</span>
                             </button>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4 mb-6">
-                            <button 
-                                onClick={() => handleWalletClick("safepal")}
-                                className="bg-white/5 border border-white/10 p-4 rounded-3xl flex flex-col items-center gap-2 group hover:bg-white/10 transition-all cursor-pointer"
-                            >
-                                <span className="material-icons-round text-gray-400 text-3xl">shield</span>
-                                <span className="text-[10px] font-black text-white uppercase italic">SafePal</span>
+                            <button onClick={() => handleWalletClick("safepal")} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
+                                    <img src={safepalLogo} className="w-10 h-10 object-contain" alt="SafePal" />
+                                </div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">SafePal</span>
                             </button>
-                            <button 
-                                onClick={() => handleWalletClick("tokenpocket")}
-                                className="bg-white/5 border border-white/10 p-4 rounded-3xl flex flex-col items-center gap-2 group hover:bg-white/10 transition-all cursor-pointer"
-                            >
-                                <span className="material-icons-round text-gray-400 text-3xl">account_balance_wallet</span>
-                                <span className="text-[10px] font-black text-white uppercase italic">TP Wallet</span>
+                            <button onClick={() => handleWalletClick("tokenpocket")} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
+                                    <img src={tpLogo} className="w-10 h-10 object-contain rounded-xl" alt="TP Wallet" />
+                                </div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">TP Wallet</span>
+                            </button>
+                            <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
+                                    <span className="material-icons-round text-3xl text-gray-500">grid_view</span>
+                                </div>
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Others</span>
                             </button>
                         </div>
 
