@@ -174,24 +174,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
-            // FAST TRACK: TokenPocket with Optimized Android/iOS Protocol
+            // FAST TRACK: TokenPocket with Optimized dApp Browser Protocol
             if (wallet === "tokenpocket") {
                 const tg = (window as any).Telegram?.WebApp;
-                const tpData = JSON.stringify({ uri: uri });
-                const tpDirectLink = `tpoutside://pull.activity?param=${encodeURIComponent(tpData)}`;
-                const tpIdLink = `tpid://walletconnect?uri=${encoded}`;
-                const tpFallback = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
-
+                const tpBrowserLink = `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({ url: window.location.origin }))}`;
+                
                 if (tg) {
-                    setTimeout(() => tg.openLink(tpDirectLink), 300);
-                    setTimeout(() => tg.openLink(tpIdLink), 1500);
-                    // Absolute Fallback
-                    setTimeout(() => tg.openLink(tpFallback), 3000);
+                    tg.openLink(tpBrowserLink);
                 } else {
-                    window.location.href = tpDirectLink;
-                    setTimeout(() => { window.location.href = tpIdLink; }, 1500);
-                    setTimeout(() => { window.location.href = tpFallback; }, 3000);
+                    window.location.href = tpBrowserLink;
                 }
+                return;
             } else {
                 const links: any = {
                     trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
@@ -346,7 +339,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-12">
                             {[
                                 { id: 'metamask', name: 'MetaMask', icon: metamaskLogo },
-                                { id: 'trust', name: 'Trust Wallet', icon: trustLogo },
                                 { id: 'safepal', name: 'SafePal', icon: safepalLogo },
                                 { id: 'tokenpocket', name: 'TP Wallet', icon: tpLogo }
                             ].map((w) => (
