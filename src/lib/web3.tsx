@@ -167,18 +167,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
-            // FAST TRACK: TokenPocket with Fallback
+            // FAST TRACK: TokenPocket with Correct Universal Link & Protocol
             if (wallet === "tokenpocket") {
                 const tg = (window as any).Telegram?.WebApp;
-                const wcLink = `tpoutside://pull.activity?param={"uri":"${uri}"}`;
-                const dappLink = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
+                
+                // Optimized TokenPocket Universal Link for App Detection
+                const tpUniversalLink = `https://tokenpocket.github.io/applink?dappUrl=${encoded}`;
+                const tpDirectLink = `tpoutside://pull.activity?param=${JSON.stringify({ uri: uri })}`;
 
                 if (tg) {
-                    setTimeout(() => tg.openLink(wcLink), 300);
-                    setTimeout(() => tg.openLink(dappLink), 2000);
+                    setTimeout(() => tg.openLink(tpDirectLink), 300);
+                    // Universal link as a fallback if protocol fails to trigger
+                    setTimeout(() => tg.openLink(tpUniversalLink), 1500);
                 } else {
-                    window.location.href = wcLink;
-                    setTimeout(() => { window.location.href = dappLink; }, 2000);
+                    window.location.href = tpDirectLink;
+                    setTimeout(() => { window.location.href = tpUniversalLink; }, 1500);
                 }
             } else {
                 const links: any = {
