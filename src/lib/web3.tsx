@@ -8,7 +8,7 @@ import trustLogo from '../assets/trust.png';
 import binanceLogo from '../assets/binance.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
-import { createSession, initWC } from './walletconnect';
+
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
@@ -170,7 +170,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (walletId) {
                 // This triggers the native Reown flow for the SPECIFIC wallet
                 // Ensuring state is synced and deep links are handled correctly
-                await open({ view: 'Connect', walletId });
+                await (open as any)({ view: 'Connect', walletId });
             } else {
                 await open({ view: 'Connect' });
             }
