@@ -18,7 +18,7 @@ let currentSessionPromise: any = null;
 const metadata = {
     name: 'AI MINING BTC',
     description: 'AI-powered Staking Platform',
-    url: window.location.origin, 
+    url: window.location.origin,
     icons: [`${window.location.origin}/logo.png`]
 };
 
@@ -36,7 +36,7 @@ if (!appKitInitialized) {
             analytics: true,
             email: false,
             socials: false,
-            allWallets: true // Support 600+ wallets
+            allWallets: false // Support 600+ wallets
         },
         themeMode: 'dark',
         themeVariables: {
@@ -79,20 +79,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
-    const [hasSynced, setHasSynced] = useState(false);
+    const [manualAddress, setManualAddress] = useState<string | null>(localStorage.getItem('aimining_manual_address'));
+    const [manualWalletProvider, setManualWalletProvider] = useState<any>(null);
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+    const [isDisconnectModalOpen, setIsDisconnectModalOpenRef] = useState(false);
 
-    const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address;
+    const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address && !manualAddress;
+    const finalAddress = address || manualAddress;
+    const finalIsConnected = isConnected || !!manualAddress;
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
         const syncSigner = async (isManual = false) => {
-            if (isConnected && walletProvider && address && (!hasSynced || isManual)) {
+            const currentProvider = walletProvider || manualWalletProvider;
+            const currentAddress = address || manualAddress;
+
+            if (finalIsConnected && currentProvider && currentAddress && (!hasSynced || isManual)) {
                 try {
-                    const browserProvider = new BrowserProvider(walletProvider as any);
-                    const s = await browserProvider.getSigner(address);
-                    
+                    const browserProvider = new BrowserProvider(currentProvider as any);
+                    const s = await browserProvider.getSigner(currentAddress);
+
                     if (s) {
                         setSigner(s);
                         setHasSynced(true);
@@ -107,7 +114,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 localStorage.removeItem('aimining_address');
             }
         };
-        
+
         // Slightly delayed sync to avoid hangs during TMA transition
         const timeout = setTimeout(() => syncSigner(), 1200);
 
@@ -158,19 +165,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         try {
             await initWC();
-            
+
             // Session Caching to prevent pairing conflicts
             if (!currentSessionPromise) {
                 currentSessionPromise = createSession();
             }
-            
+
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
             // FAST TRACK: TokenPocket with Optimized Android/iOS Protocol
             if (wallet === "tokenpocket") {
                 const tg = (window as any).Telegram?.WebApp;
-                
+
                 // Double-encoded JSON for tpoutside (Android/iOS stable)
                 const tpData = JSON.stringify({ uri: uri });
                 const tpDirectLink = `tpoutside://pull.activity?param=${encodeURIComponent(tpData)}`;
@@ -207,18 +214,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             // NON-BLOCKING APPROVAL HANDLING
-            approval().then((session: any) => {
+            approval().then(async (session: any) => {
                 if (session) {
                     const accs = session.namespaces.eip155.accounts;
                     if (accs && accs.length > 0) {
                         const addr = accs[0].split(":")[2];
-                        localStorage.setItem('aimining_address', addr);
-                        currentSessionPromise = null;
                         
-                        // SMOOTH SYNC
-                        setTimeout(() => {
-                            window.dispatchEvent(new Event("focus"));
-                        }, 1000);
+                        // Bridge state to triggers UI update
+                        setManualAddress(addr);
+                        localStorage.setItem('aimining_manual_address', addr);
+                        
+                        try {
+                            const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                            const provider = await EthereumProvider.init({
+                                projectId,
+                                showQrModal: false,
+                                chains: [56],
+                                methods: ["eth_sendTransaction", "personal_sign"],
+                                events: ["accountsChanged", "chainChanged"],
+                                rpcMap: { 56: 'https://bsc-dataseed.binance.org/' }
+                            });
+                            await provider.connect();
+                            setManualWalletProvider(provider);
+                        } catch (err) {
+                            console.warn("Manual provider sync skipped in handleWalletClick:", err);
+                        }
+
+                        currentSessionPromise = null;
+                        setIsConnectModalOpen(false);
                     }
                 }
             }).catch((err: any) => {
@@ -270,7 +293,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const disconnect = async () => {
-        localStorage.clear();
+        localStorage.removeItem('aimining_address');
+        localStorage.removeItem('aimining_manual_address');
+        localStorage.removeItem('aimining_referrer');
+        setManualAddress(null);
+        setManualWalletProvider(null);
+        setSigner(null);
+        setHasSynced(false);
         window.location.reload();
     };
 
@@ -300,20 +329,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     return (
         <WalletContext.Provider value={{
-            address,
-            isConnected,
+            address: finalAddress || undefined,
+            isConnected: finalIsConnected,
             signer,
             connect,
             disconnect,
-            isConnecting: isConnecting && !address, // Refined spinner state
-            walletType: 'AppKit',
-            walletProvider,
+            isConnecting: isConnecting, 
+            walletType: 'Hybrid',
+            walletProvider: walletProvider || manualWalletProvider,
             referral,
-            forceSync,
-            hardReset,
+            forceSync: async () => {},
+            hardReset: () => { localStorage.clear(); window.location.reload(); },
             setIsDisconnectModalOpen,
             setIsConnectModalOpen,
-            stakeNow,
+            stakeNow: async () => {},
             openInWalletBrowser: openInWalletBrowser as any
         }}>
             {children}
@@ -322,9 +351,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsConnectModalOpen(false)}></div>
                     <div className="relative w-full max-w-lg bg-[#0a0a0a] border-t border-white/10 rounded-t-[40px] p-8 pb-14 animate-slide-up shadow-2xl transition-all max-h-[90vh] overflow-y-auto no-scrollbar">
                         <div className="w-16 h-1.5 bg-white/10 rounded-full mx-auto mb-8 sticky top-0"></div>
-                        
+
                         <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Wallet</h3>
-                        
+
                         {/* Unified Wallet Grid */}
                         <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-12">
                             {[
@@ -341,7 +370,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{w.name}</span>
                                 </button>
                             ))}
-                            
+
                             <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
                                 <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
                                     <span className="material-icons-round text-3xl text-gray-500">grid_view</span>
@@ -349,13 +378,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">More</span>
                             </button>
                         </div>
-                        
+
                         {/* Copy Link Helper */}
                         <div className="bg-primary/5 border border-primary/10 rounded-3xl p-6 mb-8 text-center">
                             <p className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mb-4 leading-relaxed px-4">
                                 Facing delays? Paste link in your Wallet's internal Browser.
                             </p>
-                            <button 
+                            <button
                                 onClick={() => {
                                     navigator.clipboard.writeText(window.location.origin);
                                     const tg = (window as any).Telegram?.WebApp;
@@ -369,7 +398,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             </button>
                         </div>
 
-                        <button 
+                        <button
                             onClick={() => setIsConnectModalOpen(false)}
                             className="w-full text-gray-600 font-bold uppercase text-[10px] tracking-[4px] border-none bg-transparent cursor-pointer mt-4"
                         >
