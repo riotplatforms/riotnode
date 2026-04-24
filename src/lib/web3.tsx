@@ -78,12 +78,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { open } = useAppKit();
     const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
-    const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
+    const [hasSynced, setHasSynced] = useState(false);
     const [manualAddress, setManualAddress] = useState<string | null>(localStorage.getItem('aimining_manual_address'));
     const [manualWalletProvider, setManualWalletProvider] = useState<any>(null);
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
-    const [isDisconnectModalOpen, setIsDisconnectModalOpenRef] = useState(false);
+    const [isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
 
     const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address && !manualAddress;
     const finalAddress = address || manualAddress;
@@ -103,12 +103,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     if (s) {
                         setSigner(s);
                         setHasSynced(true);
-                        localStorage.setItem('aimining_address', address);
+                        localStorage.setItem('aimining_address', currentAddress as string);
                     }
                 } catch (e) {
                     console.error("[Web3] High-speed signer sync failed:", e);
                 }
-            } else if (!isConnected) {
+            } else if (!finalIsConnected) {
                 setSigner(null);
                 setHasSynced(false);
                 localStorage.removeItem('aimining_address');
@@ -313,19 +313,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const setIsDisconnectModalOpen = (isOpen: boolean) => {
+        _setIsDisconnectModalOpen(isOpen);
         if (isOpen) {
             open({ view: 'Account' });
         }
     };
-
-    const stakeNow = async (_amount: string) => {
-        if (!isConnected || !address) {
-            await connect();
-            return;
-        }
-        // This will be implemented using useStaking in components, 
-        // but can be routed here for generalized 'One Click' logic if needed.
-    };
+    
+    const forceSync = async () => {};
+    const hardReset = () => { localStorage.clear(); window.location.reload(); };
+    const stakeNow = async () => {};
 
     return (
         <WalletContext.Provider value={{
