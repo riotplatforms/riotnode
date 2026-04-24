@@ -8,10 +8,12 @@ import trustLogo from '../assets/trust.png';
 import binanceLogo from '../assets/binance.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
+import { createSession, initWC } from './walletconnect';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
+let currentSessionPromise: any = null;
 
 const metadata = {
     name: 'AI MINING BTC',
@@ -26,7 +28,7 @@ let appKitInitialized = false;
 if (!appKitInitialized) {
     createAppKit({
         adapters: [new EthersAdapter()],
-        networks: [mainnet, bsc], // BSC primary, but mainnet added for wallet compatibility
+        networks: [bsc],
         defaultNetwork: bsc,
         metadata,
         projectId,
@@ -40,14 +42,7 @@ if (!appKitInitialized) {
         themeVariables: {
             '--w3m-accent': '#FFD700',
             '--w3m-border-radius-master': '1px'
-        },
-        featuredWalletIds: [
-            'c53b2160100a74836696b4ef61012a67', // MetaMask
-            '4622a2b2d6ad1297d0d0ed7963d330c6', // Trust Wallet
-            '971e689d0a5955a868f3b13fdb2742e4', // Binance Wallet
-            '225affb17671854898148b0d46d2f3d2', // SafePal
-            'd681b9790ca427f9103c8091da93f0b4'  // TokenPocket
-        ]
+        }
     });
     appKitInitialized = true;
 }
@@ -155,27 +150,60 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
-        
-        const walletIds: any = {
-            metamask: 'c53b2160100a74836696b4ef61012a67',
-            trust: '4622a2b2d6ad1297d0d0ed7963d330c6',
-            binance: '971e689d0a5955a868f3b13fdb2742e4',
-            safepal: '225affb17671854898148b0d46d2f3d2',
-            tokenpocket: 'd681b9790ca427f9103c8091da93f0b4'
-        };
 
-        const walletId = walletIds[wallet];
-        
         try {
-            if (walletId) {
-                // This triggers the native Reown flow for the SPECIFIC wallet
-                // Ensuring state is synced and deep links are handled correctly
-                await (open as any)({ view: 'Connect', walletId });
-            } else {
-                await open({ view: 'Connect' });
+            await initWC();
+            
+            // Session Caching to prevent pairing conflicts
+            if (!currentSessionPromise) {
+                currentSessionPromise = createSession();
             }
+            
+            const { uri, approval } = await currentSessionPromise;
+
+            const encoded = encodeURIComponent(uri);
+            const links: any = {
+                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
+                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
+                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
+                tokenpocket: `tpoutside://pull.activity?param=${encoded}`,
+                okx: `https://www.okx.com/download`,
+                bitget: `https://web3.bitget.com/en`
+            };
+
+            const tg = (window as any).Telegram?.WebApp;
+            const link = links[wallet];
+
+            if (tg && link) {
+                // Delay fix for Telegram openLink stability
+                setTimeout(() => {
+                    tg.openLink(link);
+                }, 300);
+            } else if (link) {
+                window.location.href = link;
+            }
+
+            // NON-BLOCKING APPROVAL HANDLING
+            approval().then((session: any) => {
+                if (session) {
+                    const accs = session.namespaces.eip155.accounts;
+                    if (accs && accs.length > 0) {
+                        const addr = accs[0].split(":")[2];
+                        localStorage.setItem('aimining_address', addr);
+                        // Reset promise for next attempt if needed, or just reload
+                        currentSessionPromise = null;
+                        window.location.reload();
+                    }
+                }
+            }).catch((err: any) => {
+                console.error("Session approval error:", err);
+                currentSessionPromise = null;
+            });
+
         } catch (e) {
-            console.error("Direct connection failed, opening modal", e);
+            console.error("RAW WC failed, fallback to AppKit", e);
+            currentSessionPromise = null;
             await open({ view: 'Connect' });
         }
     };
@@ -207,8 +235,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Auto-reconnect on boot
+    // Auto-reconnect on boot & Init Raw Client
     useEffect(() => {
+        initWC();
         const saved = localStorage.getItem('aimining_address');
         if (saved && !isConnected) {
             connect();
