@@ -171,14 +171,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         // IMMEDIATE FAST-TRACK: TokenPocket (Direct dApp Browser Protocol)
         if (wallet === "tokenpocket") {
             const tg = (window as any).Telegram?.WebApp;
-            // Native TokenPocket protocol to open site in their internal browser
             const tpBrowserLink = `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({ url: window.location.origin }))}`;
-            
-            if (tg) {
-                tg.openLink(tpBrowserLink);
-            } else {
-                window.location.href = tpBrowserLink;
-            }
+            if (tg) tg.openLink(tpBrowserLink);
+            else window.location.href = tpBrowserLink;
+            return;
+        }
+
+        // IMMEDIATE FAST-TRACK: MetaMask (Bypass ALL WalletConnect overhead)
+        if (wallet === "metamask") {
+            const tg = (window as any).Telegram?.WebApp;
+            const url = `https://metamask.app.link/dapp/${window.location.host}`;
+            if (tg) tg.openLink(url);
+            else window.location.href = url;
             return;
         }
 
@@ -194,7 +198,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const encoded = encodeURIComponent(uri);
 
             const links: any = {
-                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
@@ -206,12 +209,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const link = links[wallet];
 
             if (tg && link) {
-                // MetaMask optimization: Immediate trigger
-                if (wallet === 'metamask') {
-                    tg.openLink(link);
-                } else {
-                    setTimeout(() => tg.openLink(link), 300);
-                }
+                setTimeout(() => tg.openLink(link), 300);
             } else if (link) {
                 window.location.href = link;
             }
