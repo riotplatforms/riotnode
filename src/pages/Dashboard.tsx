@@ -110,15 +110,17 @@ const Dashboard: React.FC = () => {
         }
     };
  
-    // FIX: Clear stats when address changes to prevent data leak from previous wallet
+    // FIX: Only reset stats if address is explicitly GONE, otherwise keep previous data for smoothness
     useEffect(() => {
-        setStats({
-            miningPower: '0.0',
-            balance: '0.00000000000000',
-            dailyProfit: '0.00000000000000',
-            address: address || ''
-        });
-        setRewardPerSecond(0);
+        if (!address) {
+            setStats({
+                miningPower: '0.0',
+                balance: '0.00000000000000',
+                dailyProfit: '0.00000000000000',
+                address: ''
+            });
+            setRewardPerSecond(0);
+        }
     }, [address]);
 
     const [rewardPerSecond, setRewardPerSecond] = useState(0);

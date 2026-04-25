@@ -86,8 +86,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
 
     const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address && !manualAddress;
-    const finalAddress = address || manualAddress;
-    const finalIsConnected = isConnected || !!manualAddress;
+    
+    // Identity Persistence: Ensure identity doesn't leak or flicker
+    const [finalAddress, setFinalAddress] = useState<string | undefined>(address || manualAddress || undefined);
+    const [finalIsConnected, setFinalIsConnected] = useState<boolean>(isConnected || !!manualAddress);
+    
+    useEffect(() => {
+        const addr = address || manualAddress;
+        if (addr && addr !== finalAddress) {
+            setFinalAddress(addr);
+            setFinalIsConnected(true);
+        } else if (!addr && finalIsConnected && status !== 'connecting') {
+            setFinalAddress(undefined);
+            setFinalIsConnected(false);
+        }
+    }, [address, manualAddress, isConnected, status]);
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {

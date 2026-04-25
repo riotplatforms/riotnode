@@ -45,7 +45,7 @@ const Wallet: React.FC = () => {
 
     useEffect(() => {
         const fetchWalletData = async () => {
-            if (!isConnected || !address) {
+            if (!address) {
                 setStats({
                     referralRewards: '0.00',
                     totalEarned: '0.00',
