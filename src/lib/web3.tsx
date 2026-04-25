@@ -173,20 +173,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         // FAST SYNC: High-speed interval to catch address updates
-        const interval = setInterval(() => {
-            const savedAddress = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
-            if (savedAddress && !manualAddress) {
-                setManualAddress(savedAddress);
-            }
-            
-            if ((window as any).ethereum?.selectedAddress) {
-                localStorage.setItem('aimining_address', (window as any).ethereum.selectedAddress);
-            }
+        }, 1000);
+ 
+        // GLOBAL HIGH-FIDELITY TICKER: Animates the mining balance every second across ALL pages
+        const ticker = setInterval(() => {
+            setMiningStats((prev: any) => {
+                if (!prev.isLoaded || prev.rewardPerSecond <= 0) return prev;
+                return {
+                    ...prev,
+                    balance: (parseFloat(prev.balance) + prev.rewardPerSecond).toFixed(14)
+                };
+            });
         }, 1000);
 
         return () => {
             clearTimeout(timeout);
             clearInterval(interval);
+            clearInterval(ticker);
             window.removeEventListener("focus", handleFocus);
         };
     }, [isConnected, walletProvider, address, hasSynced]);

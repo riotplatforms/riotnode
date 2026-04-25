@@ -130,20 +130,17 @@ const Dashboard: React.FC = () => {
     useEffect(() => {
         const updateMiningData = async () => {
             if (address) {
-
-                // FETCH LIVE WALLET BALANCE - This is the NEW "God Principle"
                 const walletBalanceStr = await getWalletBalance(address);
-                if (walletBalanceStr === null) return; // Prevent flush on network error
+                if (walletBalanceStr === null) return;
                 
                 const liveWalletUsdt = parseFloat(walletBalanceStr);
-
                 const info = await getStakedInfo(address);
+
                 if (info) {
                     const count = info.stakeCount;
                     let totalContractAmount = 0;
                     let totalAccruedBtc = 0;
 
-                    // 1. SUM ALL ACTIVE CONTRACT STAKES
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(address, i);
                         if (detail && !detail.withdrawn) {
@@ -151,14 +148,11 @@ const Dashboard: React.FC = () => {
                         }
                     }
 
-                    // 2. APPLY THE CLAMP: You only mine what you actually hold in wallet
-                    // If balance drops below 50, EVERYTHING flushes to zero
                     let activeStaked = 0;
                     if (liveWalletUsdt >= 50) {
                         activeStaked = Math.min(totalContractAmount, liveWalletUsdt);
                     }
 
-                    // 3. RE-CALCULATE ACCRUED BASED ON CLAMPED AMOUNT
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(address, i);
                         if (detail && !detail.withdrawn && activeStaked > 0) {
@@ -186,40 +180,30 @@ const Dashboard: React.FC = () => {
                         isLoaded: true
                     };
 
-                    setStats(prev => ({
+                    setMiningStats((prev: any) => ({
                         ...prev,
                         ...newStats
                     }));
-                    setMiningStats(newStats);
-
-                    if (activeStaked > 0) {
-                        setRewardPerSecond(dailyProfitBtc / 86400);
-                    } else {
-                        setRewardPerSecond(0);
-                    }
                 }
             }
         };
 
         updateMiningData();
-        const pollTimer = setInterval(updateMiningData, 15000); // High-speed sync (15s)
+        const pollTimer = setInterval(updateMiningData, 60000); // 1m Stable Sync
         return () => clearInterval(pollTimer);
     }, [isConnected, address, btcPrice]);
 
-
-    // Effect 2: Ticker Update (Strict 1-second interval for UI)
+    // Effect 2: Global High-Fidelity Ticker Subscription
     useEffect(() => {
-        if (rewardPerSecond <= 0) return;
-
-        const interval = setInterval(() => {
+        if (miningStats.isLoaded) {
             setStats(prev => ({
                 ...prev,
-                balance: (parseFloat(prev.balance) + rewardPerSecond).toFixed(14)
+                balance: miningStats.balance,
+                miningPower: miningStats.miningPower,
+                dailyProfit: miningStats.dailyProfit
             }));
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, [rewardPerSecond]);
+        }
+    }, [miningStats]);
 
     return (
         <div className="flex-1 flex flex-col bg-background-dark">
