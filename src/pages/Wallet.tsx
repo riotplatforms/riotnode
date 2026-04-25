@@ -108,6 +108,11 @@ const Wallet: React.FC = () => {
 
                 // Networking Logic
                 const isEligible = activeStaked >= 200;
+
+                // Detailed Team Update
+                const tree = await getTeamTree(address);
+                const teamStats = await getTeamMiningStats(tree, btcPrice);
+                const l1Count = tree[1]?.length || 0;
                 
                 const newStats = {
                     referralRewards: formatUnits(info.referralRewards, 18),
