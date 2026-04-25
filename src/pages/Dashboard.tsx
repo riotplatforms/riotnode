@@ -117,7 +117,8 @@ const Dashboard: React.FC = () => {
                 miningPower: '0.0',
                 balance: '0.00000000000000',
                 dailyProfit: '0.00000000000000',
-                address: ''
+                activeMiners: '0',
+                networkStatus: 'Disconnected'
             });
             setRewardPerSecond(0);
         }
