@@ -208,14 +208,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleWalletClick = async (wallet: string) => {
-        setIsConnectModalOpen(false);
+        // OPTIMIZATION: Delay closing the modal for 2 seconds to ensure deep links trigger and user sees the interaction
+        const isDeepLink = ["metamask", "safepal", "tokenpocket", "trust", "binance", "okx", "bitget"].includes(wallet);
+        if (!isDeepLink) {
+            setIsConnectModalOpen(false);
+        } else {
+            // Keep modal open for 2s as requested by user
+            setTimeout(() => setIsConnectModalOpen(false), 2000);
+        }
 
         // IMMEDIATE FAST-TRACK: TokenPocket (Direct App to DApp Browser)
         if (wallet === "tokenpocket") {
             const tg = (window as any).Telegram?.WebApp;
             const dappUrl = window.location.origin;
-            // TokenPocket standard for opening DApp browser
-            const tpLink = `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
+            // TokenPocket standard for opening DApp browser directly
+            const tpLink = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
             
             if (tg) tg.openLink(tpLink);
             else window.location.href = tpLink;
@@ -325,7 +332,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (type === 'safepal') {
             url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
         } else if (type === 'tokenpocket') {
-            url = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
+            url = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
         }
 
         if (tg) {
