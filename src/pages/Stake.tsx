@@ -157,7 +157,7 @@ const Stake: React.FC = () => {
     const tabs = ['AI Mining', 'Plan', 'Hardware', 'My Stakes'];
 
     useEffect(() => {
-        const fetchStakes = async () => {
+        const updateStakes = async () => {
             if (!isConnected || !address) {
                 setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
                 setUserStakes([]);
@@ -233,10 +233,22 @@ const Stake: React.FC = () => {
             }
         };
 
-        fetchStakes();
-        const interval = setInterval(fetchStakes, 15000); // 15s High-speed sync
+        updateStakes();
+        const interval = setInterval(updateStakes, 60000); // 1m Stable Sync
         return () => clearInterval(interval);
     }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, btcPrice]);
+
+    // Effect 2: Global Ticker Sync
+    useEffect(() => {
+        if (miningStats.isLoaded) {
+            setStats(prev => ({
+                ...prev,
+                totalStaked: miningStats.totalStaked,
+                dailyYield: miningStats.dailyProfit,
+                totalTP: miningStats.miningPower
+            }));
+        }
+    }, [miningStats]);
 
     // Live countdown timer state
     const [currentTime, setCurrentTime] = useState(Date.now() / 1000);
@@ -578,9 +590,12 @@ const Stake: React.FC = () => {
                                                 <p className="text-[11px] text-primary font-black uppercase tracking-tighter">
                                                     {s.isViolated ? (
                                                         <span className="text-red-500">STOPPED (0 BTC)</span>
-                                                    ) : (
-                                                        `+${(( (s.currentHold || s.displayVal) * getTierRate(s.displayVal)) / btcPrice).toFixed(14)} BTC`
-                                                    )}
+                                                    ) : (() => {
+                                                        const timePassed = Math.max(0, currentTime - s.startTime);
+                                                        const stakeRate = getTierRate(s.displayVal);
+                                                        const currentAccrued = ((s.displayVal * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
+                                                        return `+${currentAccrued.toFixed(14)} BTC`;
+                                                    })()}
                                                 </p>
                                             </div>
                                         </div>
