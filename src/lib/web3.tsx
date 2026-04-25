@@ -168,10 +168,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
 
-        // IMMEDIATE FAST-TRACK: TokenPocket (Bypass all WC overhead)
+        // IMMEDIATE FAST-TRACK: TokenPocket (Direct dApp Browser Protocol)
         if (wallet === "tokenpocket") {
             const tg = (window as any).Telegram?.WebApp;
-            const tpBrowserLink = `tpdive://openid?url=${encodeURIComponent(window.location.origin)}`;
+            // Native TokenPocket protocol to open site in their internal browser
+            const tpBrowserLink = `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({ url: window.location.origin }))}`;
+            
             if (tg) {
                 tg.openLink(tpBrowserLink);
             } else {
@@ -300,15 +302,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             console.warn("Native disconnect failed:", e);
         }
 
-        // Detailed session cleanup to prevent auto-reconnect glitches
-        if (manualWalletProvider?.disconnect) {
-            try { await manualWalletProvider.disconnect(); } catch (e) {}
-        }
-
-        // Wipe all possible connection markers
+        // Wipe only connection markers (Preserve referrals and essential app data)
         const keysToRemove = Object.keys(localStorage).filter(key => 
             key.startsWith('wc@2') || 
-            key.startsWith('aimining_') || 
+            key === 'aimining_address' || 
+            key === 'aimining_manual_address' ||
             key.includes('walletconnect') ||
             key.includes('appkit')
         );
@@ -320,7 +318,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setSigner(null);
         setHasSynced(false);
 
-        // Immediate reload to guarantee clean state
+        // STAKING VIOLATION RULE: Handled by server-side/contract address sweep.
+        // Frontend will force reload to ensure fresh address state.
         setTimeout(() => {
             window.location.reload();
         }, 100);
