@@ -44,7 +44,7 @@ export const getTierRate = (val: number) => {
     return 0;
 };
 
-const BSC_RPC = 'https://bsc-dataseed1.binance.org/'; // Higher reliability endpoint
+const BSC_RPC = 'https://bsc-dataseed.binance.org/'; // Primary endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
@@ -121,27 +121,21 @@ export function useStaking() {
         } catch (err) { return null; }
     };
 
-    const getStakeDetails = async (userAddress: string | any, index: any) => {
+    const getStakeDetails = async (userAddress: string, index: number) => {
         const contract = await getContract();
-        let target = address;
-        let idx = 0;
-        if (typeof userAddress === 'string' && userAddress.startsWith('0x')) {
-            target = userAddress;
-            idx = typeof index === 'string' ? parseInt(index) : index;
-        } else {
-            idx = typeof userAddress === 'string' ? parseInt(userAddress) : userAddress;
-            target = typeof index === 'string' && index.startsWith('0x') ? index : address;
-        }
-        if (!contract || !target) return null;
+        if (!contract || !userAddress) return null;
         try {
-            const stake = await contract.getUserStake(target, idx);
+            const stake = await contract.getUserStake(userAddress, index);
             return {
                 amount: stake.amount,
                 startTime: Number(stake.startTime),
                 tier: Number(stake.tier),
                 withdrawn: stake.withdrawn
             };
-        } catch (err) { return null; }
+        } catch (err) { 
+            console.error("[useStaking] Detail Error:", err);
+            return null; 
+        }
     };
 
     const getWalletBalance = async (userAddress?: string) => {
