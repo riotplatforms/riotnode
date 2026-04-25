@@ -120,6 +120,7 @@ const Dashboard: React.FC = () => {
                 activeMiners: '0',
                 networkStatus: 'Disconnected'
             });
+        }
     }, [address]);
 
     // Effect 1: Data Update (Fetches data via Read-Only RPC)
