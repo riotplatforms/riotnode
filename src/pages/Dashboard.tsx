@@ -109,6 +109,17 @@ const Dashboard: React.FC = () => {
             setLoading(false);
         }
     };
+ 
+    // FIX: Clear stats when address changes to prevent data leak from previous wallet
+    useEffect(() => {
+        setStats({
+            miningPower: '0.0',
+            balance: '0.00000000000000',
+            dailyProfit: '0.00000000000000',
+            address: address || ''
+        });
+        setRewardPerSecond(0);
+    }, [address]);
 
     const [rewardPerSecond, setRewardPerSecond] = useState(0);
 
@@ -180,7 +191,7 @@ const Dashboard: React.FC = () => {
         };
 
         updateMiningData();
-        const pollTimer = setInterval(updateMiningData, 20000); // Faster sync (20s)
+        const pollTimer = setInterval(updateMiningData, 15000); // High-speed sync (15s)
         return () => clearInterval(pollTimer);
     }, [isConnected, address, btcPrice]);
 

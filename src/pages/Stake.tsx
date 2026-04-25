@@ -222,7 +222,7 @@ const Stake: React.FC = () => {
         };
 
         fetchStakes();
-        const interval = setInterval(fetchStakes, 30000);
+        const interval = setInterval(fetchStakes, 15000); // 15s High-speed sync
         return () => clearInterval(interval);
     }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, btcPrice]);
 

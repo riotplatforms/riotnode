@@ -104,6 +104,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setSigner(s);
                         setHasSynced(true);
                         localStorage.setItem('aimining_address', currentAddress as string);
+                        
+                        // Clear manual address if it's different from the native one being synced
+                        if (manualAddress && manualAddress.toLowerCase() !== currentAddress.toLowerCase()) {
+                            setManualAddress(null);
+                            localStorage.removeItem('aimining_manual_address');
+                        }
                     }
                 } catch (e) {
                     console.error("[Web3] High-speed signer sync failed:", e);
