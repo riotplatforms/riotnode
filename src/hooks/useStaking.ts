@@ -141,11 +141,14 @@ export function useStaking() {
     const getWalletBalance = async (userAddress?: string) => {
         const usdtContract = await getUsdtContract();
         const target = userAddress || address;
-        if (!usdtContract || !target) return "0.00";
+        if (!usdtContract || !target) return null;
         try {
             const balance = await usdtContract.balanceOf(target);
             return formatUnits(balance, 18);
-        } catch (err) { return "0.00"; }
+        } catch (err) { 
+            console.error("[useStaking] Balance Error:", err);
+            return null; 
+        }
     };
 
     const getTeamTree = async (userAddress: string) => {

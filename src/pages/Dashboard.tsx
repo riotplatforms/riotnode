@@ -133,6 +133,8 @@ const Dashboard: React.FC = () => {
 
                 // FETCH LIVE WALLET BALANCE - This is the NEW "God Principle"
                 const walletBalanceStr = await getWalletBalance(address);
+                if (walletBalanceStr === null) return; // Prevent flush on network error
+                
                 const liveWalletUsdt = parseFloat(walletBalanceStr);
 
                 const info = await getStakedInfo(address);
