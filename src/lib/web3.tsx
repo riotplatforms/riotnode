@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
-import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider } from '@reown/appkit/react';
+import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
@@ -74,6 +74,7 @@ export const useWallet = () => {
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { open } = useAppKit();
+    const { disconnect: appKitDisconnect } = useDisconnect();
     const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
@@ -293,14 +294,36 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const disconnect = async () => {
-        localStorage.removeItem('aimining_address');
-        localStorage.removeItem('aimining_manual_address');
-        localStorage.removeItem('aimining_referrer');
+        try {
+            await appKitDisconnect();
+        } catch (e) {
+            console.warn("Native disconnect failed:", e);
+        }
+
+        // Detailed session cleanup to prevent auto-reconnect glitches
+        if (manualWalletProvider?.disconnect) {
+            try { await manualWalletProvider.disconnect(); } catch (e) {}
+        }
+
+        // Wipe all possible connection markers
+        const keysToRemove = Object.keys(localStorage).filter(key => 
+            key.startsWith('wc@2') || 
+            key.startsWith('aimining_') || 
+            key.includes('walletconnect') ||
+            key.includes('appkit')
+        );
+        
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        
         setManualAddress(null);
         setManualWalletProvider(null);
         setSigner(null);
         setHasSynced(false);
-        window.location.reload();
+
+        // Immediate reload to guarantee clean state
+        setTimeout(() => {
+            window.location.reload();
+        }, 100);
     };
 
     const forceSync = async () => { console.log("Force sync"); };
