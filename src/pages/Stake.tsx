@@ -22,7 +22,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect } = useWallet();
+    const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
     const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -31,9 +31,9 @@ const Stake: React.FC = () => {
     const [loading, setLoading] = useState<number | string | null>(null);
     const [userStakes, setUserStakes] = useState<any[]>([]);
     const [stats, setStats] = useState({
-        totalStaked: '0.00',
-        dailyYield: '0.00',
-        totalTP: '0'
+        totalStaked: miningStats.totalStaked || '0.00',
+        dailyYield: miningStats.dailyProfit || '0.00',
+        totalTP: miningStats.miningPower || '0'
     });
 
     const upgrades = [
@@ -212,12 +212,24 @@ const Stake: React.FC = () => {
                     }
                 }
 
-                setStats({
+                const newStats = {
                     totalStaked: activeStaked.toFixed(2),
                     dailyYield: (dailyUsdtYield / btcPrice).toFixed(14),
                     totalTP: (activeStaked * 2.5).toFixed(0)
-                });
+                };
+
+                setStats(newStats);
                 setUserStakes(details);
+
+                // Update global context for other pages
+                setMiningStats({
+                    balance: miningStats.balance, // Preserve balance from dashboard/wallet
+                    miningPower: newStats.totalTP,
+                    dailyProfit: newStats.dailyYield,
+                    totalStaked: newStats.totalStaked,
+                    walletBalance: usdtBalanceStr,
+                    isLoaded: true
+                });
             }
         };
 

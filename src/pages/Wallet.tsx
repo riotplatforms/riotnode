@@ -7,16 +7,16 @@ import { usePrice } from '../hooks/usePrice';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, setIsDisconnectModalOpen } = useWallet();
+    const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats } = useStaking();
     const { btcPrice } = usePrice();
 
     const [stats, setStats] = useState({
         referralRewards: '0.00',
-        totalEarned: '0.00',
-        totalStaked: '0.00',
-        walletBalance: '0.00',
+        totalEarned: miningStats.balance || '0.00000000000000',
+        totalStaked: miningStats.totalStaked || '0.00',
+        walletBalance: miningStats.walletBalance || '0.00',
         invitationBonus: '0',
         teamDividend: '0.00000000000000',
         isEligible: false
@@ -109,26 +109,27 @@ const Wallet: React.FC = () => {
                 // Networking Logic
                 const isEligible = activeStaked >= 200;
                 
-                setStats({
+                const newStats = {
                     referralRewards: formatUnits(info.referralRewards, 18),
                     totalEarned: currentTotalBtc.toFixed(14),
                     totalStaked: activeStaked.toFixed(2),
                     walletBalance: wBalanceNum.toFixed(2),
-                    invitationBonus: '0',
-                    teamDividend: '0.00000000000000',
-                    isEligible
-                });
-
-                // Detailed Team Update
-                const tree = await getTeamTree(address);
-                const teamStats = await getTeamMiningStats(tree, btcPrice);
-                const l1Count = tree[1]?.length || 0;
-
-                setStats(prev => ({
-                    ...prev,
                     invitationBonus: isEligible ? (l1Count * 20).toString() : '0',
-                    teamDividend: teamStats.totalDailyDividend.toFixed(14)
-                }));
+                    teamDividend: teamStats.totalDailyDividend.toFixed(14),
+                    isEligible
+                };
+
+                setStats(newStats);
+                
+                // Update global context for other pages
+                setMiningStats({
+                    balance: newStats.totalEarned,
+                    miningPower: (activeStaked * 2.5).toFixed(1),
+                    dailyProfit: (activeStaked * (getTierRate(activeStaked)) / (37 * btcPrice)).toFixed(14),
+                    totalStaked: newStats.totalStaked,
+                    walletBalance: newStats.walletBalance,
+                    isLoaded: true
+                });
             }
         };
         fetchWalletData();

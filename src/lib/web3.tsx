@@ -62,6 +62,8 @@ interface WalletContextType {
     setIsConnectModalOpen: (open: boolean) => void;
     stakeNow: (amount: string) => Promise<void>;
     openInWalletBrowser: (type: 'safepal' | 'tokenpocket') => void;
+    miningStats: any;
+    setMiningStats: (stats: any) => void;
 }
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined);
@@ -84,6 +86,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
+    const [miningStats, setMiningStats] = useState<any>({
+        balance: '0.00000000000000',
+        miningPower: '0.0',
+        dailyProfit: '0.00000000000000',
+        walletBalance: '0.00',
+        totalStaked: '0.00',
+        rewardPerSecond: 0,
+        isLoaded: false
+    });
 
     const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address && !manualAddress;
     
@@ -375,7 +386,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setIsDisconnectModalOpen,
             setIsConnectModalOpen,
             stakeNow,
-            openInWalletBrowser: openInWalletBrowser as any
+            openInWalletBrowser: openInWalletBrowser as any,
+            miningStats,
+            setMiningStats
         }}>
             {children}
             {isConnectModalOpen && (

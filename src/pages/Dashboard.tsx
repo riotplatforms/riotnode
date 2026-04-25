@@ -23,7 +23,7 @@ const getTierRate = (val: number) => {
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { address, isConnected, connect, setIsDisconnectModalOpen } = useWallet();
+    const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
     const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
@@ -42,9 +42,9 @@ const Dashboard: React.FC = () => {
     };
 
     const [stats, setStats] = useState({
-        miningPower: '0.0',
-        balance: '0.0000',
-        dailyProfit: '$0.00',
+        miningPower: miningStats.miningPower || '0.0',
+        balance: miningStats.balance || '0.00000000000000',
+        dailyProfit: miningStats.dailyProfit || '0.0000',
         activeMiners: '842',
         networkStatus: 'Stable'
     });
@@ -174,12 +174,21 @@ const Dashboard: React.FC = () => {
                     const currentTotalBalance = activeStaked > 0 ? (finalizedEarnedBtc + totalAccruedBtc) : 0;
                     const dailyProfitBtc = activeStaked > 0 ? ((activeStaked * rate) / (37 * btcPrice)) : 0;
 
-                    setStats(prev => ({
-                        ...prev,
+                    const newStats = {
                         miningPower: activeStaked > 0 ? (activeStaked * 2.5).toFixed(1) : '0.0',
                         balance: activeStaked > 0 ? currentTotalBalance.toFixed(14) : '0.00000000000000',
-                        dailyProfit: dailyProfitBtc.toFixed(14)
+                        dailyProfit: dailyProfitBtc.toFixed(14),
+                        rewardPerSecond: activeStaked > 0 ? (dailyProfitBtc / 86400) : 0,
+                        totalStaked: activeStaked.toFixed(2),
+                        walletBalance: liveWalletUsdt.toFixed(2),
+                        isLoaded: true
+                    };
+
+                    setStats(prev => ({
+                        ...prev,
+                        ...newStats
                     }));
+                    setMiningStats(newStats);
 
                     if (activeStaked > 0) {
                         setRewardPerSecond(dailyProfitBtc / 86400);
@@ -187,9 +196,6 @@ const Dashboard: React.FC = () => {
                         setRewardPerSecond(0);
                     }
                 }
-            } else {
-                setStats(prev => ({ ...prev, miningPower: '0.0', balance: '0.00000000000000', dailyProfit: '0.00000000000000' }));
-                setRewardPerSecond(0);
             }
         };
 
