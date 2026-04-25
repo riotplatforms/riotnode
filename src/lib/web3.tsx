@@ -305,9 +305,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const setIsDisconnectModalOpen = (isOpen: boolean) => {
         _setIsDisconnectModalOpen(isOpen);
-        if (isOpen) {
-            open({ view: 'Account' });
-        }
     };
 
     return (
@@ -384,6 +381,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             className="w-full text-gray-600 font-bold uppercase text-[10px] tracking-[4px] border-none bg-transparent cursor-pointer mt-4"
                         >
                             CANCEL
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {_isDisconnectModalOpen && (
+                <div className="fixed inset-0 z-[2000] flex items-end justify-center">
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => _setIsDisconnectModalOpen(false)}></div>
+                    <div className="relative w-full max-w-lg bg-[#0a0a0a] border-t border-white/10 rounded-t-[40px] p-8 pb-14 animate-slide-up shadow-2xl transition-all">
+                        <div className="w-16 h-1.5 bg-white/10 rounded-full mx-auto mb-8 sticky top-0"></div>
+
+                        <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-6 font-display">Wallet Details</h3>
+
+                        <div className="bg-white/5 rounded-3xl p-6 mb-8 border border-white/10">
+                            <div className="flex flex-col items-center gap-2 mb-6">
+                                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Active Address</span>
+                                <span className="text-sm font-mono text-primary break-all text-center px-4 font-bold uppercase">{finalAddress}</span>
+                            </div>
+                            
+                            <button
+                                onClick={() => disconnect()}
+                                className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 p-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 cursor-pointer border border-red-500/20 font-black text-[12px] uppercase tracking-[3px]"
+                            >
+                                <span className="material-icons-round text-lg">logout</span>
+                                DISCONNECT WALLET
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => _setIsDisconnectModalOpen(false)}
+                            className="w-full text-gray-600 font-bold uppercase text-[10px] tracking-[4px] border-none bg-transparent cursor-pointer"
+                        >
+                            CLOSE
                         </button>
                     </div>
                 </div>
