@@ -138,9 +138,21 @@ const Wallet: React.FC = () => {
             }
         };
         fetchWalletData();
-        const interval = setInterval(fetchWalletData, 15000); // 15s refresh
+        const interval = setInterval(fetchWalletData, 60000); // 1m Stable Sync
         return () => clearInterval(interval);
     }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, btcPrice]);
+
+    // Effect 2: Global High-Fidelity Ticker Subscription
+    useEffect(() => {
+        if (miningStats.isLoaded) {
+            setStats(prev => ({
+                ...prev,
+                totalEarned: miningStats.balance,
+                totalStaked: miningStats.totalStaked,
+                walletBalance: miningStats.walletBalance
+            }));
+        }
+    }, [miningStats]);
 
     const handleWithdraw = () => {
         if (!isConnected) {
