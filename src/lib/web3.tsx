@@ -141,12 +141,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setReferral(localStorage.getItem('aimining_referrer'));
         }
 
-        // Global Sync Interval for Injected Wallets (MetaMask)
+        // FAST SYNC: High-speed interval to catch address updates
         const interval = setInterval(() => {
+            const savedAddress = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            if (savedAddress && !manualAddress) {
+                setManualAddress(savedAddress);
+            }
+            
             if ((window as any).ethereum?.selectedAddress) {
                 localStorage.setItem('aimining_address', (window as any).ethereum.selectedAddress);
             }
-        }, 1500);
+        }, 1000);
 
         return () => {
             clearTimeout(timeout);
@@ -186,7 +191,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const encoded = encodeURIComponent(uri);
 
             const links: any = {
-                metamask: `https://metamask.app.link/dapp/${window.location.host}`,
+                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
