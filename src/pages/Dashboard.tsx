@@ -120,11 +120,7 @@ const Dashboard: React.FC = () => {
                 activeMiners: '0',
                 networkStatus: 'Disconnected'
             });
-            setRewardPerSecond(0);
-        }
     }, [address]);
-
-    const [rewardPerSecond, setRewardPerSecond] = useState(0);
 
     // Effect 1: Data Update (Fetches data via Read-Only RPC)
     useEffect(() => {
