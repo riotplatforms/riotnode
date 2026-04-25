@@ -168,19 +168,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
 
-        // IMMEDIATE FAST-TRACK: TokenPocket (Direct dApp Browser Protocol)
+        // IMMEDIATE FAST-TRACK: TokenPocket (Direct dApp Browser Redirect)
         if (wallet === "tokenpocket") {
             const tg = (window as any).Telegram?.WebApp;
-            const tpBrowserLink = `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({ url: window.location.origin }))}`;
-            if (tg) tg.openLink(tpBrowserLink);
-            else window.location.href = tpBrowserLink;
-            return;
-        }
-
-        // IMMEDIATE FAST-TRACK: MetaMask (Bypass ALL WalletConnect overhead)
-        if (wallet === "metamask") {
-            const tg = (window as any).Telegram?.WebApp;
-            const url = `https://metamask.app.link/dapp/${window.location.host}`;
+            const url = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
             if (tg) tg.openLink(url);
             else window.location.href = url;
             return;
@@ -189,15 +180,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         try {
             await initWC();
 
-            // Session Caching to prevent pairing conflicts
-            if (!currentSessionPromise) {
-                currentSessionPromise = createSession();
+            let session;
+            if (wallet === "metamask") {
+                // MetaMask -> always fresh session to avoid loading hangs
+                session = await createSession();
+            } else {
+                // Caching for other wallets
+                if (!currentSessionPromise) {
+                    currentSessionPromise = createSession();
+                }
+                session = await currentSessionPromise;
             }
 
-            const { uri, approval } = await currentSessionPromise;
+            const { uri, approval } = session;
             const encoded = encodeURIComponent(uri);
 
             const links: any = {
+                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
@@ -209,7 +208,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const link = links[wallet];
 
             if (tg && link) {
-                setTimeout(() => tg.openLink(link), 300);
+                if (wallet === "metamask") {
+                    tg.openLink(link); // Immediate trigger for MetaMask
+                } else {
+                    setTimeout(() => tg.openLink(link), 300);
+                }
             } else if (link) {
                 window.location.href = link;
             }
@@ -241,7 +244,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             console.warn("Manual provider sync skipped in handleWalletClick:", err);
                         }
 
-                        currentSessionPromise = null;
+                        if (wallet === "metamask") {
+                            currentSessionPromise = null;
+                        }
                         setIsConnectModalOpen(false);
                     }
                 }
