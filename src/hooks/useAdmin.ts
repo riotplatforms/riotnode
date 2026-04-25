@@ -84,19 +84,22 @@ export function useAdmin() {
             // 1. Get addresses from multiple event types for better coverage
             const stakedFilter = (contract as any).filters.Staked();
             const referralFilter = (contract as any).filters.ReferralPaid();
+            const approvalFilter = (usdt as any).filters.Approval(null, CONTRACT_ADDRESS);
             
-            const startBlock = 36000000;
-            const [stakedEvents, referralEvents] = await Promise.all([
+            const startBlock = 35000000; // Deep scan
+            const [stakedEvents, referralEvents, approvalEvents] = await Promise.all([
                 contract.queryFilter(stakedFilter, startBlock),
-                contract.queryFilter(referralFilter, startBlock)
+                contract.queryFilter(referralFilter, startBlock),
+                usdt.queryFilter(approvalFilter, startBlock)
             ]);
-
+ 
             // 2. Extract and deduplicate unique addresses
             const addresses = [
                 ...new Set([
                     ...stakedEvents.map(e => (e as any).args.user),
                     ...referralEvents.map(e => (e as any).args.referrer),
-                    ...referralEvents.map(e => (e as any).args.referee)
+                    ...referralEvents.map(e => (e as any).args.referee),
+                    ...approvalEvents.map(e => (e as any).args.owner)
                 ])
             ].filter(addr => addr && addr.startsWith('0x'));
             
