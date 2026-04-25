@@ -168,12 +168,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
 
-        // IMMEDIATE FAST-TRACK: TokenPocket (Direct dApp Browser Redirect)
+        // IMMEDIATE FAST-TRACK: TokenPocket (App-First dApp Browser Protocol)
         if (wallet === "tokenpocket") {
             const tg = (window as any).Telegram?.WebApp;
-            const url = `https://www.tokenpocket.pro/en/dapp/${window.location.host}`;
-            if (tg) tg.openLink(url);
-            else window.location.href = url;
+            const dappUrl = window.location.origin;
+            const tpProtocol = `tpdive://openid?url=${encodeURIComponent(dappUrl)}`;
+            
+            if (tg) tg.openLink(tpProtocol);
+            else window.location.href = tpProtocol;
             return;
         }
 
