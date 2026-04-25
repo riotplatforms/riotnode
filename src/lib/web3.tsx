@@ -162,6 +162,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleWalletClick = async (wallet: string) => {
         setIsConnectModalOpen(false);
 
+        // IMMEDIATE FAST-TRACK: TokenPocket (Bypass all WC overhead)
+        if (wallet === "tokenpocket") {
+            const tg = (window as any).Telegram?.WebApp;
+            const tpBrowserLink = `tpdive://openid?url=${encodeURIComponent(window.location.origin)}`;
+            if (tg) {
+                tg.openLink(tpBrowserLink);
+            } else {
+                window.location.href = tpBrowserLink;
+            }
+            return;
+        }
+
         try {
             await initWC();
 
@@ -173,40 +185,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
-            // FAST TRACK: TokenPocket with direct OpenID Protocol for dApp Browser
-            if (wallet === "tokenpocket") {
-                const tg = (window as any).Telegram?.WebApp;
-                const tpBrowserLink = `tpdive://openid?url=${encodeURIComponent(window.location.origin)}`;
-                
-                if (tg) {
-                    tg.openLink(tpBrowserLink);
+            const links: any = {
+                metamask: `https://metamask.app.link/dapp/${window.location.host}`,
+                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
+                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
+                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                okx: `https://www.okx.com/download`,
+                bitget: `https://web3.bitget.com/en`
+            };
+
+            const tg = (window as any).Telegram?.WebApp;
+            const link = links[wallet];
+
+            if (tg && link) {
+                // MetaMask optimization: Immediate trigger
+                if (wallet === 'metamask') {
+                    tg.openLink(link);
                 } else {
-                    window.location.href = tpBrowserLink;
+                    setTimeout(() => tg.openLink(link), 300);
                 }
-                return;
-            } else {
-                const links: any = {
-                    metamask: `https://metamask.app.link/dapp/${window.location.host}`,
-                    safepal: `https://link.safepal.io/wc?uri=${encoded}`,
-                    trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                    binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                    okx: `https://www.okx.com/download`,
-                    bitget: `https://web3.bitget.com/en`
-                };
-
-                const tg = (window as any).Telegram?.WebApp;
-                const link = links[wallet];
-
-                if (tg && link) {
-                    // MetaMask optimization: Immediate trigger
-                    if (wallet === 'metamask') {
-                        tg.openLink(link);
-                    } else {
-                        setTimeout(() => tg.openLink(link), 300);
-                    }
-                } else if (link) {
-                    window.location.href = link;
-                }
+            } else if (link) {
+                window.location.href = link;
             }
 
             // NON-BLOCKING APPROVAL HANDLING
