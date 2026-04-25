@@ -173,10 +173,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const { uri, approval } = await currentSessionPromise;
             const encoded = encodeURIComponent(uri);
 
-            // FAST TRACK: TokenPocket with Optimized dApp Browser Protocol
+            // FAST TRACK: TokenPocket with direct OpenID Protocol for dApp Browser
             if (wallet === "tokenpocket") {
                 const tg = (window as any).Telegram?.WebApp;
-                const tpBrowserLink = `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({ url: window.location.origin }))}`;
+                const tpBrowserLink = `tpdive://openid?url=${encodeURIComponent(window.location.origin)}`;
                 
                 if (tg) {
                     tg.openLink(tpBrowserLink);
@@ -186,10 +186,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 return;
             } else {
                 const links: any = {
-                    trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                    metamask: `https://metamask.app.link/wc?uri=${encoded}`,
-                    binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                    metamask: `https://metamask.app.link/dapp/${window.location.host}`,
                     safepal: `https://link.safepal.io/wc?uri=${encoded}`,
+                    trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
+                    binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
                     okx: `https://www.okx.com/download`,
                     bitget: `https://web3.bitget.com/en`
                 };
@@ -198,9 +198,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const link = links[wallet];
 
                 if (tg && link) {
-                    setTimeout(() => {
+                    // MetaMask optimization: Immediate trigger
+                    if (wallet === 'metamask') {
                         tg.openLink(link);
-                    }, 300);
+                    } else {
+                        setTimeout(() => tg.openLink(link), 300);
+                    }
                 } else if (link) {
                     window.location.href = link;
                 }
