@@ -118,10 +118,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
         const syncSigner = async (isManual = false) => {
-            const currentProvider = walletProvider || manualWalletProvider;
+            const currentProvider = walletProvider || manualWalletProvider || (window as any).ethereum;
             const currentAddress = address || manualAddress;
 
-            if (finalIsConnected && currentProvider && currentAddress && (!hasSynced || isManual)) {
+            if (currentAddress && currentProvider) {
                 try {
                     const browserProvider = new BrowserProvider(currentProvider as any);
                     const s = await browserProvider.getSigner(currentAddress);
@@ -129,7 +129,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     if (s) {
                         setSigner(s);
                         setHasSynced(true);
-                        localStorage.setItem('aimining_address', currentAddress as string);
+                        localStorage.setItem('aimining_address', currentAddress);
                         
                         // Clear manual address if it's different from the native one being synced
                         if (manualAddress && manualAddress.toLowerCase() !== currentAddress.toLowerCase()) {
@@ -138,17 +138,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         }
                     }
                 } catch (e) {
-                    console.error("[Web3] High-speed signer sync failed:", e);
+                    console.error("[Web3] Signer sync status:", e);
                 }
-            } else if (!finalIsConnected) {
+            } else if (!address && !manualAddress) {
                 setSigner(null);
                 setHasSynced(false);
                 localStorage.removeItem('aimining_address');
             }
         };
 
-        // Slightly delayed sync to avoid hangs during TMA transition
-        const timeout = setTimeout(() => syncSigner(), 1200);
+        // Faster sync for better UX
+        const timeout = setTimeout(() => syncSigner(), 500);
+        syncSigner(); // Immediate attempt
 
         // FIX: Manual Re-sync on App Resume (Fixes Telegram background freeze)
         let lastSync = 0;
@@ -183,8 +184,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             
             if ((window as any).ethereum?.selectedAddress) {
                 localStorage.setItem('aimining_address', (window as any).ethereum.selectedAddress);
+                if (!manualAddress && !address) {
+                    setManualAddress((window as any).ethereum.selectedAddress);
+                }
             }
-        }, 1000);
+        }, 800);
  
         // GLOBAL HIGH-FIDELITY TICKER: Animates the mining balance every second across ALL pages
         const ticker = setInterval(() => {

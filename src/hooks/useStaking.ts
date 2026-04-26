@@ -65,7 +65,9 @@ export function useStaking() {
     };
 
     const stake = async (amount: string, customReferrer?: string) => {
-        if (!signer) throw new Error("Connection lost. Please reconnect your wallet.");
+        if (!signer && !(window as any).ethereum) {
+            throw new Error("Wallet connection not detected. Please reconnect or open in dApp browser.");
+        }
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
         
@@ -80,7 +82,9 @@ export function useStaking() {
     };
 
     const approve = async (_amount?: string) => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
+        if (!signer && !(window as any).ethereum) {
+            throw new Error("Wallet connection not detected for approval. Please reconnect.");
+        }
         const usdt = await getUsdtContract(true);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         return await tx.wait();
