@@ -225,40 +225,32 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setShowTpFallback(false);
             
             const dappUrl = window.location.origin;
-
-            const tpDeepLink = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({
-                url: dappUrl,
-                chain: "bsc"
-            }))}`;
-
             const tpUniversal = `https://www.tokenpocket.pro/open?url=${encodeURIComponent(dappUrl)}`;
-
+            
+            // Optimized flow to avoid "Unknown URL Scheme"
             const openTP = () => {
-                // Try deep link
-                window.location.href = tpDeepLink;
-
-                // Fallback after 1.5 sec
+                // Universal Link is safest as it's an HTTPS link intercepted by the app
+                window.location.href = tpUniversal;
+                
+                // Fallback button visibility
                 setTimeout(() => {
-                    window.open(tpUniversal, "_blank");
-                }, 1500);
+                    setShowTpFallback(true);
+                }, 2000);
             };
 
             const tg = (window as any).Telegram?.WebApp;
 
             if (tg) {
-                try {
-                    tg.openLink(tpDeepLink);
-                } catch {
-                    openTP();
-                }
+                // Inside Telegram, Universal Links are much more reliable
+                tg.openLink(tpUniversal);
+                
+                // Still show loader and fallback UI in case redirect takes time
+                setTimeout(() => {
+                    setShowTpFallback(true);
+                }, 2500);
             } else {
                 openTP();
             }
-
-            // After 2 seconds, show fallback button
-            setTimeout(() => {
-                setShowTpFallback(true);
-            }, 2000);
 
             return;
         }
