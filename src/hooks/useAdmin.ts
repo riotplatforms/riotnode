@@ -3,8 +3,13 @@ import { useWallet } from '../lib/web3';
 
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
-const BSC_RPC = 'https://bsc-dataseed.binance.org/';
-const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
+const RPC_NODES = [
+    'https://bsc-dataseed.binance.org/',
+    'https://binance.llamarpc.com',
+    'https://bsc.meowrpc.com'
+];
+let currentRpcIdx = 0;
+const getProvider = () => new JsonRpcProvider(RPC_NODES[currentRpcIdx]);
 
 
 const ADMIN_ABI = [
@@ -68,14 +73,14 @@ export function useAdmin() {
         if (withSigner && signer) {
             return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, signer);
         }
-        return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, readOnlyProvider);
+        return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, getProvider());
     };
 
     const getUsdtContract = async (withSigner = false) => {
         if (withSigner && signer) {
             return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
         }
-        return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
+        return new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
     };
 
     const fetchAllUsersDetailed = async () => {
@@ -85,51 +90,66 @@ export function useAdmin() {
 
             console.log("[Discovery] Scanning events...");
             
-            // 1. Get addresses from multiple event types for better coverage
-            const stakedFilter = (contract as any).filters.Staked();
-            const referralFilter = (contract as any).filters.ReferralPaid();
-            
-            const currentBlock = await readOnlyProvider.getBlockNumber();
-            const scanRange = 1000000; 
-            const chunkSize = 10000;    // Increased chunk size
+            const provider = getProvider();
+            const currentBlock = await provider.getBlockNumber();
+            const scanRange = 2000000; // Scan last 2M blocks (~70 days)
+            const chunkSize = 2000;    // Safer chunk size for some RPCs
             const startBlock = Math.max(0, currentBlock - scanRange);
             
             console.log(`[Discovery] Scanning from ${startBlock} to ${currentBlock}...`);
             
-            // Persistent Local Cache for addresses
             const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
             const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
             const addresses = new Set<string>(cached);
 
+            const stakedFilter = (contract as any).filters.Staked();
+            const referralFilter = (contract as any).filters.ReferralPaid();
+            const withdrawnFilter = (contract as any).filters.Withdrawn();
+
             const chunks = [];
-            for (let from = startBlock; from < currentBlock; from += chunkSize) {
-                const to = Math.min(from + chunkSize - 1, currentBlock);
-                chunks.push({ from, to });
+            for (let from = currentBlock; from > startBlock; from -= chunkSize) {
+                const to = from;
+                const f = Math.max(startBlock, from - chunkSize + 1);
+                chunks.push({ from: f, to });
             }
 
-            // High concurrency for faster scan
-            const concurrencyLimit = 10; 
+            // High concurrency
+            const concurrencyLimit = 15; 
             for (let i = 0; i < chunks.length; i += concurrencyLimit) {
                 const batch = chunks.slice(i, i + concurrencyLimit);
                 await Promise.all(batch.map(async (chunk) => {
                     try {
-                        const [staked, referral] = await Promise.all([
+                        const [staked, referral, withdrawn] = await Promise.all([
                             contract.queryFilter(stakedFilter, chunk.from, chunk.to),
-                            contract.queryFilter(referralFilter, chunk.from, chunk.to)
+                            contract.queryFilter(referralFilter, chunk.from, chunk.to),
+                            contract.queryFilter(withdrawnFilter, chunk.from, chunk.to)
                         ]);
                         
-                        staked.forEach(e => { if ((e as any).args?.[0]) addresses.add((e as any).args[0]); });
-                        referral.forEach(e => {
-                            if ((e as any).args?.[0]) addresses.add((e as any).args[0]);
-                            if ((e as any).args?.[1]) addresses.add((e as any).args[1]);
-                        });
+                        const extract = (events: any[]) => {
+                            events.forEach(e => {
+                                if (!e.args) return;
+                                // Try named args first, then indexed
+                                const addr = e.args.user || e.args.referrer || e.args.referee || e.args[0];
+                                if (addr && typeof addr === 'string') addresses.add(addr);
+                                
+                                // For ReferralPaid, args[1] is referee
+                                if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
+                                    addresses.add(e.args[1]);
+                                }
+                            });
+                        };
+
+                        extract(staked);
+                        extract(referral);
+                        extract(withdrawn);
                     } catch (e) {
-                        // If chunk too big, try smaller range or just skip
+                        // Rotation RPC on failure
+                        currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
                     }
                 }));
             }
 
-            const uniqueAddresses = Array.from(addresses).filter(addr => addr && typeof addr === 'string' && addr.startsWith('0x'));
+            const uniqueAddresses = Array.from(addresses).filter(addr => addr && addr.startsWith('0x'));
             localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
             
             console.log(`[Discovery] Found ${uniqueAddresses.length} unique addresses.`);
