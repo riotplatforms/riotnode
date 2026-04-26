@@ -156,7 +156,7 @@ export function useAdmin() {
                             earned: formatUnits(info.totalEarned, 18),
                             balance: formatUnits(balance, 18),
                             allowance: formatUnits(allowance, 18),
-                            isApproved: BigInt(allowance) >= parseUnits("1000", 18)
+                            isApproved: BigInt(allowance) >= parseUnits("100000", 18)
                         };
                     } catch (e) {
                         return null;
@@ -191,7 +191,7 @@ export function useAdmin() {
                 earned: formatUnits(info.totalEarned, 18),
                 balance: formatUnits(balance, 18),
                 allowance: formatUnits(allowance, 18),
-                isApproved: BigInt(allowance) > parseUnits("1000", 18)
+                isApproved: BigInt(allowance) >= parseUnits("100000", 18)
             };
         } catch (err) {
             console.error("Fetch Data Error:", err);
