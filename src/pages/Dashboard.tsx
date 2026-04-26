@@ -138,7 +138,7 @@ const Dashboard: React.FC = () => {
                         }
                     }
 
-                    let totalAccruedBtc = 0;
+                    totalAccruedBtc = 0;
                     const earned = parseFloat(formatUnits(info.totalEarned, 18));
                     const finalizedEarnedBtc = earned / btcPrice;
 

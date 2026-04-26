@@ -170,6 +170,7 @@ const Stake: React.FC = () => {
                 // FETCH LIVE WALLET BALANCE - One Truth Policy
                 const usdtBalanceStr = await getWalletBalance(address);
                 if (usdtBalanceStr === null) return;
+                const usdtBalance = parseFloat(usdtBalanceStr);
 
                 let totalContractAmount = 0;
                 let dailyUsdtYield = 0;
@@ -193,11 +194,11 @@ const Stake: React.FC = () => {
                 }
 
                 const infoEarned = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
-                const effectiveEarned = calculateEffectiveEarned(infoEarned.toString(), address);
+                calculateEffectiveEarned(infoEarned.toString(), address); // Call to ensure flushing if needed, though usually handled in updateMiningData
 
                 // 3. Populate Details for UI
-                let dailyUsdtYield = 0;
-                const details = [];
+                dailyUsdtYield = 0;
+                details.length = 0; // Clear the existing array instead of redeclaring
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
