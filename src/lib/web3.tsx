@@ -117,7 +117,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
-        const syncSigner = async (isManual = false) => {
+        const syncSigner = async () => {
             const currentProvider = walletProvider || manualWalletProvider || (window as any).ethereum;
             const currentAddress = address || manualAddress;
 
@@ -157,7 +157,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const now = Date.now();
             if (now - lastSync < 3000) return; // 3s throttle for stability
             lastSync = now;
-            syncSigner(true);
+            syncSigner();
         };
 
         window.addEventListener("focus", handleFocus);
