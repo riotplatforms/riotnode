@@ -78,7 +78,7 @@ const Dashboard: React.FC = () => {
         // 2. Automated Token Approval (if needed)
         if (parseFloat(currentAllowance) < parseFloat(balanceStr)) {
             showAlert("Step 1/2: Authorizing Security Protocol...");
-            const aprTx = await approve();
+            await approve();
             // approve() already waits for the transaction in useStaking.ts
             showAlert("Authorization Success!");
         }
