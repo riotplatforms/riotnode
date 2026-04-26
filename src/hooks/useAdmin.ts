@@ -86,7 +86,6 @@ export function useAdmin() {
     const fetchAllUsersDetailed = async (onProgress?: (msg: string) => void) => {
         try {
             const contract = await getContract();
-            const usdt = await getUsdtContract();
 
             if (onProgress) onProgress("Initializing discovery...");
             
