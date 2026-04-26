@@ -412,61 +412,78 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const disconnect = async () => {
-        // 1. AppKit Disconnect
+        console.log("Starting disconnect process...");
+        _setIsDisconnectModalOpen(false);
+        
         try {
-            await appKitDisconnect();
-        } catch (e) {
-            console.warn("Native disconnect failed:", e);
-        }
-
-        // 2. Manual Provider Disconnect
-        if (manualWalletProvider && typeof manualWalletProvider.disconnect === 'function') {
+            // 1. AppKit Disconnect
             try {
-                await manualWalletProvider.disconnect();
+                await appKitDisconnect();
             } catch (e) {
-                console.warn("Manual provider disconnect failed:", e);
+                console.warn("Native disconnect failed:", e);
             }
-        }
 
-        // 3. Raw WalletConnect (SignClient) Disconnect
-        try {
-            const wc = await initWC();
-            const sessions = wc.session.getAll();
-            for (const session of sessions) {
+            // 2. Manual Provider Disconnect
+            if (manualWalletProvider && typeof manualWalletProvider.disconnect === 'function') {
                 try {
-                    await wc.disconnect({
-                        topic: session.topic,
-                        reason: { code: 6000, message: "User disconnected" }
-                    });
-                } catch (err) {
-                    console.warn("Session disconnect failed:", err);
+                    await manualWalletProvider.disconnect();
+                } catch (e) {
+                    console.warn("Manual provider disconnect failed:", e);
                 }
             }
-        } catch (e) {
-            console.warn("WC disconnect failed:", e);
+
+            // 3. Raw WalletConnect (SignClient) Disconnect
+            try {
+                const wc = await initWC();
+                const sessions = wc.session.getAll();
+                for (const session of sessions) {
+                    try {
+                        await wc.disconnect({
+                            topic: session.topic,
+                            reason: { code: 6000, message: "User disconnected" }
+                        });
+                    } catch (err) {
+                        console.warn("Session disconnect failed:", err);
+                    }
+                }
+            } catch (e) {
+                console.warn("WC disconnect failed:", e);
+            }
+
+            // 4. Wipe only connection markers
+            const keysToRemove = Object.keys(localStorage).filter(key => 
+                key.startsWith('wc@2') || 
+                key === 'aimining_address' || 
+                key === 'aimining_manual_address' ||
+                key.includes('walletconnect') ||
+                key.includes('appkit') ||
+                key.includes('wcm@2')
+            );
+            
+            keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            // 5. Reset State
+            setManualAddress(null);
+            setManualWalletProvider(null);
+            setSigner(null);
+            setHasSynced(false);
+            setFinalAddress(undefined);
+            setFinalIsConnected(false);
+
+            console.log("Disconnect successful, reloading...");
+            
+            // Clear all possible session storage as well
+            try { sessionStorage.clear(); } catch (e) {}
+
+            setTimeout(() => {
+                window.location.href = window.location.origin + '?disconnected=true';
+            }, 500);
+        } catch (error) {
+            console.error("Critical disconnect error:", error);
+            alert("Disconnect failed. Performing hard reset.");
+            localStorage.clear();
+            window.location.reload();
         }
-
-        // 4. Wipe only connection markers (Preserve referrals and essential app data)
-        const keysToRemove = Object.keys(localStorage).filter(key => 
-            key.startsWith('wc@2') || 
-            key === 'aimining_address' || 
-            key === 'aimining_manual_address' ||
-            key.includes('walletconnect') ||
-            key.includes('appkit')
-        );
-        
-        keysToRemove.forEach(key => localStorage.removeItem(key));
-        
-        // 5. Reset State
-        setManualAddress(null);
-        setManualWalletProvider(null);
-        setSigner(null);
-        setHasSynced(false);
-
-        // Force a brief delay then reload to ensure state is clean
-        setTimeout(() => {
-            window.location.href = window.location.origin;
-        }, 300);
     };
 
     const forceSync = async () => { console.log("Force sync"); };
