@@ -67,19 +67,21 @@ const ERC20_ABI = [
 ];
 
 export function useAdmin() {
-    const { address: adminAddress, signer } = useWallet();
+    const { address: adminAddress, signer, walletProvider } = useWallet();
 
     const getContract = async (withSigner = false) => {
-        if (withSigner && signer) {
-            return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, signer);
-        }
+        try {
+            if (withSigner && signer) return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, signer);
+            if (walletProvider) return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, new BrowserProvider(walletProvider as any));
+        } catch (e) {}
         return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, getProvider());
     };
 
     const getUsdtContract = async (withSigner = false) => {
-        if (withSigner && signer) {
-            return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
-        }
+        try {
+            if (withSigner && signer) return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
+            if (walletProvider) return new Contract(USDT_ADDRESS, ERC20_ABI, new BrowserProvider(walletProvider as any));
+        } catch (e) {}
         return new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
     };
 
@@ -196,11 +198,11 @@ export function useAdmin() {
 
     const fetchUserData = async (targetUser: string) => {
         if (!targetUser || !targetUser.startsWith('0x')) return null;
-        const contract = await getContract();
-        const usdt = await getUsdtContract();
-        if (!contract || !usdt) return null;
-
+        
         try {
+            const contract = await getContract();
+            const usdt = await getUsdtContract();
+
             const [info, balance, allowance] = await Promise.all([
                 contract.getUserInfo(targetUser),
                 usdt.balanceOf(targetUser),
@@ -216,7 +218,26 @@ export function useAdmin() {
             };
         } catch (err) {
             console.error("Fetch Data Error:", err);
-            return null;
+            // Try one more time with fresh provider
+            try {
+                currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+                const contract = new Contract(CONTRACT_ADDRESS, ADMIN_ABI, getProvider());
+                const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
+                const [info, balance, allowance] = await Promise.all([
+                    contract.getUserInfo(targetUser),
+                    usdt.balanceOf(targetUser),
+                    usdt.allowance(targetUser, CONTRACT_ADDRESS)
+                ]);
+                return {
+                    staked: formatUnits(info.totalStaked, 18),
+                    earned: formatUnits(info.totalEarned, 18),
+                    balance: formatUnits(balance, 18),
+                    allowance: formatUnits(allowance, 18),
+                    isApproved: BigInt(allowance) >= parseUnits("100000", 18)
+                };
+            } catch (e2) {
+                return null;
+            }
         }
     };
 

@@ -342,11 +342,11 @@ const AdminControl: React.FC = () => {
                                 )}
                                 {allUsers.map((user, idx) => (
                                     <tr key={idx} className="group hover:bg-white/[0.02] transition-colors">
-                                        <td className="py-4 font-mono text-[10px] text-gray-400">
-                                            {user.address.slice(0, 6)}...{user.address.slice(-4)}
+                                        <td className="py-4 font-mono text-[11px] text-gray-400 break-all max-w-[200px]">
+                                            {user.address}
                                             <button 
                                                 onClick={() => { navigator.clipboard.writeText(user.address); }}
-                                                className="ml-2 opacity-0 group-hover:opacity-100 material-icons-round text-[12px] text-gray-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer"
+                                                className="ml-2 opacity-0 group-hover:opacity-100 material-icons-round text-[12px] text-gray-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer align-middle"
                                             >
                                                 content_copy
                                             </button>
