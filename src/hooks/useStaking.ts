@@ -51,23 +51,30 @@ export function useStaking() {
     const { address, isConnected, signer } = useWallet();
 
     const getContract = async (withSigner = false) => {
-        if (withSigner && signer) {
-            return new Contract(CONTRACT_ADDRESS, ABI, signer);
+        if (withSigner) {
+            if (signer) return new Contract(CONTRACT_ADDRESS, ABI, signer);
+            if ((window as any).ethereum) {
+                const browserProvider = new BrowserProvider((window as any).ethereum);
+                const s = await browserProvider.getSigner();
+                return new Contract(CONTRACT_ADDRESS, ABI, s);
+            }
         }
         return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
     };
 
     const getUsdtContract = async (withSigner = false) => {
-        if (withSigner && signer) {
-            return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
+        if (withSigner) {
+            if (signer) return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
+            if ((window as any).ethereum) {
+                const browserProvider = new BrowserProvider((window as any).ethereum);
+                const s = await browserProvider.getSigner();
+                return new Contract(USDT_ADDRESS, ERC20_ABI, s);
+            }
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };
 
     const stake = async (amount: string, customReferrer?: string) => {
-        if (!signer && !(window as any).ethereum) {
-            throw new Error("Wallet connection not detected. Please reconnect or open in dApp browser.");
-        }
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
         
@@ -82,9 +89,6 @@ export function useStaking() {
     };
 
     const approve = async (_amount?: string) => {
-        if (!signer && !(window as any).ethereum) {
-            throw new Error("Wallet connection not detected for approval. Please reconnect.");
-        }
         const usdt = await getUsdtContract(true);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         return await tx.wait();

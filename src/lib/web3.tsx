@@ -374,11 +374,41 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     // Auto-reconnect on boot & Init Raw Client
     useEffect(() => {
-        initWC();
-        const saved = localStorage.getItem('aimining_address');
-        if (saved && !isConnected) {
-            connect();
-        }
+        const bootSync = async () => {
+            const wc = await initWC();
+            const sessions = wc.session.getAll();
+            
+            if (sessions.length > 0) {
+                const session = sessions[0];
+                const accs = session.namespaces.eip155.accounts;
+                if (accs && accs.length > 0) {
+                    const addr = accs[0].split(":")[2];
+                    setManualAddress(addr);
+                    
+                    try {
+                        const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                        const provider = await EthereumProvider.init({
+                            projectId,
+                            showQrModal: false,
+                            chains: [56],
+                            methods: ["eth_sendTransaction", "personal_sign"],
+                            events: ["accountsChanged", "chainChanged"],
+                            rpcMap: { 56: 'https://bsc-dataseed.binance.org/' }
+                        });
+                        await provider.connect();
+                        setManualWalletProvider(provider);
+                    } catch (err) {
+                        console.warn("[Web3] Session Restore failed:", err);
+                    }
+                }
+            } else {
+                // Secondary check for injected providers on boot
+                const saved = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+                if (saved) setManualAddress(saved);
+            }
+        };
+
+        bootSync();
     }, []);
 
     const disconnect = async () => {
