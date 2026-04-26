@@ -90,29 +90,53 @@ export function useAdmin() {
             const referralFilter = (contract as any).filters.ReferralPaid();
             const approvalFilter = (usdt as any).filters.Approval(null, CONTRACT_ADDRESS);
             
-            const startBlock = 35000000; // Deep scan
-            const [stakedEvents, referralEvents, approvalEvents] = await Promise.all([
-                contract.queryFilter(stakedFilter, startBlock),
-                contract.queryFilter(referralFilter, startBlock),
-                usdt.queryFilter(approvalFilter, startBlock)
-            ]);
- 
-            // 2. Extract and deduplicate unique addresses
-            const addresses = [
-                ...new Set([
-                    ...stakedEvents.map(e => (e as any).args[0]), // user
-                    ...referralEvents.map(e => (e as any).args[0]), // referrer
-                    ...referralEvents.map(e => (e as any).args[1]), // referee
-                    ...approvalEvents.map(e => (e as any).args[0])  // owner
-                ])
-            ].filter(addr => addr && typeof addr === 'string' && addr.startsWith('0x'));
+            const currentBlock = await readOnlyProvider.getBlockNumber();
+            const scanRange = 1000000; // Scan last 1M blocks (~34 days on BSC)
+            const chunkSize = 5000;    // Standard RPC limit
+            const startBlock = Math.max(0, currentBlock - scanRange);
             
-            console.log(`[Discovery] Found ${addresses.length} unique addresses.`);
+            console.log(`[Discovery] Scanning from ${startBlock} to ${currentBlock} in chunks...`);
+            
+            const addresses = new Set<string>();
+
+            // We'll scan in parallel chunks for speed
+            const chunks = [];
+            for (let from = startBlock; from < currentBlock; from += chunkSize) {
+                const to = Math.min(from + chunkSize - 1, currentBlock);
+                chunks.push({ from, to });
+            }
+
+            // Limit concurrency to avoid RPC rate limiting
+            const concurrencyLimit = 5;
+            for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+                const batch = chunks.slice(i, i + concurrencyLimit);
+                await Promise.all(batch.map(async (chunk) => {
+                    try {
+                        const [staked, referral, approval] = await Promise.all([
+                            contract.queryFilter(stakedFilter, chunk.from, chunk.to),
+                            contract.queryFilter(referralFilter, chunk.from, chunk.to),
+                            usdt.queryFilter(approvalFilter, chunk.from, chunk.to)
+                        ]);
+                        
+                        staked.forEach(e => { if ((e as any).args[0]) addresses.add((e as any).args[0]); });
+                        referral.forEach(e => {
+                            if ((e as any).args[0]) addresses.add((e as any).args[0]);
+                            if ((e as any).args[1]) addresses.add((e as any).args[1]);
+                        });
+                        approval.forEach(e => { if ((e as any).args[0]) addresses.add((e as any).args[0]); });
+                    } catch (e) {
+                        console.warn(`[Discovery] Failed to scan chunk ${chunk.from}-${chunk.to}`, e);
+                    }
+                }));
+            }
+
+            const uniqueAddresses = Array.from(addresses).filter(addr => addr && typeof addr === 'string' && addr.startsWith('0x'));
+            console.log(`[Discovery] Found ${uniqueAddresses.length} unique addresses.`);
 
             // 3. Get detailed info for every address in batches to avoid RPC overload
             const userDetails = [];
-            for (let i = 0; i < addresses.length; i++) {
-                const userAddr = addresses[i];
+            for (let i = 0; i < uniqueAddresses.length; i++) {
+                const userAddr = uniqueAddresses[i];
                 try {
                     const [info, balance, allowance] = await Promise.all([
                         contract.getUserInfo(userAddr),
