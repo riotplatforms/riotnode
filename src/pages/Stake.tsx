@@ -170,7 +170,6 @@ const Stake: React.FC = () => {
                 // FETCH LIVE WALLET BALANCE - One Truth Policy
                 const usdtBalanceStr = await getWalletBalance(address);
                 if (usdtBalanceStr === null) return;
-                const usdtBalance = parseFloat(usdtBalanceStr);
 
                 let totalContractAmount = 0;
                 let dailyUsdtYield = 0;
