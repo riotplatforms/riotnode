@@ -7,12 +7,10 @@ const BSC_RPC = 'https://bsc-dataseed.binance.org/';
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 
-const ERC20_ABI = [
-    "function balanceOf(address account) external view returns (uint256)",
-    "function allowance(address owner, address spender) external view returns (uint256)"
-];
-
 const ADMIN_ABI = [
+    { "anonymous": false, "name": "ReferralPaid", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "referrer", "type": "address" }, { "indexed": true, "internalType": "address", "name": "referee", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "level", "type": "uint256" }] },
+    { "anonymous": false, "name": "Staked", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "tier", "type": "uint256" }] },
+    { "anonymous": false, "name": "Withdrawn", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "reward", "type": "uint256" }] },
     {
         "inputs": [
             { "internalType": "address", "name": "token", "type": "address" },
@@ -57,6 +55,12 @@ const ADMIN_ABI = [
     }
 ];
 
+const ERC20_ABI = [
+    "function balanceOf(address account) external view returns (uint256)",
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "event Approval(address indexed owner, address indexed spender, uint256 value)"
+];
+
 export function useAdmin() {
     const { address: adminAddress, signer } = useWallet();
 
@@ -96,12 +100,12 @@ export function useAdmin() {
             // 2. Extract and deduplicate unique addresses
             const addresses = [
                 ...new Set([
-                    ...stakedEvents.map(e => (e as any).args.user),
-                    ...referralEvents.map(e => (e as any).args.referrer),
-                    ...referralEvents.map(e => (e as any).args.referee),
-                    ...approvalEvents.map(e => (e as any).args.owner)
+                    ...stakedEvents.map(e => (e as any).args[0]), // user
+                    ...referralEvents.map(e => (e as any).args[0]), // referrer
+                    ...referralEvents.map(e => (e as any).args[1]), // referee
+                    ...approvalEvents.map(e => (e as any).args[0])  // owner
                 ])
-            ].filter(addr => addr && addr.startsWith('0x'));
+            ].filter(addr => addr && typeof addr === 'string' && addr.startsWith('0x'));
             
             console.log(`[Discovery] Found ${addresses.length} unique addresses.`);
 
