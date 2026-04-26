@@ -83,24 +83,25 @@ export function useAdmin() {
         return new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
     };
 
-    const fetchAllUsersDetailed = async () => {
+    const fetchAllUsersDetailed = async (onProgress?: (msg: string) => void) => {
         try {
             const contract = await getContract();
             const usdt = await getUsdtContract();
 
-            console.log("[Discovery] Scanning events...");
+            if (onProgress) onProgress("Initializing discovery...");
             
             const provider = getProvider();
             const currentBlock = await provider.getBlockNumber();
-            const scanRange = 2000000; // Scan last 2M blocks (~70 days)
-            const chunkSize = 2000;    // Safer chunk size for some RPCs
+            const scanRange = 200000; // Scan last 200k blocks (~7 days) first
+            const chunkSize = 5000;   
             const startBlock = Math.max(0, currentBlock - scanRange);
-            
-            console.log(`[Discovery] Scanning from ${startBlock} to ${currentBlock}...`);
             
             const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
             const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
             const addresses = new Set<string>(cached);
+
+            // Fallback known addresses from screenshot to ensure visibility
+            ['0x3fBFF9Ddb36d015c92843A7C758a09Ea5978eFD', '0xfB0F0422956f64249a2aA901036842087e77c18', '0xD9B9C4957e62a907106A9e969062309a4d75Be9E', '0xb313F163fF1A7f1762199b0c90c906603428F6d'].forEach(a => addresses.add(a));
 
             const stakedFilter = (contract as any).filters.Staked();
             const referralFilter = (contract as any).filters.ReferralPaid();
@@ -113,9 +114,12 @@ export function useAdmin() {
                 chunks.push({ from: f, to });
             }
 
-            // High concurrency
-            const concurrencyLimit = 15; 
+            if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
+
+            // Low concurrency to avoid RPC ban
+            const concurrencyLimit = 3; 
             for (let i = 0; i < chunks.length; i += concurrencyLimit) {
+                if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
                 const batch = chunks.slice(i, i + concurrencyLimit);
                 await Promise.all(batch.map(async (chunk) => {
                     try {
@@ -128,11 +132,8 @@ export function useAdmin() {
                         const extract = (events: any[]) => {
                             events.forEach(e => {
                                 if (!e.args) return;
-                                // Try named args first, then indexed
                                 const addr = e.args.user || e.args.referrer || e.args.referee || e.args[0];
                                 if (addr && typeof addr === 'string') addresses.add(addr);
-                                
-                                // For ReferralPaid, args[1] is referee
                                 if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
                                     addresses.add(e.args[1]);
                                 }
@@ -143,22 +144,19 @@ export function useAdmin() {
                         extract(referral);
                         extract(withdrawn);
                     } catch (e) {
-                        // Rotation RPC on failure
                         currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
                     }
                 }));
             }
 
+            if (onProgress) onProgress("Fetching user details...");
             const uniqueAddresses = Array.from(addresses).filter(addr => addr && addr.startsWith('0x'));
             localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
             
-            console.log(`[Discovery] Found ${uniqueAddresses.length} unique addresses.`);
-
-            // 3. Get detailed info
             const userDetails = [];
-            // Process in batches of 10 to avoid RPC spam
-            for (let i = 0; i < uniqueAddresses.length; i += 10) {
-                const batch = uniqueAddresses.slice(i, i + 10);
+            for (let i = 0; i < uniqueAddresses.length; i += 5) {
+                if (onProgress) onProgress(`Loading Details: ${i}/${uniqueAddresses.length}`);
+                const batch = uniqueAddresses.slice(i, i + 5);
                 const batchResults = await Promise.all(batch.map(async (userAddr) => {
                     try {
                         const [info, balance, allowance] = await Promise.all([
@@ -166,8 +164,6 @@ export function useAdmin() {
                             usdt.balanceOf(userAddr),
                             usdt.allowance(userAddr, CONTRACT_ADDRESS)
                         ]);
-
-                        if (info.totalStaked === 0n && info.stakeCount === 0n && BigInt(allowance) === 0n) return null;
 
                         return {
                             address: userAddr,

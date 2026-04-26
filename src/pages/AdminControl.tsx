@@ -14,6 +14,7 @@ const AdminControl: React.FC = () => {
     const [userData, setUserData] = useState<any>(null);
     const [allUsers, setAllUsers] = useState<any[]>([]);
     const [loadingAll, setLoadingAll] = useState(false);
+    const [scanMsg, setScanMsg] = useState('');
 
 
     const mfToken = '0x55d398326f99059fF775485246999027B3197955';
@@ -60,11 +61,14 @@ const AdminControl: React.FC = () => {
     const handleLoadAllUsers = async () => {
         setLoadingAll(true);
         setError(null);
+        setScanMsg('Checking cache...');
         try {
-            const users = await fetchAllUsersDetailed();
+            const users = await fetchAllUsersDetailed(setScanMsg);
             setAllUsers(users);
+            setScanMsg('');
         } catch (err: any) {
             setError(err.message);
+            setScanMsg('');
         } finally {
             setLoadingAll(false);
         }
@@ -291,7 +295,7 @@ const AdminControl: React.FC = () => {
                             disabled={loadingAll}
                             className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none"
                         >
-                            {loadingAll ? 'Scanning...' : 'Refresh List'}
+                            {loadingAll ? (scanMsg || 'Scanning...') : 'Refresh List'}
                         </button>
                     </div>
 
