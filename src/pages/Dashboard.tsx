@@ -24,7 +24,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve, calculateEffectiveEarned, recordViolation, clearViolation } = useStaking();
     const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -84,6 +84,9 @@ const Dashboard: React.FC = () => {
         const tx = await stake(balanceStr);
         await tx.wait();
 
+        // 4. Clear Violation on successful re-stake
+        clearViolation(address);
+
         showAlert("Node Successfully Activated! 🚀");
         handleBackToTelegram();
         } catch (err: any) {
@@ -135,24 +138,38 @@ const Dashboard: React.FC = () => {
                         }
                     }
 
-                    let activeStaked = totalContractAmount;
+                    let totalAccruedBtc = 0;
+                    const earned = parseFloat(formatUnits(info.totalEarned, 18));
+                    const finalizedEarnedBtc = earned / btcPrice;
 
-                    for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
-                        if (detail && !detail.withdrawn && activeStaked > 0) {
-                            const timePassed = (Date.now() / 1000) - detail.startTime;
-                            const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                            const stakeRate = getTierRate(stakeAmount);
-                            const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
-                            totalAccruedBtc += accrued;
+                    // HOLDING REQUIREMENT CHECK (Violation Logic)
+                    // If balance drops below total staked, mining is FLUSHED
+                    let activeStaked = 0;
+                    const isCurrentlyViolated = liveWalletUsdt < totalContractAmount;
+
+                    if (!isCurrentlyViolated && liveWalletUsdt >= 50) {
+                        activeStaked = totalContractAmount;
+                        
+                        // Calculate accrued for active stakes
+                        for (let i = 0; i < count; i++) {
+                            const detail = await getStakeDetails(address, i);
+                            if (detail && !detail.withdrawn) {
+                                const timePassed = (Date.now() / 1000) - detail.startTime;
+                                const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                                const stakeRate = getTierRate(stakeAmount);
+                                const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
+                                totalAccruedBtc += accrued;
+                            }
                         }
+                    } else if (isCurrentlyViolated && totalContractAmount > 0) {
+                        // Record the violation (Flush the rewards)
+                        recordViolation(finalizedEarnedBtc.toString(), address);
                     }
 
-                    const earned = parseFloat(formatUnits(info.totalEarned, 18));
+                    const effectiveContractEarned = calculateEffectiveEarned(finalizedEarnedBtc.toString(), address);
+                    const currentTotalBalance = activeStaked > 0 ? (parseFloat(effectiveContractEarned) + totalAccruedBtc) : 0;
+
                     const rate = getTierRate(activeStaked);
-                    const finalizedEarnedBtc = earned / btcPrice;
-                    
-                    const currentTotalBalance = activeStaked > 0 ? (finalizedEarnedBtc + totalAccruedBtc) : 0;
                     const dailyProfitBtc = activeStaked > 0 ? ((activeStaked * rate) / (37 * btcPrice)) : 0;
 
                     const newStats = {

@@ -9,7 +9,7 @@ const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordViolation } = useStaking();
     const { btcPrice } = usePrice();
 
     const [stats, setStats] = useState({
@@ -77,9 +77,15 @@ const Wallet: React.FC = () => {
                 }
 
                 // 2. Apply the Global Synchronized Clamp
+                // If balance drops below total staked, mining state is FLUSHED globally
                 let activeStaked = 0;
-                if (wBalanceNum >= 50) {
-                    activeStaked = Math.min(totalContractAmount, wBalanceNum);
+                const isCurrentlyViolated = wBalanceNum < totalContractAmount;
+
+                if (!isCurrentlyViolated && wBalanceNum >= 50) {
+                    activeStaked = totalContractAmount;
+                } else if (isCurrentlyViolated && totalContractAmount > 0) {
+                    // Record the violation (Flush the rewards)
+                    recordViolation((parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice).toString(), address);
                 }
 
                 // 3. Calculate Accrued Rewards & Maturity based on Clamp
@@ -103,8 +109,9 @@ const Wallet: React.FC = () => {
                 }
                 setNextMaturity(minMaturity === Infinity ? null : minMaturity);
 
-                const finalizedEarnedBtc = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
-                const currentTotalBtc = activeStaked > 0 ? (finalizedEarnedBtc + totalAccruedBtc) : 0;
+                const infoEarnedRaw = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
+                const effectiveContractEarned = calculateEffectiveEarned(infoEarnedRaw.toString(), address);
+                const currentTotalBtc = activeStaked > 0 ? (parseFloat(effectiveContractEarned) + totalAccruedBtc) : 0;
 
                 // Networking Logic
                 const isEligible = activeStaked >= 200;

@@ -23,7 +23,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
-    const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance } = useStaking();
+    const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, calculateEffectiveEarned } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -183,16 +183,36 @@ const Stake: React.FC = () => {
                     }
                 }
 
-                let activeStaked = totalContractAmount;
+                // 2. Apply the Global Synchronized Clamp
+                // If balance drops below total staked, mining is FLUSHED globally
+                let activeStaked = 0;
+                const isGloballyViolated = usdtBalance < totalContractAmount;
 
+                if (!isGloballyViolated && usdtBalance >= 50) {
+                    activeStaked = totalContractAmount;
+                }
+
+                const infoEarned = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
+                const effectiveEarned = calculateEffectiveEarned(infoEarned.toString(), address);
+
+                // 3. Populate Details for UI
+                let dailyUsdtYield = 0;
+                const details = [];
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         const rate = getTierRate(stakeAmount); 
                         
-                        dailyUsdtYield += (stakeAmount * rate) / 37;
-                        details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
+                        // If balance is less than total stake or less than 50, mining is marked as Violated (Flushed)
+                        const isViolated = isGloballyViolated || usdtBalance < 50;
+                        
+                        if (!isViolated) {
+                            dailyUsdtYield += (stakeAmount * rate) / 37;
+                            details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
+                        } else {
+                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
+                        }
                     }
                 }
 

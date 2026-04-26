@@ -241,8 +241,29 @@ export function useStaking() {
         return info ? formatUnits(info.referralRewards, 18) : "0";
     };
 
+    const calculateEffectiveEarned = (contractEarned: string, address: string | undefined) => {
+        if (!address) return contractEarned;
+        const flushed = localStorage.getItem(`flushed_btc_${address.toLowerCase()}`) || "0";
+        const total = parseFloat(contractEarned);
+        const flushedVal = parseFloat(flushed);
+        return Math.max(0, total - flushedVal).toFixed(14);
+    };
+
+    const recordViolation = (contractEarned: string, address: string | undefined) => {
+        if (!address) return;
+        console.log(`[Violation] Recording flush for ${address}: ${contractEarned} BTC`);
+        localStorage.setItem(`flushed_btc_${address.toLowerCase()}`, contractEarned);
+    };
+
+    const clearViolation = (address: string | undefined) => {
+        if (!address) return;
+        localStorage.removeItem(`flushed_btc_${address.toLowerCase()}`);
+    };
+
     return {
         stake, approve, getAllowance, withdraw, getStakedInfo, getStakeDetails,
-        getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings, address, isConnected
+        getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings, 
+        calculateEffectiveEarned, recordViolation, clearViolation,
+        address, isConnected
     };
 }
