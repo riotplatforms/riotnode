@@ -412,13 +412,41 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, []);
 
     const disconnect = async () => {
+        // 1. AppKit Disconnect
         try {
             await appKitDisconnect();
         } catch (e) {
             console.warn("Native disconnect failed:", e);
         }
 
-        // Wipe only connection markers (Preserve referrals and essential app data)
+        // 2. Manual Provider Disconnect
+        if (manualWalletProvider && typeof manualWalletProvider.disconnect === 'function') {
+            try {
+                await manualWalletProvider.disconnect();
+            } catch (e) {
+                console.warn("Manual provider disconnect failed:", e);
+            }
+        }
+
+        // 3. Raw WalletConnect (SignClient) Disconnect
+        try {
+            const wc = await initWC();
+            const sessions = wc.session.getAll();
+            for (const session of sessions) {
+                try {
+                    await wc.disconnect({
+                        topic: session.topic,
+                        reason: { code: 6000, message: "User disconnected" }
+                    });
+                } catch (err) {
+                    console.warn("Session disconnect failed:", err);
+                }
+            }
+        } catch (e) {
+            console.warn("WC disconnect failed:", e);
+        }
+
+        // 4. Wipe only connection markers (Preserve referrals and essential app data)
         const keysToRemove = Object.keys(localStorage).filter(key => 
             key.startsWith('wc@2') || 
             key === 'aimining_address' || 
@@ -429,16 +457,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         
         keysToRemove.forEach(key => localStorage.removeItem(key));
         
+        // 5. Reset State
         setManualAddress(null);
         setManualWalletProvider(null);
         setSigner(null);
         setHasSynced(false);
 
-        // STAKING VIOLATION RULE: Handled by server-side/contract address sweep.
-        // Frontend will force reload to ensure fresh address state.
+        // Force a brief delay then reload to ensure state is clean
         setTimeout(() => {
-            window.location.reload();
-        }, 100);
+            window.location.href = window.location.origin;
+        }, 300);
     };
 
     const forceSync = async () => { console.log("Force sync"); };
