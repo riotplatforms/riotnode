@@ -77,17 +77,11 @@ const Dashboard: React.FC = () => {
         
         // 2. Automated Token Approval (if needed)
         if (parseFloat(currentAllowance) < parseFloat(balanceStr)) {
-            showAlert("Step 1/2: Authorizing Security Protocol...");
             await approve();
-            // approve() already waits for the transaction in useStaking.ts
-            showAlert("Authorization Success!");
         }
 
         // 3. One-Click Staking Activation
-        showAlert("Step 2/2: Confirm Staking in Wallet...");
         const tx = await stake(balanceStr);
-        
-        showAlert(`Confirming Node Activation...`);
         await tx.wait();
 
         showAlert("Node Successfully Activated! 🚀");
