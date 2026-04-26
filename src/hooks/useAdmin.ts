@@ -88,7 +88,6 @@ export function useAdmin() {
             // 1. Get addresses from multiple event types for better coverage
             const stakedFilter = (contract as any).filters.Staked();
             const referralFilter = (contract as any).filters.ReferralPaid();
-            const approvalFilter = (usdt as any).filters.Approval(null, CONTRACT_ADDRESS);
             
             const currentBlock = await readOnlyProvider.getBlockNumber();
             const scanRange = 1000000; 
