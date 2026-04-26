@@ -184,31 +184,16 @@ const Stake: React.FC = () => {
                     }
                 }
 
-                // 2. Apply the Global Synchronized Clamp
-                // If balance drops below 50, mining state is FLUSHED globally
-                let activeStaked = 0;
-                if (usdtBalance >= 50) {
-                    activeStaked = Math.min(totalContractAmount, usdtBalance);
-                }
+                let activeStaked = totalContractAmount;
 
-                // 3. Populate Details for UI
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         const rate = getTierRate(stakeAmount); 
                         
-                        // If balance is 0 or less than 50, mining is marked as Violated (Flushed)
-                        const isViolated = usdtBalance < 50;
-                        
-                        if (!isViolated) {
-                            // Pro-rata yield calculation if balance is lower than stake (clamped)
-                            const effectiveAmount = Math.min(stakeAmount, usdtBalance);
-                            dailyUsdtYield += (effectiveAmount * rate) / 37;
-                            details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: effectiveAmount, isViolated: false });
-                        } else {
-                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
-                        }
+                        dailyUsdtYield += (stakeAmount * rate) / 37;
+                        details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
                     }
                 }
 

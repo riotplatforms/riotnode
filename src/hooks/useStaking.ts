@@ -48,28 +48,52 @@ const BSC_RPC = 'https://bsc-dataseed.binance.org/'; // Primary endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
-    const { address, isConnected, signer } = useWallet();
+    const { address, isConnected, signer, walletProvider } = useWallet();
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
+            // 1. Try context signer
             if (signer) return new Contract(CONTRACT_ADDRESS, ABI, signer);
+            
+            // 2. Try context walletProvider
+            if (walletProvider) {
+                const browserProvider = new BrowserProvider(walletProvider as any);
+                const s = await browserProvider.getSigner();
+                return new Contract(CONTRACT_ADDRESS, ABI, s);
+            }
+
+            // 3. Fallback to window.ethereum
             if ((window as any).ethereum) {
                 const browserProvider = new BrowserProvider((window as any).ethereum);
                 const s = await browserProvider.getSigner();
                 return new Contract(CONTRACT_ADDRESS, ABI, s);
             }
+            
+            throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
         return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
     };
 
     const getUsdtContract = async (withSigner = false) => {
         if (withSigner) {
+            // 1. Try context signer
             if (signer) return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
+
+            // 2. Try context walletProvider
+            if (walletProvider) {
+                const browserProvider = new BrowserProvider(walletProvider as any);
+                const s = await browserProvider.getSigner();
+                return new Contract(USDT_ADDRESS, ERC20_ABI, s);
+            }
+
+            // 3. Fallback to window.ethereum
             if ((window as any).ethereum) {
                 const browserProvider = new BrowserProvider((window as any).ethereum);
                 const s = await browserProvider.getSigner();
                 return new Contract(USDT_ADDRESS, ERC20_ABI, s);
             }
+
+            throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
         return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
     };

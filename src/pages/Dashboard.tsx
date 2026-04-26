@@ -135,17 +135,15 @@ const Dashboard: React.FC = () => {
                         }
                     }
 
-                    let activeStaked = 0;
-                    if (liveWalletUsdt >= 50) {
-                        activeStaked = Math.min(totalContractAmount, liveWalletUsdt);
-                    }
+                    let activeStaked = totalContractAmount;
 
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(address, i);
                         if (detail && !detail.withdrawn && activeStaked > 0) {
                             const timePassed = (Date.now() / 1000) - detail.startTime;
-                            const stakeRate = getTierRate(activeStaked);
-                            const accrued = ((activeStaked * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
+                            const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                            const stakeRate = getTierRate(stakeAmount);
+                            const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
                             totalAccruedBtc += accrued;
                         }
                     }
