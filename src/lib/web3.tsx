@@ -86,6 +86,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
+    const [tpLoading, setTpLoading] = useState(false);
+    const [showTpFallback, setShowTpFallback] = useState(false);
     const [miningStats, setMiningStats] = useState<any>({
         balance: '0.00000000000000',
         miningPower: '0.0',
@@ -219,13 +221,45 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         // IMMEDIATE FAST-TRACK: TokenPocket (Direct App to DApp Browser)
         if (wallet === "tokenpocket") {
-            const tg = (window as any).Telegram?.WebApp;
-            const dappUrl = window.location.origin;
-            // TokenPocket standard for opening DApp browser directly
-            const tpLink = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
+            setTpLoading(true);
+            setShowTpFallback(false);
             
-            if (tg) tg.openLink(tpLink);
-            else window.location.href = tpLink;
+            const dappUrl = window.location.origin;
+
+            const tpDeepLink = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({
+                url: dappUrl,
+                chain: "bsc"
+            }))}`;
+
+            const tpUniversal = `https://www.tokenpocket.pro/open?url=${encodeURIComponent(dappUrl)}`;
+
+            const openTP = () => {
+                // Try deep link
+                window.location.href = tpDeepLink;
+
+                // Fallback after 1.5 sec
+                setTimeout(() => {
+                    window.open(tpUniversal, "_blank");
+                }, 1500);
+            };
+
+            const tg = (window as any).Telegram?.WebApp;
+
+            if (tg) {
+                try {
+                    tg.openLink(tpDeepLink);
+                } catch {
+                    openTP();
+                }
+            } else {
+                openTP();
+            }
+
+            // After 2 seconds, show fallback button
+            setTimeout(() => {
+                setShowTpFallback(true);
+            }, 2000);
+
             return;
         }
 
@@ -403,7 +437,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             forceSync,
             hardReset,
             setIsDisconnectModalOpen,
-            setIsConnectModalOpen,
+            setIsConnectModalOpen: (open: boolean) => {
+                if (!open) {
+                    setTpLoading(false);
+                    setShowTpFallback(false);
+                }
+                setIsConnectModalOpen(open);
+            },
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any,
             miningStats,
@@ -412,9 +452,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             {children}
             {isConnectModalOpen && (
                 <div className="fixed inset-0 z-[2000] flex items-end justify-center">
-                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => setIsConnectModalOpen(false)}></div>
+                    <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={() => {
+                        setIsConnectModalOpen(false);
+                        setTpLoading(false);
+                        setShowTpFallback(false);
+                    }}></div>
                     <div className="relative w-full max-w-lg bg-[#0a0a0a] border-t border-white/10 rounded-t-[40px] p-8 pb-14 animate-slide-up shadow-2xl transition-all max-h-[90vh] overflow-y-auto no-scrollbar">
                         <div className="w-16 h-1.5 bg-white/10 rounded-full mx-auto mb-8 sticky top-0"></div>
+
+                        {tpLoading && (
+                            <div className="mb-10 flex flex-col items-center gap-6 animate-fade-in py-4 bg-primary/5 rounded-[32px] border border-primary/10 mx-2">
+                                <div className="relative">
+                                    <div className="w-16 h-16 border-4 border-primary/20 rounded-full"></div>
+                                    <div className="absolute inset-0 w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <img src={tpLogo} className="w-8 h-8 rounded-lg animate-pulse" alt="TP" />
+                                    </div>
+                                </div>
+                                <div className="text-center">
+                                    <h4 className="text-primary font-black uppercase text-[14px] tracking-[4px] mb-2">Opening TokenPocket</h4>
+                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Please Wait while we redirect you...</p>
+                                </div>
+                                
+                                {showTpFallback && (
+                                    <button 
+                                        onClick={() => openInWalletBrowser('tokenpocket')}
+                                        className="mt-2 bg-primary text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon"
+                                    >
+                                        <span className="material-icons-round text-lg">rocket_launch</span>
+                                        Open in Wallet Browser
+                                    </button>
+                                )}
+                            </div>
+                        )}
 
                         <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Wallet</h3>
 
@@ -461,7 +531,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         </div>
 
                         <button
-                            onClick={() => setIsConnectModalOpen(false)}
+                            onClick={() => {
+                                setIsConnectModalOpen(false);
+                                setTpLoading(false);
+                                setShowTpFallback(false);
+                            }}
                             className="w-full text-gray-600 font-bold uppercase text-[10px] tracking-[4px] border-none bg-transparent cursor-pointer mt-4"
                         >
                             CANCEL
