@@ -1,4 +1,4 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
 import { useWallet } from '../lib/web3';
 
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
