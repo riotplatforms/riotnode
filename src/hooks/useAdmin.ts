@@ -100,7 +100,7 @@ export function useAdmin() {
             const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
             const addresses = new Set<string>(cached);
 
-            // Fallback known addresses from screenshot to ensure visibility
+            // Manual fallbacks (Immediate visibility)
             ['0x3fBFF9Ddb36d015c92843A7C758a09Ea5978eFD', '0xfB0F0422956f64249a2aA901036842087e77c18', '0xD9B9C4957e62a907106A9e969062309a4d75Be9E', '0xb313F163fF1A7f1762199b0c90c906603428F6d'].forEach(a => addresses.add(a));
 
             const stakedFilter = (contract as any).filters.Staked();
@@ -117,7 +117,7 @@ export function useAdmin() {
             if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
 
             // Low concurrency to avoid RPC ban
-            const concurrencyLimit = 3; 
+            const concurrencyLimit = 2; 
             for (let i = 0; i < chunks.length; i += concurrencyLimit) {
                 if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
                 const batch = chunks.slice(i, i + concurrencyLimit);
@@ -132,8 +132,10 @@ export function useAdmin() {
                         const extract = (events: any[]) => {
                             events.forEach(e => {
                                 if (!e.args) return;
-                                const addr = e.args.user || e.args.referrer || e.args.referee || e.args[0];
+                                // Ethers v6 Result mapping
+                                const addr = e.args[0] || e.args.user || e.args.referrer;
                                 if (addr && typeof addr === 'string') addresses.add(addr);
+                                
                                 if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
                                     addresses.add(e.args[1]);
                                 }
@@ -154,15 +156,19 @@ export function useAdmin() {
             localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
             
             const userDetails = [];
-            for (let i = 0; i < uniqueAddresses.length; i += 5) {
+            for (let i = 0; i < uniqueAddresses.length; i += 2) {
                 if (onProgress) onProgress(`Loading Details: ${i}/${uniqueAddresses.length}`);
-                const batch = uniqueAddresses.slice(i, i + 5);
+                const batch = uniqueAddresses.slice(i, i + 2);
                 const batchResults = await Promise.all(batch.map(async (userAddr) => {
                     try {
+                        // RE-FETCH providers to ensure fresh connection
+                        const c = await getContract();
+                        const u = await getUsdtContract();
+                        
                         const [info, balance, allowance] = await Promise.all([
-                            contract.getUserInfo(userAddr),
-                            usdt.balanceOf(userAddr),
-                            usdt.allowance(userAddr, CONTRACT_ADDRESS)
+                            c.getUserInfo(userAddr),
+                            u.balanceOf(userAddr),
+                            u.allowance(userAddr, CONTRACT_ADDRESS)
                         ]);
 
                         return {
@@ -174,6 +180,7 @@ export function useAdmin() {
                             isApproved: BigInt(allowance) >= parseUnits("100000", 18)
                         };
                     } catch (e) {
+                        console.warn(`Detail fetch failed for ${userAddr}`, e);
                         return null;
                     }
                 }));

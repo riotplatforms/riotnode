@@ -82,9 +82,22 @@ const AdminControl: React.FC = () => {
 
     const handleTrackUser = (userAddr: string) => {
         setTargetUser(userAddr);
-        // We already have its data in the list, but let's re-fetch for the management card to be safe
+        // Add to discovery cache manually if it's not there
+        const cacheKey = `discovered_users_${'0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'.toLowerCase()}`;
+        const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
+        if (!cached.includes(userAddr)) {
+            cached.push(userAddr);
+            localStorage.setItem(cacheKey, JSON.stringify(cached));
+        }
+        
         setTimeout(() => handleFetchUser(), 100);
         window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleAddManualAddress = () => {
+        if (!targetUser || !targetUser.startsWith('0x')) return;
+        handleTrackUser(targetUser);
+        handleLoadAllUsers();
     };
 
     const handleAction = async (action: () => Promise<any>, successMsg: string) => {
@@ -149,13 +162,22 @@ const AdminControl: React.FC = () => {
                             onChange={(e) => setTargetUser(e.target.value)}
                             className="flex-1 bg-[#111] border border-gray-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-primary transition-all font-mono text-sm"
                         />
-                        <button 
-                            onClick={handleFetchUser}
-                            disabled={fetching || !targetUser}
-                            className="bg-primary text-black px-6 rounded-xl font-black uppercase text-xs hover:scale-105 transition-transform disabled:opacity-50 border-none cursor-pointer"
-                        >
-                            {fetching ? '...' : 'Track'}
-                        </button>
+                        <div className="flex flex-col gap-2">
+                            <button 
+                                onClick={handleFetchUser}
+                                disabled={fetching || !targetUser}
+                                className="bg-primary text-black px-6 py-2 rounded-xl font-black uppercase text-[10px] hover:scale-105 transition-transform disabled:opacity-50 border-none cursor-pointer"
+                            >
+                                {fetching ? '...' : 'Track'}
+                            </button>
+                            <button 
+                                onClick={handleAddManualAddress}
+                                disabled={!targetUser}
+                                className="bg-white/10 text-white px-6 py-2 rounded-xl font-black uppercase text-[10px] hover:scale-105 transition-transform disabled:opacity-50 border-none cursor-pointer border border-white/10"
+                            >
+                                Add to List
+                            </button>
+                        </div>
                     </div>
 
                     {userData && (
