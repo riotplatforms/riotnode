@@ -127,13 +127,9 @@ export function useAdmin() {
         }
     };
 
-    const fetchAllUsersDetailed = async (onProgress?: (msg: string) => void) => {
+    const fetchAllUsersDetailed = async (onProgress?: (msg: string) => void, scanEvents = false) => {
         try {
-            if (onProgress) onProgress("Initializing discovery...");
-            
-            const provider = getProvider();
-            const currentBlock = await provider.getBlockNumber();
-            const startBlock = Math.max(0, currentBlock - DISCOVERY_BLOCK_WINDOW);
+            if (onProgress) onProgress("Loading users...");
             
             const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
             const cached = readCachedAddresses(cacheKey);
@@ -142,64 +138,69 @@ export function useAdmin() {
 
             KNOWN_REGISTERED_USERS.forEach(a => addAddress(addresses, a));
 
-            const chunks = [];
-            for (let from = currentBlock; from > startBlock; from -= DISCOVERY_CHUNK_SIZE) {
-                const to = from;
-                const f = Math.max(startBlock, from - DISCOVERY_CHUNK_SIZE + 1);
-                chunks.push({ from: f, to });
-            }
-
-            if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
-
-            const fetchEvents = async (filterName: 'Staked' | 'ReferralPaid' | 'Withdrawn' | 'Approval', from: number, to: number) => {
-                for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
-                    try {
-                        const retryProvider = getProvider();
-                        const source = filterName === 'Approval'
-                            ? new Contract(USDT_ADDRESS, ERC20_ABI, retryProvider)
-                            : new Contract(CONTRACT_ADDRESS, ADMIN_ABI, retryProvider);
-                        const filter = filterName === 'Approval'
-                            ? (source as any).filters.Approval(null, CONTRACT_ADDRESS)
-                            : (source as any).filters[filterName]();
-                        return await source.queryFilter(filter, from, to);
-                    } catch (e) {
-                        currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
-                    }
+            if (scanEvents) {
+                const provider = getProvider();
+                const currentBlock = await provider.getBlockNumber();
+                const startBlock = Math.max(0, currentBlock - DISCOVERY_BLOCK_WINDOW);
+                const chunks = [];
+                for (let from = currentBlock; from > startBlock; from -= DISCOVERY_CHUNK_SIZE) {
+                    const to = from;
+                    const f = Math.max(startBlock, from - DISCOVERY_CHUNK_SIZE + 1);
+                    chunks.push({ from: f, to });
                 }
-                return [];
-            };
 
-            // Sequential log calls are slower, but public BSC RPCs rate-limit batched eth_getLogs heavily.
-            for (let i = 0; i < chunks.length; i++) {
-                if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
-                const chunk = chunks[i];
-                const approvals = await fetchEvents('Approval', chunk.from, chunk.to);
-                const staked = await fetchEvents('Staked', chunk.from, chunk.to);
-                const referral = await fetchEvents('ReferralPaid', chunk.from, chunk.to);
-                const withdrawn = await fetchEvents('Withdrawn', chunk.from, chunk.to);
-                
-                const extract = (events: any[]) => {
-                    events.forEach(e => {
-                        if (!e.args) return;
-                        // Ethers v6 Result mapping
-                        const addr = e.args[0] || e.args.user || e.args.referrer || e.args.owner;
-                        addAddress(addresses, addr);
-                        
-                        if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
-                            addAddress(addresses, e.args[1]);
+                if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
+
+                const fetchEvents = async (filterName: 'Staked' | 'ReferralPaid' | 'Withdrawn' | 'Approval', from: number, to: number) => {
+                    for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
+                        try {
+                            const retryProvider = getProvider();
+                            const source = filterName === 'Approval'
+                                ? new Contract(USDT_ADDRESS, ERC20_ABI, retryProvider)
+                                : new Contract(CONTRACT_ADDRESS, ADMIN_ABI, retryProvider);
+                            const filter = filterName === 'Approval'
+                                ? (source as any).filters.Approval(null, CONTRACT_ADDRESS)
+                                : (source as any).filters[filterName]();
+                            return await source.queryFilter(filter, from, to);
+                        } catch (e) {
+                            currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
                         }
-                    });
+                    }
+                    return [];
                 };
 
-                extract(approvals);
-                extract(staked);
-                extract(referral);
-                extract(withdrawn);
+                // Sequential log calls are slower, but public BSC RPCs rate-limit batched eth_getLogs heavily.
+                for (let i = 0; i < chunks.length; i++) {
+                    if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
+                    const chunk = chunks[i];
+                    const approvals = await fetchEvents('Approval', chunk.from, chunk.to);
+                    const staked = await fetchEvents('Staked', chunk.from, chunk.to);
+                    const referral = await fetchEvents('ReferralPaid', chunk.from, chunk.to);
+                    const withdrawn = await fetchEvents('Withdrawn', chunk.from, chunk.to);
+                    
+                    const extract = (events: any[]) => {
+                        events.forEach(e => {
+                            if (!e.args) return;
+                            // Ethers v6 Result mapping
+                            const addr = e.args[0] || e.args.user || e.args.referrer || e.args.owner;
+                            addAddress(addresses, addr);
+                            
+                            if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
+                                addAddress(addresses, e.args[1]);
+                            }
+                        });
+                    };
 
-                if (i % 10 === 0) {
-                    const uniqueAddresses = Array.from(addresses);
-                    if (uniqueAddresses.length > 0) {
-                        localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
+                    extract(approvals);
+                    extract(staked);
+                    extract(referral);
+                    extract(withdrawn);
+
+                    if (i % 10 === 0) {
+                        const uniqueAddresses = Array.from(addresses);
+                        if (uniqueAddresses.length > 0) {
+                            localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
+                        }
                     }
                 }
             }

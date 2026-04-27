@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useAdmin } from '../hooks/useAdmin';
@@ -29,6 +29,8 @@ const AdminControl: React.FC = () => {
     const [fetching, setFetching] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
+    const usersLoadInFlight = useRef(false);
+    const didAutoLoadUsers = useRef(false);
 
     // Redirect non-admin wallets to Dashboard
     useEffect(() => {
@@ -60,9 +62,11 @@ const AdminControl: React.FC = () => {
     };
 
     const handleLoadAllUsers = async () => {
+        if (usersLoadInFlight.current) return;
+        usersLoadInFlight.current = true;
         setLoadingAll(true);
         setError(null);
-        setScanMsg('Checking cache...');
+        setScanMsg('Loading users...');
         try {
             const users = await fetchAllUsersDetailed(setScanMsg);
             setAllUsers(users);
@@ -71,12 +75,14 @@ const AdminControl: React.FC = () => {
             setError(err.message);
             setScanMsg('');
         } finally {
+            usersLoadInFlight.current = false;
             setLoadingAll(false);
         }
     };
 
     useEffect(() => {
-        if (isConnected && address && isAdmin(address)) {
+        if (isConnected && address && isAdmin(address) && !didAutoLoadUsers.current) {
+            didAutoLoadUsers.current = true;
             handleLoadAllUsers();
         }
     }, [isConnected, address]);
