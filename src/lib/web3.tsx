@@ -39,6 +39,23 @@ const getTokenPocketDappLink = (autoConnect = true) => {
     return `tpdapp://open?params=${encodeURIComponent(JSON.stringify(params))}`;
 };
 
+const clearWalletConnectPairingCache = () => {
+    const shouldRemove = (key: string) =>
+        key.startsWith('wc@2') ||
+        key.includes('walletconnect') ||
+        key.includes('WALLETCONNECT') ||
+        key.includes('appkit') ||
+        key.includes('wcm@2');
+
+    Object.keys(localStorage).forEach(key => {
+        if (shouldRemove(key)) localStorage.removeItem(key);
+    });
+    Object.keys(sessionStorage).forEach(key => {
+        if (shouldRemove(key)) sessionStorage.removeItem(key);
+    });
+    currentSessionPromise = null;
+};
+
 // Initialize AppKit with Instance Guard
 let appKitInitialized = false;
 
@@ -49,11 +66,12 @@ if (!appKitInitialized) {
         defaultNetwork: bsc,
         metadata,
         projectId,
+        allWallets: 'SHOW',
+        enableMobileFullScreen: true,
         features: {
             analytics: true,
             email: false,
-            socials: false,
-            allWallets: false // Support 600+ wallets
+            socials: false
         },
         themeMode: 'dark',
         themeVariables: {
@@ -118,11 +136,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     });
 
     const isConnecting = (status === 'connecting' || status === 'reconnecting') && !address && !manualAddress;
-    
+
     // Identity Persistence: Ensure identity doesn't leak or flicker
     const [finalAddress, setFinalAddress] = useState<string | undefined>(address || manualAddress || undefined);
     const [finalIsConnected, setFinalIsConnected] = useState<boolean>(isConnected || !!manualAddress);
-    
+
     useEffect(() => {
         const addr = address || manualAddress;
         if (addr && addr !== finalAddress) {
@@ -149,7 +167,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setSigner(s);
                         setHasSynced(true);
                         localStorage.setItem('aimining_address', currentAddress);
-                        
+
                         // Clear manual address if it's different from the native one being synced
                         if (manualAddress && manualAddress.toLowerCase() !== currentAddress.toLowerCase()) {
                             setManualAddress(null);
@@ -200,7 +218,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (savedAddress && !manualAddress) {
                 setManualAddress(savedAddress);
             }
-            
+
             if ((window as any).ethereum?.selectedAddress) {
                 localStorage.setItem('aimining_address', (window as any).ethereum.selectedAddress);
                 if (!manualAddress && !address) {
@@ -208,7 +226,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 }
             }
         }, 800);
- 
+
         // GLOBAL HIGH-FIDELITY TICKER: Animates the mining balance every second across ALL pages
         const ticker = setInterval(() => {
             setMiningStats((prev: any) => {
@@ -305,38 +323,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (await connectInjectedWallet()) {
                 return;
             }
-            
-            const tpDappLink = getTokenPocketDappLink(true);
-            const tpUniversal = `https://www.tokenpocket.pro/open?url=${encodeURIComponent(getDappUrl(true))}`;
-            
-            // Optimized flow to avoid "Unknown URL Scheme"
-            const openTP = () => {
-                window.location.href = tpDappLink;
-                
-                // Fallback button visibility
-                setTimeout(() => {
-                    setShowTpFallback(true);
-                }, 2000);
-            };
 
-            const tg = (window as any).Telegram?.WebApp;
-
-            if (tg) {
-                tg.openLink(tpDappLink);
-                
-                // Still show loader and fallback UI in case redirect takes time
-                setTimeout(() => {
-                    setShowTpFallback(true);
-                }, 2500);
-            } else {
-                openTP();
+            try {
+                clearWalletConnectPairingCache();
+                setIsConnectModalOpen(false);
+                await open({ view: 'AllWallets' });
+            } catch (err) {
+                console.warn("[Web3] AppKit TokenPocket flow failed:", err);
+                await open({ view: 'Connect' });
+            } finally {
+                setTpLoading(false);
             }
 
             setTimeout(() => {
-                try {
-                    window.location.href = tpUniversal;
-                } catch (e) {}
-            }, 1200);
+                setShowTpFallback(true);
+            }, 1500);
 
             return;
         }
@@ -388,11 +389,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     const accs = session.namespaces.eip155.accounts;
                     if (accs && accs.length > 0) {
                         const addr = accs[0].split(":")[2];
-                        
+
                         // Bridge state to triggers UI update
                         setManualAddress(addr);
                         localStorage.setItem('aimining_manual_address', addr);
-                        
+
                         try {
                             const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
                             const provider = await EthereumProvider.init({
@@ -430,6 +431,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleDirectConnect = async () => {
         setIsConnectModalOpen(false);
         try {
+            clearWalletConnectPairingCache();
             await open({ view: 'Connect' });
         } catch (err) {
             console.warn("[Web3] Reown Modal failed");
@@ -470,14 +472,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             const wc = await initWC();
             const sessions = wc.session.getAll();
-            
+
             if (sessions.length > 0) {
                 const session = sessions[0];
                 const accs = session.namespaces.eip155.accounts;
                 if (accs && accs.length > 0) {
                     const addr = accs[0].split(":")[2];
                     setManualAddress(addr);
-                    
+
                     try {
                         const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
                         const provider = await EthereumProvider.init({
@@ -507,7 +509,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const disconnect = async () => {
         console.log("Starting disconnect process...");
         _setIsDisconnectModalOpen(false);
-        
+
         try {
             // 1. AppKit Disconnect
             try {
@@ -544,17 +546,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             // 4. Wipe only connection markers
-            const keysToRemove = Object.keys(localStorage).filter(key => 
-                key.startsWith('wc@2') || 
-                key === 'aimining_address' || 
+            const keysToRemove = Object.keys(localStorage).filter(key =>
+                key.startsWith('wc@2') ||
+                key === 'aimining_address' ||
                 key === 'aimining_manual_address' ||
                 key.includes('walletconnect') ||
                 key.includes('appkit') ||
                 key.includes('wcm@2')
             );
-            
+
             keysToRemove.forEach(key => localStorage.removeItem(key));
-            
+
             // 5. Reset State
             setManualAddress(null);
             setManualWalletProvider(null);
@@ -564,9 +566,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setFinalIsConnected(false);
 
             console.log("Disconnect successful, reloading...");
-            
+
             // Clear all possible session storage as well
-            try { sessionStorage.clear(); } catch (e) {}
+            try { sessionStorage.clear(); } catch (e) { }
 
             setTimeout(() => {
                 window.location.href = window.location.origin + '?disconnected=true';
@@ -594,7 +596,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             signer,
             connect,
             disconnect,
-            isConnecting: isConnecting, 
+            isConnecting: isConnecting,
             walletType: 'Hybrid',
             walletProvider: walletProvider || manualWalletProvider,
             referral,
@@ -637,14 +639,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     <h4 className="text-primary font-black uppercase text-[14px] tracking-[4px] mb-2">Opening TokenPocket</h4>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Please Wait while we redirect you...</p>
                                 </div>
-                                
+
                                 {showTpFallback && (
-                                    <button 
-                                        onClick={() => openInWalletBrowser('tokenpocket')}
+                                    <button
+                                        onClick={async () => {
+                                            clearWalletConnectPairingCache();
+                                            setIsConnectModalOpen(false);
+                                            await open({ view: 'AllWallets' });
+                                        }}
                                         className="mt-2 bg-primary text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon"
                                     >
                                         <span className="material-icons-round text-lg">rocket_launch</span>
-                                        Open in Wallet Browser
+                                        Open WalletConnect
                                     </button>
                                 )}
                             </div>
@@ -721,7 +727,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Active Address</span>
                                 <span className="text-sm font-mono text-primary break-all text-center px-4 font-bold uppercase">{finalAddress}</span>
                             </div>
-                            
+
                             <button
                                 onClick={() => disconnect()}
                                 className="w-full bg-red-600/20 hover:bg-red-600/30 text-red-500 p-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 cursor-pointer border border-red-500/20 font-black text-[12px] uppercase tracking-[3px]"
