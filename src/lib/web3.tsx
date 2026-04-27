@@ -20,6 +20,25 @@ const metadata = {
     icons: [`${window.location.origin}/logo.png`]
 };
 
+const BSC_CHAIN_ID_HEX = '0x38';
+
+const getDappUrl = (autoConnectTokenPocket = false) => {
+    const url = new URL(window.location.href);
+    if (autoConnectTokenPocket) {
+        url.searchParams.set('tpconnect', '1');
+    }
+    return url.toString();
+};
+
+const getTokenPocketDappLink = (autoConnect = true) => {
+    const params = {
+        url: getDappUrl(autoConnect),
+        chain: 'BSC',
+        source: 'AI MINING BTC'
+    };
+    return `tpdapp://open?params=${encodeURIComponent(JSON.stringify(params))}`;
+};
+
 // Initialize AppKit with Instance Guard
 let appKitInitialized = false;
 
@@ -213,6 +232,61 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setIsConnectModalOpen(true);
     };
 
+    const connectInjectedWallet = async () => {
+        const injectedProvider =
+            (window as any).tokenpocket?.ethereum ||
+            (window as any).ethereum;
+
+        if (!injectedProvider?.request) {
+            return false;
+        }
+
+        try {
+            try {
+                await injectedProvider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: BSC_CHAIN_ID_HEX }]
+                });
+            } catch (switchError: any) {
+                if (switchError?.code === 4902 || switchError?.data?.originalError?.code === 4902) {
+                    await injectedProvider.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: BSC_CHAIN_ID_HEX,
+                            chainName: 'BNB Smart Chain',
+                            nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+                            rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                            blockExplorerUrls: ['https://bscscan.com']
+                        }]
+                    });
+                }
+            }
+
+            const accounts = await injectedProvider.request({ method: 'eth_requestAccounts' });
+            const connectedAddress = accounts?.[0] || injectedProvider.selectedAddress;
+            if (!connectedAddress) return false;
+
+            const browserProvider = new BrowserProvider(injectedProvider);
+            const injectedSigner = await browserProvider.getSigner(connectedAddress);
+
+            setManualAddress(connectedAddress);
+            setManualWalletProvider(injectedProvider);
+            setSigner(injectedSigner);
+            setHasSynced(true);
+            setFinalAddress(connectedAddress);
+            setFinalIsConnected(true);
+            localStorage.setItem('aimining_manual_address', connectedAddress);
+            localStorage.setItem('aimining_address', connectedAddress);
+            setIsConnectModalOpen(false);
+            setTpLoading(false);
+            setShowTpFallback(false);
+            return true;
+        } catch (err) {
+            console.warn("[Web3] Injected wallet connect failed:", err);
+            return false;
+        }
+    };
+
     const handleWalletClick = async (wallet: string) => {
         // OPTIMIZATION: Delay closing the modal for 2 seconds to ensure deep links trigger and user sees the interaction
         const isDeepLink = ["metamask", "safepal", "tokenpocket", "trust", "binance", "okx", "bitget"].includes(wallet);
@@ -227,14 +301,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         if (wallet === "tokenpocket") {
             setTpLoading(true);
             setShowTpFallback(false);
+
+            if (await connectInjectedWallet()) {
+                return;
+            }
             
-            const dappUrl = window.location.origin;
-            const tpUniversal = `https://www.tokenpocket.pro/open?url=${encodeURIComponent(dappUrl)}`;
+            const tpDappLink = getTokenPocketDappLink(true);
+            const tpUniversal = `https://www.tokenpocket.pro/open?url=${encodeURIComponent(getDappUrl(true))}`;
             
             // Optimized flow to avoid "Unknown URL Scheme"
             const openTP = () => {
-                // Universal Link is safest as it's an HTTPS link intercepted by the app
-                window.location.href = tpUniversal;
+                window.location.href = tpDappLink;
                 
                 // Fallback button visibility
                 setTimeout(() => {
@@ -245,8 +322,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const tg = (window as any).Telegram?.WebApp;
 
             if (tg) {
-                // Inside Telegram, Universal Links are much more reliable
-                tg.openLink(tpUniversal);
+                tg.openLink(tpDappLink);
                 
                 // Still show loader and fallback UI in case redirect takes time
                 setTimeout(() => {
@@ -255,6 +331,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             } else {
                 openTP();
             }
+
+            setTimeout(() => {
+                try {
+                    window.location.href = tpUniversal;
+                } catch (e) {}
+            }, 1200);
 
             return;
         }
@@ -356,13 +438,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const openInWalletBrowser = (type: 'safepal' | 'tokenpocket') => {
         const tg = (window as any).Telegram?.WebApp;
-        const dappUrl = window.location.origin;
+        const dappUrl = getDappUrl(type === 'tokenpocket');
         let url = "";
 
         if (type === 'safepal') {
             url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
         } else if (type === 'tokenpocket') {
-            url = `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl }))}`;
+            url = getTokenPocketDappLink(true);
         }
 
         if (tg) {
@@ -375,6 +457,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Auto-reconnect on boot & Init Raw Client
     useEffect(() => {
         const bootSync = async () => {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('tpconnect') === '1') {
+                const connected = await connectInjectedWallet();
+                if (connected) {
+                    params.delete('tpconnect');
+                    const cleanUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`;
+                    window.history.replaceState({}, '', cleanUrl);
+                    return;
+                }
+            }
+
             const wc = await initWC();
             const sessions = wc.session.getAll();
             
