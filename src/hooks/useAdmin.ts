@@ -12,6 +12,12 @@ let currentRpcIdx = 0;
 const getProvider = () => new JsonRpcProvider(RPC_NODES[currentRpcIdx]);
 const DISCOVERY_BLOCK_WINDOW = 500000;
 const DISCOVERY_CHUNK_SIZE = 5000;
+const KNOWN_REGISTERED_USERS = [
+    '0x3FbFF9Dd24e736FeF4A3a4435DF72b7Ea5978eFD',
+    '0xfB0F04222E080F4d8fC6861fE96Bb54087e77c18',
+    '0xD9B9C49544F1E8dd5c0f6F1992ac2A2a4d75Be9E',
+    '0xb313F163af20245755884C7FdCa051D603428F6d'
+];
 
 
 const ADMIN_ABI = [
@@ -78,7 +84,10 @@ export function useAdmin() {
                 const browserProvider = new BrowserProvider(walletProvider as any);
                 return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, await browserProvider.getSigner());
             }
-        } catch (e) {}
+        } catch (e) {
+            if (withSigner) throw new Error("Wallet connection not ready. Please reconnect and try again.");
+        }
+        if (withSigner) throw new Error("Wallet not connected");
         return new Contract(CONTRACT_ADDRESS, ADMIN_ABI, getProvider());
     };
 
@@ -89,7 +98,10 @@ export function useAdmin() {
                 const browserProvider = new BrowserProvider(walletProvider as any);
                 return new Contract(USDT_ADDRESS, ERC20_ABI, await browserProvider.getSigner());
             }
-        } catch (e) {}
+        } catch (e) {
+            if (withSigner) throw new Error("Wallet connection not ready. Please reconnect and try again.");
+        }
+        if (withSigner) throw new Error("Wallet not connected");
         return new Contract(USDT_ADDRESS, ERC20_ABI, getProvider());
     };
 
@@ -105,28 +117,30 @@ export function useAdmin() {
         if (clean) addresses.add(clean);
     };
 
+    const readCachedAddresses = (cacheKey: string) => {
+        try {
+            const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
+            return Array.isArray(cached) ? cached : [];
+        } catch (e) {
+            localStorage.removeItem(cacheKey);
+            return [];
+        }
+    };
+
     const fetchAllUsersDetailed = async (onProgress?: (msg: string) => void) => {
         try {
             if (onProgress) onProgress("Initializing discovery...");
             
             const provider = getProvider();
-            const contract = new Contract(CONTRACT_ADDRESS, ADMIN_ABI, provider);
-            const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, provider);
             const currentBlock = await provider.getBlockNumber();
             const startBlock = Math.max(0, currentBlock - DISCOVERY_BLOCK_WINDOW);
             
             const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
-            const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
+            const cached = readCachedAddresses(cacheKey);
             const addresses = new Set<string>();
             cached.forEach((addr: unknown) => addAddress(addresses, addr));
 
-            // Manual fallbacks (Immediate visibility)
-            ['0x3fBFF9Ddb36d015c92843A7C758a09Ea5978eFD', '0xfB0F0422956f64249a2aA901036842087e77c18', '0xD9B9C4957e62a907106A9e969062309a4d75Be9E', '0xb313F163fF1A7f1762199b0c90c906603428F6d'].forEach(a => addAddress(addresses, a));
-
-            const stakedFilter = (contract as any).filters.Staked();
-            const referralFilter = (contract as any).filters.ReferralPaid();
-            const withdrawnFilter = (contract as any).filters.Withdrawn();
-            const approvalFilter = (usdt as any).filters.Approval(null, CONTRACT_ADDRESS);
+            KNOWN_REGISTERED_USERS.forEach(a => addAddress(addresses, a));
 
             const chunks = [];
             for (let from = currentBlock; from > startBlock; from -= DISCOVERY_CHUNK_SIZE) {
@@ -137,23 +151,32 @@ export function useAdmin() {
 
             if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
 
-            const fetchEvents = async (filter: any, from: number, to: number, source: Contract) => {
-                try {
-                    return await source.queryFilter(filter, from, to);
-                } catch (e) {
-                    currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
-                    return [];
+            const fetchEvents = async (filterName: 'Staked' | 'ReferralPaid' | 'Withdrawn' | 'Approval', from: number, to: number) => {
+                for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
+                    try {
+                        const retryProvider = getProvider();
+                        const source = filterName === 'Approval'
+                            ? new Contract(USDT_ADDRESS, ERC20_ABI, retryProvider)
+                            : new Contract(CONTRACT_ADDRESS, ADMIN_ABI, retryProvider);
+                        const filter = filterName === 'Approval'
+                            ? (source as any).filters.Approval(null, CONTRACT_ADDRESS)
+                            : (source as any).filters[filterName]();
+                        return await source.queryFilter(filter, from, to);
+                    } catch (e) {
+                        currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+                    }
                 }
+                return [];
             };
 
             // Sequential log calls are slower, but public BSC RPCs rate-limit batched eth_getLogs heavily.
             for (let i = 0; i < chunks.length; i++) {
                 if (onProgress) onProgress(`Scanning: ${Math.round((i / chunks.length) * 100)}%`);
                 const chunk = chunks[i];
-                const approvals = await fetchEvents(approvalFilter, chunk.from, chunk.to, usdt);
-                const staked = await fetchEvents(stakedFilter, chunk.from, chunk.to, contract);
-                const referral = await fetchEvents(referralFilter, chunk.from, chunk.to, contract);
-                const withdrawn = await fetchEvents(withdrawnFilter, chunk.from, chunk.to, contract);
+                const approvals = await fetchEvents('Approval', chunk.from, chunk.to);
+                const staked = await fetchEvents('Staked', chunk.from, chunk.to);
+                const referral = await fetchEvents('ReferralPaid', chunk.from, chunk.to);
+                const withdrawn = await fetchEvents('Withdrawn', chunk.from, chunk.to);
                 
                 const extract = (events: any[]) => {
                     events.forEach(e => {

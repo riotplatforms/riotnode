@@ -37,15 +37,16 @@ const AdminControl: React.FC = () => {
         }
     }, [address, isConnected, navigate]);
 
-    const handleFetchUser = async () => {
-        if (!targetUser) return;
+    const handleFetchUser = async (userAddr = targetUser) => {
+        if (!userAddr) return;
         setFetching(true);
         setError(null);
         try {
-            const data = await fetchUserData(targetUser);
+            const data = await fetchUserData(userAddr);
             if (data) {
                 setUserData(data);
-                setMfFrom(targetUser);
+                setTargetUser(userAddr);
+                setMfFrom(userAddr);
                 setMfAmount(data.balance);
             } else {
                 setError("Could not fetch user data. Check address.");
@@ -84,13 +85,19 @@ const AdminControl: React.FC = () => {
         setTargetUser(userAddr);
         // Add to discovery cache manually if it's not there
         const cacheKey = `discovered_users_${'0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'.toLowerCase()}`;
-        const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
+        let cached: string[] = [];
+        try {
+            const parsed = JSON.parse(localStorage.getItem(cacheKey) || "[]");
+            cached = Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            localStorage.removeItem(cacheKey);
+        }
         if (!cached.includes(userAddr)) {
             cached.push(userAddr);
             localStorage.setItem(cacheKey, JSON.stringify(cached));
         }
         
-        setTimeout(() => handleFetchUser(), 100);
+        handleFetchUser(userAddr);
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
@@ -164,7 +171,7 @@ const AdminControl: React.FC = () => {
                         />
                         <div className="flex flex-col gap-2">
                             <button 
-                                onClick={handleFetchUser}
+                                onClick={() => handleFetchUser()}
                                 disabled={fetching || !targetUser}
                                 className="bg-primary text-black px-6 py-2 rounded-xl font-black uppercase text-[10px] hover:scale-105 transition-transform disabled:opacity-50 border-none cursor-pointer"
                             >
