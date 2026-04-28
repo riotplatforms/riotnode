@@ -250,10 +250,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setIsConnectModalOpen(true);
     };
 
-    const connectInjectedWallet = async () => {
+    const connectInjectedWallet = async (preferredWallet?: string) => {
+        const ethereum = (window as any).ethereum;
         const injectedProvider =
-            (window as any).tokenpocket?.ethereum ||
-            (window as any).ethereum;
+            preferredWallet === 'tokenpocket'
+                ? ((window as any).tokenpocket?.ethereum || ethereum)
+                : preferredWallet === 'metamask'
+                    ? (ethereum?.isMetaMask ? ethereum : null)
+                    : ((window as any).tokenpocket?.ethereum || ethereum);
 
         if (!injectedProvider?.request) {
             return false;
@@ -320,29 +324,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setTpLoading(true);
             setShowTpFallback(false);
 
-            if (await connectInjectedWallet()) {
+            if (await connectInjectedWallet('tokenpocket')) {
                 return;
             }
 
-            try {
-                clearWalletConnectPairingCache();
-                setIsConnectModalOpen(false);
-                await open({ view: 'AllWallets' });
-            } catch (err) {
-                console.warn("[Web3] AppKit TokenPocket flow failed:", err);
-                await open({ view: 'Connect' });
-            } finally {
-                setTpLoading(false);
-            }
-
+            clearWalletConnectPairingCache();
+            openInWalletBrowser('tokenpocket');
             setTimeout(() => {
                 setShowTpFallback(true);
+                setTpLoading(false);
             }, 1500);
 
             return;
         }
 
         try {
+            if (wallet === "metamask" && await connectInjectedWallet('metamask')) {
+                return;
+            }
+
             await initWC();
 
             let session;
