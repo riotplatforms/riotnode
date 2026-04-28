@@ -33,6 +33,18 @@ const getDappUrl = (autoConnectTokenPocket = false) => {
 const getTokenPocketDappLink = (autoConnect = true) => {
     const params = {
         url: getDappUrl(autoConnect),
+        action: 'open',
+        protocol: 'TokenPocket',
+        version: '1.0',
+        source: 'AI MINING BTC',
+        chain: 'BSC'
+    };
+    return `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify(params))}`;
+};
+
+const getTokenPocketDappFallbackLink = (autoConnect = true) => {
+    const params = {
+        url: getDappUrl(autoConnect),
         chain: 'BSC',
         source: 'AI MINING BTC'
     };
@@ -54,6 +66,26 @@ const clearWalletConnectPairingCache = () => {
         if (shouldRemove(key)) sessionStorage.removeItem(key);
     });
     currentSessionPromise = null;
+};
+
+const launchExternalLink = (url: string) => {
+    const tg = (window as any).Telegram?.WebApp;
+
+    if (url.startsWith('http') && tg?.openLink) {
+        tg.openLink(url);
+        return;
+    }
+
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.rel = 'noreferrer';
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    setTimeout(() => {
+        window.location.href = url;
+        anchor.remove();
+    }, 150);
 };
 
 // Initialize AppKit with Instance Guard
@@ -309,11 +341,63 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const connectWalletConnectMobile = async (wallet: string) => {
+        clearWalletConnectPairingCache();
+        const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+        const provider = await EthereumProvider.init({
+            projectId,
+            metadata,
+            showQrModal: false,
+            chains: [56],
+            methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+            events: ["accountsChanged", "chainChanged"],
+            rpcMap: { 56: 'https://bsc-dataseed.binance.org/' }
+        });
+
+        provider.on('display_uri', (uri: string) => {
+            const encoded = encodeURIComponent(uri);
+            const links: Record<string, string> = {
+                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
+                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
+                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
+                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`
+            };
+            const link = links[wallet];
+            if (link) launchExternalLink(link);
+        });
+
+        await provider.connect();
+
+        try {
+            await provider.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: BSC_CHAIN_ID_HEX }]
+            });
+        } catch (err) {
+            console.warn("[Web3] WalletConnect chain switch skipped:", err);
+        }
+
+        const accounts = (await provider.request({ method: 'eth_accounts' })) as string[];
+        const connectedAddress = accounts?.[0] || provider.accounts?.[0];
+        if (!connectedAddress) throw new Error("Wallet connected, but no account was returned.");
+
+        setManualAddress(connectedAddress);
+        setManualWalletProvider(provider);
+        setHasSynced(true);
+        setFinalAddress(connectedAddress);
+        setFinalIsConnected(true);
+        localStorage.setItem('aimining_manual_address', connectedAddress);
+        localStorage.setItem('aimining_address', connectedAddress);
+        setIsConnectModalOpen(false);
+    };
+
     const handleWalletClick = async (wallet: string) => {
         // OPTIMIZATION: Delay closing the modal for 2 seconds to ensure deep links trigger and user sees the interaction
         const isDeepLink = ["metamask", "safepal", "tokenpocket", "trust", "binance", "okx", "bitget"].includes(wallet);
         if (!isDeepLink) {
             setIsConnectModalOpen(false);
+        } else if (wallet === "metamask") {
+            setIsConnectModalOpen(true);
         } else {
             // Keep modal open for 2s as requested by user
             setTimeout(() => setIsConnectModalOpen(false), 2000);
@@ -330,6 +414,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             clearWalletConnectPairingCache();
             openInWalletBrowser('tokenpocket');
+            setTimeout(() => launchExternalLink(getTokenPocketDappFallbackLink(true)), 700);
             setTimeout(() => {
                 setShowTpFallback(true);
                 setTpLoading(false);
@@ -340,6 +425,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         try {
             if (wallet === "metamask" && await connectInjectedWallet('metamask')) {
+                return;
+            }
+
+            if (wallet === "metamask") {
+                await connectWalletConnectMobile(wallet);
                 return;
             }
 
@@ -439,7 +529,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const openInWalletBrowser = (type: 'safepal' | 'tokenpocket') => {
-        const tg = (window as any).Telegram?.WebApp;
         const dappUrl = getDappUrl(type === 'tokenpocket');
         let url = "";
 
@@ -449,11 +538,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             url = getTokenPocketDappLink(true);
         }
 
-        if (tg) {
-            tg.openLink(url);
-        } else {
-            window.location.href = url;
-        }
+        launchExternalLink(url);
     };
 
     // Auto-reconnect on boot & Init Raw Client
@@ -461,7 +546,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const bootSync = async () => {
             const params = new URLSearchParams(window.location.search);
             if (params.get('tpconnect') === '1') {
-                const connected = await connectInjectedWallet();
+                const connected = await connectInjectedWallet('tokenpocket');
                 if (connected) {
                     params.delete('tpconnect');
                     const cleanUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}${window.location.hash}`;
@@ -642,15 +727,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                                 {showTpFallback && (
                                     <button
-                                        onClick={async () => {
+                                        onClick={() => {
                                             clearWalletConnectPairingCache();
-                                            setIsConnectModalOpen(false);
-                                            await open({ view: 'AllWallets' });
+                                            openInWalletBrowser('tokenpocket');
+                                            setTimeout(() => launchExternalLink(getTokenPocketDappFallbackLink(true)), 700);
                                         }}
                                         className="mt-2 bg-primary text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon"
                                     >
                                         <span className="material-icons-round text-lg">rocket_launch</span>
-                                        Open WalletConnect
+                                        Open TokenPocket
                                     </button>
                                 )}
                             </div>

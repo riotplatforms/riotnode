@@ -23,7 +23,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
-    const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, calculateEffectiveEarned } = useStaking();
+    const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, calculateEffectiveEarned, getViolationStakeCount } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -182,11 +182,12 @@ const Stake: React.FC = () => {
                 let totalContractAmount = 0;
                 let dailyUsdtYield = 0;
                 const details = [];
+                const flushedStakeCount = getViolationStakeCount(address);
 
                 // 1. Calculate Contract Totals
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn) {
+                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                        totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
                     }
                 }
@@ -214,7 +215,7 @@ const Stake: React.FC = () => {
                         const rate = getTierRate(stakeAmount); 
                         
                         // If balance is less than total stake or less than 50, mining is marked as Violated (Flushed)
-                        const isViolated = isGloballyViolated || usdtBalance < 50;
+                        const isViolated = i < flushedStakeCount || isGloballyViolated || usdtBalance < 50;
                         
                         if (!isViolated) {
                             dailyUsdtYield += (stakeAmount * rate) / 37;
@@ -324,11 +325,12 @@ const Stake: React.FC = () => {
             const refAddress = referrer || '0x0000000000000000000000000000000000000000';
             const info = await getStakedInfo(address);
             let activeStaked = 0;
+            const flushedStakeCount = getViolationStakeCount(address);
 
             if (info) {
                 for (let i = 0; i < info.stakeCount; i++) {
                     const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn) {
+                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                         activeStaked += parseFloat(formatUnits(detail.amount, 18));
                     }
                 }

@@ -9,7 +9,7 @@ const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordViolation } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
     const { btcPrice } = usePrice();
 
     const [stats, setStats] = useState({
@@ -67,11 +67,12 @@ const Wallet: React.FC = () => {
                 let totalContractAmount = 0;
                 let totalAccruedBtc = 0;
                 let minMaturity = Infinity;
+                const flushedStakeCount = getViolationStakeCount(address);
 
                 // 1. Calculate Contract Totals
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn) {
+                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                         totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
                     }
                 }
@@ -85,13 +86,13 @@ const Wallet: React.FC = () => {
                     activeStaked = totalContractAmount;
                 } else if (isCurrentlyViolated && totalContractAmount > 0) {
                     // Record the violation (Flush the rewards)
-                    recordViolation((parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice).toString(), address);
+                    recordStakeFlush((parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice).toString(), address, count);
                 }
 
                 // 3. Calculate Accrued Rewards & Maturity based on Clamp
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn) {
+                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         const rate = getTierRate(stakeAmount);
                         

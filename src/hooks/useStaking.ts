@@ -255,15 +255,30 @@ export function useStaking() {
         localStorage.setItem(`flushed_btc_${address.toLowerCase()}`, contractEarned);
     };
 
+    const recordStakeFlush = (contractEarned: string, address: string | undefined, stakeCount: number) => {
+        if (!address) return;
+        recordViolation(contractEarned, address);
+        localStorage.setItem(`flushed_stake_count_${address.toLowerCase()}`, stakeCount.toString());
+    };
+
+    const getViolationStakeCount = (address: string | undefined) => {
+        if (!address) return 0;
+        const stored = localStorage.getItem(`flushed_stake_count_${address.toLowerCase()}`) || "0";
+        return Math.max(0, parseInt(stored, 10) || 0);
+    };
+
+    const isViolationActive = (address: string | undefined) => getViolationStakeCount(address) > 0;
+
     const clearViolation = (address: string | undefined) => {
         if (!address) return;
         localStorage.removeItem(`flushed_btc_${address.toLowerCase()}`);
+        localStorage.removeItem(`flushed_stake_count_${address.toLowerCase()}`);
     };
 
     return {
         stake, approve, getAllowance, withdraw, getStakedInfo, getStakeDetails,
         getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings, 
-        calculateEffectiveEarned, recordViolation, clearViolation,
+        calculateEffectiveEarned, recordViolation, recordStakeFlush, getViolationStakeCount, isViolationActive, clearViolation,
         address, isConnected
     };
 }

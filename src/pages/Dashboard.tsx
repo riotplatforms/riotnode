@@ -24,7 +24,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve, calculateEffectiveEarned, recordViolation } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
     const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -74,11 +74,12 @@ const Dashboard: React.FC = () => {
             }
             const info = await getStakedInfo(address);
             let activeStaked = 0;
+            const flushedStakeCount = getViolationStakeCount(address);
 
             if (info) {
                 for (let i = 0; i < info.stakeCount; i++) {
                     const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn) {
+                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                         activeStaked += parseFloat(formatUnits(detail.amount, 18));
                     }
                 }
@@ -147,10 +148,11 @@ const Dashboard: React.FC = () => {
                     const count = info.stakeCount;
                     let totalContractAmount = 0;
                     let totalAccruedBtc = 0;
+                    const flushedStakeCount = getViolationStakeCount(address);
 
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(address, i);
-                        if (detail && !detail.withdrawn) {
+                        if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                             totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
                         }
                     }
@@ -170,7 +172,7 @@ const Dashboard: React.FC = () => {
                         // Calculate accrued for active stakes
                         for (let i = 0; i < count; i++) {
                             const detail = await getStakeDetails(address, i);
-                            if (detail && !detail.withdrawn) {
+                            if (detail && !detail.withdrawn && i >= flushedStakeCount) {
                                 const timePassed = (Date.now() / 1000) - detail.startTime;
                                 const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                                 const stakeRate = getTierRate(stakeAmount);
@@ -180,7 +182,7 @@ const Dashboard: React.FC = () => {
                         }
                     } else if (isCurrentlyViolated && totalContractAmount > 0) {
                         // Record the violation (Flush the rewards)
-                        recordViolation(finalizedEarnedBtc.toString(), address);
+                        recordStakeFlush(finalizedEarnedBtc.toString(), address, count);
                     }
 
                     const effectiveContractEarned = calculateEffectiveEarned(finalizedEarnedBtc.toString(), address);
