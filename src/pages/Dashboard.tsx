@@ -49,6 +49,7 @@ const Dashboard: React.FC = () => {
         activeMiners: '842',
         networkStatus: 'Stable'
     });
+    const isMiningActive = parseFloat(stats.miningPower) > 0;
 
     // Auto-resume mining after connection
     useEffect(() => {
@@ -201,6 +202,17 @@ const Dashboard: React.FC = () => {
                         ...prev,
                         ...newStats
                     }));
+                } else {
+                    setMiningStats((prev: any) => ({
+                        ...prev,
+                        miningPower: '0.0',
+                        balance: '0.00000000000000',
+                        dailyProfit: '0.00000000000000',
+                        rewardPerSecond: 0,
+                        totalStaked: '0.00',
+                        walletBalance: liveWalletUsdt.toFixed(2),
+                        isLoaded: true
+                    }));
                 }
             }
         };
@@ -314,7 +326,7 @@ const Dashboard: React.FC = () => {
                             cx="50" cy="50" fill="none" r="46"
                             stroke="url(#goldGradient)"
                             strokeDasharray="289"
-                            strokeDashoffset={isConnected ? "100" : "289"}
+                            strokeDashoffset={isMiningActive ? "100" : "289"}
                             strokeLinecap="round"
                             strokeWidth="3">
                         </circle>
@@ -328,7 +340,7 @@ const Dashboard: React.FC = () => {
                     </svg>
 
                     {/* Orbiting Icons (Only visible when active) */}
-                    {isConnected && (
+                    {isMiningActive && (
                         <>
                             <div className="absolute inset-0 flex items-center justify-center animate-orbit" style={{ animationDelay: '0s' }}>
                                 <span className="material-icons-round text-primary/40 text-xl">currency_bitcoin</span>
@@ -348,9 +360,9 @@ const Dashboard: React.FC = () => {
                     <div className="absolute w-48 h-48 border border-primary/20 rounded-full animate-reverse-spin" style={{ animationDuration: '20s' }}></div>
 
                     {/* Central Mining Node */}
-                    <div className={`relative w-36 h-36 bg-gradient-to-br from-gray-900 to-black rounded-full flex items-center justify-center shadow-neon border border-primary/30 ${isConnected ? 'animate-pulse-glow' : ''}`}>
+                    <div className={`relative w-36 h-36 bg-gradient-to-br from-gray-900 to-black rounded-full flex items-center justify-center shadow-neon border border-primary/30 ${isMiningActive ? 'animate-pulse-glow' : ''}`}>
                         <div className="absolute inset-0 bg-primary/20 rounded-full blur-2xl opacity-20"></div>
-                        <span className={`material-icons-round text-6xl text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.6)] ${isConnected ? 'animate-rotate-3d' : ''}`}>currency_bitcoin</span>
+                        <span className={`material-icons-round text-6xl text-primary drop-shadow-[0_0_15px_rgba(255,215,0,0.6)] ${isMiningActive ? 'animate-rotate-3d' : ''}`}>currency_bitcoin</span>
                         
                         {/* Status Particles */}
                         <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-primary rounded-full animate-ping"></div>
@@ -358,11 +370,11 @@ const Dashboard: React.FC = () => {
                     </div>
                     <div className="absolute bottom-6 bg-black/60 backdrop-blur-md border border-gray-800 px-3 py-1 rounded-full flex items-center gap-1">
                         <span className="material-icons-round text-xs text-primary">bolt</span>
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-gray-300">{isConnected ? 'MINING ACTIVE' : 'SYSTEM READY'}</span>
+                        <span className="text-[10px] uppercase font-bold tracking-wider text-gray-300">{isMiningActive ? 'MINING ACTIVE' : 'SYSTEM READY'}</span>
                     </div>
                 </div>
                 <div className="mt-6 text-center">
-                    <p className="text-primary font-display font-bold text-lg tracking-widest uppercase">{isConnected ? 'System Operational' : 'Node Inactive'}</p>
+                    <p className="text-primary font-display font-bold text-lg tracking-widest uppercase">{isMiningActive ? 'System Operational' : 'Node Inactive'}</p>
                     <div className="flex flex-col gap-1 mt-1">
                         <div className="flex justify-between items-center px-8 gap-4">
                             <div className="text-left">
