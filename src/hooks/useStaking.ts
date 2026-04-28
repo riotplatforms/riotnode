@@ -46,29 +46,6 @@ export const getTierRate = (val: number) => {
 
 const BSC_RPC = 'https://bsc-dataseed.binance.org/'; // Primary endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-const waitForBscReceipt = async (hash: string) => {
-    const receipt = await readOnlyProvider.waitForTransaction(hash, 1, 120000);
-    if (!receipt || receipt.status !== 1) {
-        throw new Error("Transaction confirmation failed. Please try again.");
-    }
-    return receipt;
-};
-
-const waitForAllowance = async (owner: string) => {
-    const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
-
-    for (let attempt = 0; attempt < 45; attempt++) {
-        const allowance = await usdt.allowance(owner, CONTRACT_ADDRESS);
-        if (allowance >= APPROVAL_AMOUNT) {
-            return allowance;
-        }
-        await delay(2000);
-    }
-
-    throw new Error("Approval confirmed but allowance is not updated yet. Please try staking again.");
-};
 
 export function useStaking() {
     const { address, isConnected, signer, walletProvider } = useWallet();
@@ -149,8 +126,7 @@ export function useStaking() {
         const usdt = await getUsdtContract(true);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
-        await waitForBscReceipt(tx.hash);
-        return await waitForAllowance(owner);
+        return tx;
     };
 
     const getAllowance = async (ownerAddress?: string) => {
