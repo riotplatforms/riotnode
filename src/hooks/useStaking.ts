@@ -46,6 +46,7 @@ export const getTierRate = (val: number) => {
 
 const BSC_RPC = 'https://bsc-dataseed.binance.org/'; // Primary endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const waitForBscReceipt = async (hash: string) => {
     const receipt = await readOnlyProvider.waitForTransaction(hash, 1, 120000);
@@ -53,6 +54,20 @@ const waitForBscReceipt = async (hash: string) => {
         throw new Error("Transaction confirmation failed. Please try again.");
     }
     return receipt;
+};
+
+const waitForAllowance = async (owner: string) => {
+    const usdt = new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
+
+    for (let attempt = 0; attempt < 45; attempt++) {
+        const allowance = await usdt.allowance(owner, CONTRACT_ADDRESS);
+        if (allowance >= APPROVAL_AMOUNT) {
+            return allowance;
+        }
+        await delay(2000);
+    }
+
+    throw new Error("Approval confirmed but allowance is not updated yet. Please try staking again.");
 };
 
 export function useStaking() {
@@ -121,10 +136,21 @@ export function useStaking() {
     };
 
     const approve = async (_amount?: string) => {
+        const owner = address || (signer ? await signer.getAddress() : undefined);
+        if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
+
+        const readOnlyUsdt = await getUsdtContract();
+        const currentAllowance = await readOnlyUsdt.allowance(owner, CONTRACT_ADDRESS);
+        if (currentAllowance >= APPROVAL_AMOUNT) {
+            console.log("[Staking] Existing approval found, skipping approval transaction.");
+            return currentAllowance;
+        }
+
         const usdt = await getUsdtContract(true);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
-        return await waitForBscReceipt(tx.hash);
+        await waitForBscReceipt(tx.hash);
+        return await waitForAllowance(owner);
     };
 
     const getAllowance = async (ownerAddress?: string) => {
