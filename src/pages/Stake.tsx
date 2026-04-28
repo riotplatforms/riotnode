@@ -23,7 +23,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
-    const { stake, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, calculateEffectiveEarned, getViolationStakeCount } = useStaking();
+    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, calculateEffectiveEarned, getViolationStakeCount } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -311,11 +311,10 @@ const Stake: React.FC = () => {
 
         if (loading) return;
 
-        const minAmountStr = priceStr.split(' ')[0];
-        const minAmount = parseFloat(minAmountStr);
-
         setLoading(id);
         try {
+            await approve();
+
             const balanceStr = await getWalletBalance(address);
             if (balanceStr === null) {
                 throw new Error("Could not check wallet balance due to network issues. Try again.");
@@ -338,8 +337,9 @@ const Stake: React.FC = () => {
 
             const stakeableBalance = Math.max(0, balance - activeStaked);
 
-            if (stakeableBalance < minAmount) {
-                throw new Error(`Insufficient extra USDT. Add at least ${minAmount} unstaked USDT for this tier.`);
+            if (stakeableBalance < 50) {
+                showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
+                return;
             }
 
             await stake(formatUsdtAmount(stakeableBalance), refAddress);
@@ -670,10 +670,10 @@ const Stake: React.FC = () => {
                             </div>
                             <button
                                 onClick={() => handleBuy('extra-fund', '50 USDT')}
-                                disabled={loading === 'extra-fund' || parseFloat(funds.extraFund) < 50}
+                                disabled={loading === 'extra-fund'}
                                 className={`relative z-10 w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-none ${parseFloat(funds.extraFund) >= 50
                                     ? 'bg-primary text-black shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
-                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'
+                                    : 'bg-white/5 text-gray-300 border border-white/5 cursor-pointer'
                                     }`}
                             >
                                 {loading === 'extra-fund' ? 'Processing...' : 'Stake Extra Fund'}
