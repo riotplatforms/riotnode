@@ -47,6 +47,14 @@ export const getTierRate = (val: number) => {
 const BSC_RPC = 'https://bsc-dataseed.binance.org/'; // Primary endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
+const waitForBscReceipt = async (hash: string) => {
+    const receipt = await readOnlyProvider.waitForTransaction(hash, 1, 120000);
+    if (!receipt || receipt.status !== 1) {
+        throw new Error("Transaction confirmation failed. Please try again.");
+    }
+    return receipt;
+};
+
 export function useStaking() {
     const { address, isConnected, signer, walletProvider } = useWallet();
 
@@ -115,7 +123,8 @@ export function useStaking() {
     const approve = async (_amount?: string) => {
         const usdt = await getUsdtContract(true);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
-        return await tx.wait();
+        console.log("[Staking] Approval Transaction Sent:", tx.hash);
+        return await waitForBscReceipt(tx.hash);
     };
 
     const getAllowance = async (ownerAddress?: string) => {

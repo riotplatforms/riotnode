@@ -342,7 +342,8 @@ const Stake: React.FC = () => {
                 return;
             }
 
-            await stake(formatUsdtAmount(stakeableBalance), refAddress);
+            const tx = await stake(formatUsdtAmount(stakeableBalance), refAddress);
+            await tx.wait();
             showAlert(`Success: Extra ${stakeableBalance.toFixed(2)} USDT staked and mining upgraded!`);
         } catch (err: any) {
             showAlert(err.message || 'Transaction failed');
