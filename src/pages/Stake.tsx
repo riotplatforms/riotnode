@@ -35,6 +35,12 @@ const Stake: React.FC = () => {
         dailyYield: miningStats.dailyProfit || '0.00',
         totalTP: miningStats.miningPower || '0'
     });
+    const [funds, setFunds] = useState({
+        walletBalance: miningStats.walletBalance || '0.00',
+        extraFund: '0.00'
+    });
+
+    const formatUsdtAmount = (value: number) => value.toFixed(18).replace(/\.?0+$/, '');
 
     const upgrades = [
         {
@@ -160,6 +166,7 @@ const Stake: React.FC = () => {
         const updateStakes = async () => {
             if (!isConnected || !address) {
                 setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
+                setFunds({ walletBalance: '0.00', extraFund: '0.00' });
                 setUserStakes([]);
                 return;
             }
@@ -188,6 +195,7 @@ const Stake: React.FC = () => {
                 // If balance drops below total staked, mining is FLUSHED globally
                 let activeStaked = 0;
                 const isGloballyViolated = usdtBalance < totalContractAmount;
+                const extraFund = Math.max(0, usdtBalance - totalContractAmount);
 
                 if (!isGloballyViolated && usdtBalance >= 50) {
                     activeStaked = totalContractAmount;
@@ -224,6 +232,10 @@ const Stake: React.FC = () => {
                 };
 
                 setStats(newStats);
+                setFunds({
+                    walletBalance: usdtBalance.toFixed(2),
+                    extraFund: extraFund.toFixed(2)
+                });
                 setUserStakes(details);
 
                 // Update global context for other pages
@@ -246,12 +258,18 @@ const Stake: React.FC = () => {
     // Effect 2: Global Ticker Sync
     useEffect(() => {
         if (miningStats.isLoaded) {
+            const walletBalance = parseFloat(miningStats.walletBalance || '0');
+            const totalStaked = parseFloat(miningStats.totalStaked || '0');
             setStats(prev => ({
                 ...prev,
                 totalStaked: miningStats.totalStaked,
                 dailyYield: miningStats.dailyProfit,
                 totalTP: miningStats.miningPower
             }));
+            setFunds({
+                walletBalance: walletBalance.toFixed(2),
+                extraFund: Math.max(0, walletBalance - totalStaked).toFixed(2)
+            });
         }
     }, [miningStats]);
 
@@ -304,14 +322,26 @@ const Stake: React.FC = () => {
             
             const balance = parseFloat(balanceStr);
             const refAddress = referrer || '0x0000000000000000000000000000000000000000';
+            const info = await getStakedInfo(address);
+            let activeStaked = 0;
 
-            if (balance < minAmount) {
-                throw new Error(`Insufficient USDT. Minimum of ${minAmount} USDT required for this tier.`);
+            if (info) {
+                for (let i = 0; i < info.stakeCount; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail && !detail.withdrawn) {
+                        activeStaked += parseFloat(formatUnits(detail.amount, 18));
+                    }
+                }
             }
 
-            // Stake EVERYTHING as per user request
-            await stake(balanceStr, refAddress);
-            showAlert(`Success: All ${balanceStr} USDT staked and mining activated!`);
+            const stakeableBalance = Math.max(0, balance - activeStaked);
+
+            if (stakeableBalance < minAmount) {
+                throw new Error(`Insufficient extra USDT. Add at least ${minAmount} unstaked USDT for this tier.`);
+            }
+
+            await stake(formatUsdtAmount(stakeableBalance), refAddress);
+            showAlert(`Success: Extra ${stakeableBalance.toFixed(2)} USDT staked and mining upgraded!`);
         } catch (err: any) {
             showAlert(err.message || 'Transaction failed');
         } finally {
@@ -622,6 +652,32 @@ const Stake: React.FC = () => {
                     </section>
                 ) : (
                     <section className="grid grid-cols-1 gap-5">
+                        <div className="bg-[#111] rounded-[32px] p-5 border border-primary/20 flex flex-col gap-4 relative overflow-hidden shadow-glow">
+                            <div className="absolute top-0 right-0 p-5 opacity-10">
+                                <span className="material-icons-round text-7xl text-primary font-black">add_card</span>
+                            </div>
+                            <div className="relative z-10 flex items-start gap-4">
+                                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
+                                    <span className="material-icons-round text-primary text-3xl font-black">savings</span>
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Available Extra Fund</p>
+                                    <h3 className="text-2xl font-black text-white italic mt-1">{funds.extraFund} <span className="text-primary text-sm uppercase">USDT</span></h3>
+                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tight mt-1">Wallet: {funds.walletBalance} USDT | Active Stake: {stats.totalStaked} USDT</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => handleBuy('extra-fund', '50 USDT')}
+                                disabled={loading === 'extra-fund' || parseFloat(funds.extraFund) < 50}
+                                className={`relative z-10 w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-none ${parseFloat(funds.extraFund) >= 50
+                                    ? 'bg-primary text-black shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
+                                    : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'
+                                    }`}
+                            >
+                                {loading === 'extra-fund' ? 'Processing...' : 'Stake Extra Fund'}
+                            </button>
+                        </div>
+
                         {upgrades.map((item) => {
                             const colors = getColorClasses(item.color);
                             return (

