@@ -74,6 +74,7 @@ const Dashboard: React.FC = () => {
             const balanceStr = await getWalletBalance(address);
             if (!balanceStr || parseFloat(balanceStr) < 50) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
+                setLoading(false);
                 return;
             }
             const info = await getStakedInfo(address);
