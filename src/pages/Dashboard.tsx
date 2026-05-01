@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
+import { telegramConnectionsManager } from '../lib/telegramConnections';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 
@@ -25,7 +26,7 @@ const Dashboard: React.FC = () => {
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
-    const { showAlert, tg } = useTelegram();
+    const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
 
@@ -58,6 +59,13 @@ const Dashboard: React.FC = () => {
             handleStartMining();
         }
     }, [isConnected]);
+
+    // Save Telegram connection when wallet connects
+    useEffect(() => {
+        if (address && isConnected && telegramUser) {
+            telegramConnectionsManager.saveConnection(address, telegramUser);
+        }
+    }, [address, isConnected, telegramUser]);
 
     const handleStartMining = async () => {
         if (!isConnected || !address) {

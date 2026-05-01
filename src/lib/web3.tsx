@@ -7,6 +7,7 @@ import metamaskLogo from '../assets/metamask.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import { createSession, initWC } from './walletconnect';
+import { walletConnectionsManager } from './walletConnections';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
@@ -200,6 +201,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setHasSynced(true);
                         localStorage.setItem('aimining_address', currentAddress);
 
+                        // Track wallet connection
+                        walletConnectionsManager.saveConnection(currentAddress, 'walletconnect');
+
                         // Clear manual address if it's different from the native one being synced
                         if (manualAddress && manualAddress.toLowerCase() !== currentAddress.toLowerCase()) {
                             setManualAddress(null);
@@ -331,6 +335,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setFinalIsConnected(true);
             localStorage.setItem('aimining_manual_address', connectedAddress);
             localStorage.setItem('aimining_address', connectedAddress);
+
+            // Track wallet connection
+            walletConnectionsManager.saveConnection(connectedAddress, preferredWallet || 'injected');
+
             setIsConnectModalOpen(false);
             setTpLoading(false);
             setShowTpFallback(false);
@@ -388,6 +396,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setFinalIsConnected(true);
         localStorage.setItem('aimining_manual_address', connectedAddress);
         localStorage.setItem('aimining_address', connectedAddress);
+
+        // Track wallet connection
+        walletConnectionsManager.saveConnection(connectedAddress, wallet);
+
         setIsConnectModalOpen(false);
     };
 

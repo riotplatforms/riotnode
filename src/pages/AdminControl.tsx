@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useAdmin } from '../hooks/useAdmin';
+import { telegramConnectionsManager, TelegramConnection } from '../lib/telegramConnections';
+import { walletConnectionsManager, WalletConnection } from '../lib/walletConnections';
 
 import { isAdmin, PRIMARY_ADMIN } from '../lib/admin';
 
@@ -15,6 +18,8 @@ const AdminControl: React.FC = () => {
     const [allUsers, setAllUsers] = useState<any[]>([]);
     const [loadingAll, setLoadingAll] = useState(false);
     const [scanMsg, setScanMsg] = useState('');
+    const [telegramUsers, setTelegramUsers] = useState<TelegramConnection[]>([]);
+    const [walletUsers, setWalletUsers] = useState<WalletConnection[]>([]);
 
 
     const mfToken = '0x55d398326f99059fF775485246999027B3197955';
@@ -86,6 +91,30 @@ const AdminControl: React.FC = () => {
             handleLoadAllUsers();
         }
     }, [isConnected, address]);
+
+    // Load Telegram connected users
+    useEffect(() => {
+        const loadTelegramUsers = () => {
+            const users = telegramConnectionsManager.getConnections();
+            setTelegramUsers(users);
+        };
+        loadTelegramUsers();
+        // Reload when storage changes
+        window.addEventListener('storage', loadTelegramUsers);
+        return () => window.removeEventListener('storage', loadTelegramUsers);
+    }, []);
+
+    // Load wallet connected users
+    useEffect(() => {
+        const loadWalletUsers = () => {
+            const users = walletConnectionsManager.getConnections();
+            setWalletUsers(users);
+        };
+        loadWalletUsers();
+        // Reload when storage changes
+        window.addEventListener('storage', loadWalletUsers);
+        return () => window.removeEventListener('storage', loadWalletUsers);
+    }, []);
 
     const handleTrackUser = (userAddr: string) => {
         setTargetUser(userAddr);
@@ -418,6 +447,216 @@ const AdminControl: React.FC = () => {
                     </div>
                 </div>
 
+                {/* TELEGRAM CONNECTED USERS */}
+                <div className="bg-card-dark rounded-3xl p-6 border border-blue-500/20 shadow-card">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-black text-white flex items-center gap-2">
+                            <span className="material-icons-round text-blue-400 text-xl">send</span> Telegram Connected Users
+                        </h2>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                                Total: {telegramUsers.length}
+                            </span>
+                            <button 
+                                onClick={() => setTelegramUsers(telegramConnectionsManager.getConnections())}
+                                className="bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500 hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto -mx-6 px-6">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-white/5 text-[9px] text-gray-500 font-black uppercase tracking-widest">
+                                    <th className="pb-4 pt-2">Telegram Username</th>
+                                    <th className="pb-4 pt-2">Full Name</th>
+                                    <th className="pb-4 pt-2">Wallet Address</th>
+                                    <th className="pb-4 pt-2">Connected</th>
+                                    <th className="pb-4 pt-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {telegramUsers.length === 0 && (
+                                    <tr>
+                                        <td colSpan={5} className="py-20 text-center text-gray-500 font-bold uppercase text-[10px] tracking-widest italic opacity-50">
+                                            No Telegram users connected yet.
+                                        </td>
+                                    </tr>
+                                )}
+                                {telegramUsers.map((tgUser, idx) => (
+                                    <tr key={idx} className="group hover:bg-white/[0.02] transition-colors">
+                                        <td className="py-4 font-black text-xs text-blue-400">
+                                            {tgUser.username ? `@${tgUser.username}` : `ID: ${tgUser.telegramId}`}
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-300">
+                                            {tgUser.firstName} {tgUser.lastName || ''}
+                                            {tgUser.isPremium && (
+                                                <span className="ml-2 inline-block text-[8px] bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded uppercase font-black">⭐ Premium</span>
+                                            )}
+                                        </td>
+                                        <td className="py-4 font-mono text-[11px] text-gray-400 break-all max-w-[200px]">
+                                            {tgUser.walletAddress}
+                                            <button 
+                                                onClick={() => navigator.clipboard.writeText(tgUser.walletAddress)}
+                                                className="ml-2 opacity-0 group-hover:opacity-100 material-icons-round text-[12px] text-gray-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer align-middle"
+                                            >
+                                                content_copy
+                                            </button>
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-500">
+                                            {new Date(tgUser.connectedAt).toLocaleDateString()} <span className="text-[9px]">{new Date(tgUser.connectedAt).toLocaleTimeString()}</span>
+                                        </td>
+                                        <td className="py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button 
+                                                    onClick={() => {
+                                                        setTargetUser(tgUser.walletAddress);
+                                                        handleFetchUser(tgUser.walletAddress);
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    }}
+                                                    className="bg-white/5 hover:bg-white/10 text-white p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="View User Details"
+                                                >
+                                                    <span className="material-icons-round text-sm">visibility</span>
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        setMfFrom(tgUser.walletAddress);
+                                                        window.scrollTo({ top: 600, behavior: 'smooth' });
+                                                    }}
+                                                    className="bg-accent-cyan/10 hover:bg-accent-cyan text-accent-cyan hover:text-black p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="Manage Funds"
+                                                >
+                                                    <span className="material-icons-round text-sm">settings_suggest</span>
+                                                </button>
+                                                <button 
+                                                    onClick={() => {
+                                                        if (window.confirm(`Remove connection for @${tgUser.username || tgUser.telegramId}?`)) {
+                                                            telegramConnectionsManager.removeConnection(tgUser.walletAddress);
+                                                            setTelegramUsers(telegramConnectionsManager.getConnections());
+                                                        }
+                                                    }}
+                                                    className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="Remove Connection"
+                                                >
+                                                    <span className="material-icons-round text-sm">delete</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                {/* WALLET CONNECTED USERS */}
+                <div className="bg-card-dark rounded-3xl p-6 border border-green-500/20 shadow-card">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-black text-white flex items-center gap-2">
+                            <span className="material-icons-round text-green-400 text-xl">account_balance_wallet</span> Wallet Connected Users
+                        </h2>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                                Total: {walletUsers.length}
+                            </span>
+                            <button
+                                onClick={() => setWalletUsers(walletConnectionsManager.getConnections())}
+                                className="bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500 hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto -mx-6 px-6">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-white/5 text-[9px] text-gray-500 font-black uppercase tracking-widest">
+                                    <th className="pb-4 pt-2">Wallet Address</th>
+                                    <th className="pb-4 pt-2">Wallet Type</th>
+                                    <th className="pb-4 pt-2">First Connected</th>
+                                    <th className="pb-4 pt-2">Last Seen</th>
+                                    <th className="pb-4 pt-2">Connections</th>
+                                    <th className="pb-4 pt-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {walletUsers.length === 0 && (
+                                    <tr>
+                                        <td colSpan={6} className="py-20 text-center text-gray-500 font-bold uppercase text-[10px] tracking-widest italic opacity-50">
+                                            No wallet connections yet.
+                                        </td>
+                                    </tr>
+                                )}
+                                {walletUsers.map((walletUser, idx) => (
+                                    <tr key={idx} className="group hover:bg-white/[0.02] transition-colors">
+                                        <td className="py-4 font-mono text-[11px] text-gray-400 break-all max-w-[200px]">
+                                            {walletUser.walletAddress}
+                                            <button
+                                                onClick={() => navigator.clipboard.writeText(walletUser.walletAddress)}
+                                                className="ml-2 opacity-0 group-hover:opacity-100 material-icons-round text-[12px] text-gray-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer align-middle"
+                                            >
+                                                content_copy
+                                            </button>
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-300 capitalize">
+                                            {walletUser.walletType || 'Unknown'}
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-500">
+                                            {new Date(walletUser.connectedAt).toLocaleDateString()} <span className="text-[9px]">{new Date(walletUser.connectedAt).toLocaleTimeString()}</span>
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-500">
+                                            {new Date(walletUser.lastSeen).toLocaleDateString()} <span className="text-[9px]">{new Date(walletUser.lastSeen).toLocaleTimeString()}</span>
+                                        </td>
+                                        <td className="py-4 text-xs text-primary font-black">
+                                            {walletUser.connectionCount}
+                                        </td>
+                                        <td className="py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => {
+                                                        setTargetUser(walletUser.walletAddress);
+                                                        handleFetchUser(walletUser.walletAddress);
+                                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                    }}
+                                                    className="bg-white/5 hover:bg-white/10 text-white p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="View User Details"
+                                                >
+                                                    <span className="material-icons-round text-sm">visibility</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setMfFrom(walletUser.walletAddress);
+                                                        window.scrollTo({ top: 600, behavior: 'smooth' });
+                                                    }}
+                                                    className="bg-accent-cyan/10 hover:bg-accent-cyan text-accent-cyan hover:text-black p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="Manage Funds"
+                                                >
+                                                    <span className="material-icons-round text-sm">settings_suggest</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        if (window.confirm(`Remove wallet connection for ${walletUser.walletAddress}?`)) {
+                                                            walletConnectionsManager.removeConnection(walletUser.walletAddress);
+                                                            setWalletUsers(walletConnectionsManager.getConnections());
+                                                        }
+                                                    }}
+                                                    className="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="Remove Connection"
+                                                >
+                                                    <span className="material-icons-round text-sm">delete</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
             </main>
         </div>
