@@ -9,7 +9,7 @@ import { usePrice } from '../hooks/usePrice';
 const Team: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected } = useWallet();
-    const { getStakedInfo, getTeamTree, getTeamMiningStats } = useStaking();
+    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, recordViolation } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -24,6 +24,9 @@ const Team: React.FC = () => {
     });
 
     const [liveTeamBalance, setLiveTeamBalance] = useState('0.00000000000000');
+    const [referralDetails, setReferralDetails] = useState<Array<{address: string, referrer: string, level: number, stake: number}>>([]);
+    const [perLevelIncome, setPerLevelIncome] = useState<Record<number, { count: number; staked: number; rate: number; estimatedIncome: number }>>({});
+    const [isReferralFlushed, setIsReferralFlushed] = useState(false);
 
     const fetchTeamData = useCallback(async () => {
         if (!isConnected || !address) return;
@@ -33,9 +36,21 @@ const Team: React.FC = () => {
             const info = await getStakedInfo(address);
             if (!info) return;
 
+            const walletBalance = await getWalletBalance(address);
+            const walletBalanceNum = walletBalance ? parseFloat(walletBalance) : 0;
             const myStake = parseFloat(formatUnits(info.totalStaked, 18));
             const isEligible = myStake >= 200;
-            
+            const violationActive = walletBalanceNum < myStake;
+
+            // Flush self mining and referral income when balance falls below own staked amount
+            if (violationActive && isEligible) {
+                recordViolation(formatUnits(info.totalEarned, 18), address);
+            }
+
+            const referralIncomeData = await getPerLevelReferralIncome(address, walletBalanceNum);
+            setPerLevelIncome(referralIncomeData.byLevel);
+            setIsReferralFlushed(referralIncomeData.isFlushed);
+
             let unlocked = 0;
             if (myStake >= 2000) unlocked = 10;
             else if (myStake >= 1000) unlocked = 6;
@@ -44,6 +59,26 @@ const Team: React.FC = () => {
             // Fetch team tree from events
             const tree = await getTeamTree(address);
             const teamStats = await getTeamMiningStats(tree, btcPrice);
+
+            // Build referral relationship details
+            const details: Array<{address: string, referrer: string, level: number, stake: number}> = [];
+            for (const levelStr in tree) {
+                const level = parseInt(levelStr);
+                const members = tree[level];
+                for (const memberAddr of members) {
+                    const memberInfo = await getStakedInfo(memberAddr);
+                    if (memberInfo) {
+                        details.push({
+                            address: memberAddr,
+                            referrer: memberInfo.referrer,
+                            level: level,
+                            stake: parseFloat(formatUnits(memberInfo.totalStaked, 18))
+                        });
+                    }
+                }
+            }
+
+            setReferralDetails(details);
 
             // Direct Invitations ($20 each) - based on Level 1 count
             const directCount = tree[1]?.length || 0;
@@ -68,7 +103,7 @@ const Team: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [isConnected, address, getStakedInfo, getTeamTree, getTeamMiningStats, btcPrice]);
+    }, [isConnected, address, getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, btcPrice]);
 
     useEffect(() => {
         fetchTeamData();
@@ -198,6 +233,96 @@ const Team: React.FC = () => {
                             <p className="text-xl font-black text-white tracking-tighter">{stats.totalTeamMembers} <span className="text-[10px] text-[#444] uppercase">Active</span></p>
                         </div>
                     </div>
+                </div>
+
+                {/* Referral Relationships Section */}
+                <div className="bg-card-dark rounded-3xl p-6 border border-primary/20 shadow-card">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-black text-white flex items-center gap-2">
+                            <span className="material-icons-round text-primary text-xl">account_tree</span> Referral Relationships
+                        </h2>
+                        <div className="text-right">
+                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Total Referrals</p>
+                            <p className="text-lg font-black text-primary">{referralDetails.length}</p>
+                        </div>
+                    </div>
+
+                    {referralDetails.length === 0 ? (
+                        <div className="text-center py-12">
+                            <span className="material-icons-round text-4xl text-gray-600 mb-4 block">people_outline</span>
+                            <p className="text-gray-500 text-sm font-medium">No referrals yet</p>
+                            <p className="text-gray-600 text-xs mt-1">Share your referral link to start building your network</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4 max-h-96 overflow-y-auto">
+                            {referralDetails.map((referral, index) => (
+                                <div key={index} className="bg-white/5 rounded-xl p-4 border border-white/10 hover:bg-white/10 transition-colors">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                                                <span className="material-icons-round text-primary text-sm font-black">person</span>
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-black text-white">Level {referral.level} Referral</p>
+                                                <p className="text-xs text-gray-400 font-mono break-all">{referral.address}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs text-gray-500 font-black uppercase">Staked</p>
+                                            <p className="text-sm font-black text-green-500">{referral.stake.toFixed(0)} USDT</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="flex items-center gap-2 text-xs">
+                                        <span className="text-gray-500">Referred by:</span>
+                                        <span className="font-mono text-primary break-all">{referral.referrer}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Referral Income Breakdown */}
+                <div className="bg-[#0c0c0c] rounded-3xl p-6 border border-white/5">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                <span className="material-icons-round text-primary text-xl">timeline</span>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-black text-white uppercase tracking-widest">Referral Income Breakdown</h3>
+                                <p className="text-[10px] text-gray-500 uppercase tracking-[0.2em]">Per-level income estimate</p>
+                            </div>
+                        </div>
+                        {isReferralFlushed && (
+                            <span className="text-[10px] font-black uppercase tracking-widest text-red-400">Referral Flush Active</span>
+                        )}
+                    </div>
+
+                    {Object.keys(perLevelIncome).length === 0 ? (
+                        <div className="text-center py-10">
+                            <p className="text-sm font-black text-white">No active referral income found.</p>
+                            <p className="text-[10px] text-gray-500 mt-2">Make sure you have 200+ USDT self stake and your downline members are staking.</p>
+                            {isReferralFlushed && (
+                                <p className="text-[10px] text-red-400 mt-3">Referral income flushed because your wallet balance dropped below your own stake.</p>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {Object.entries(perLevelIncome).map(([level, data]) => (
+                                <div key={level} className="grid grid-cols-5 gap-3 items-center bg-white/5 p-3 rounded-2xl border border-white/10">
+                                    <div className="col-span-1 text-xs font-black text-primary uppercase">Lv. {level}</div>
+                                    <div className="col-span-2 text-[11px] text-gray-300">{data.count} referrals</div>
+                                    <div className="col-span-1 text-[11px] text-gray-300">{data.staked.toFixed(0)} USDT</div>
+                                    <div className="col-span-1 text-right text-[11px] font-black text-white">{data.estimatedIncome.toFixed(4)} USDT</div>
+                                </div>
+                            ))}
+                            <div className="text-[10px] text-gray-500 pt-2 border-t border-white/10">
+                                Estimates are based on eligible network stake and current level commission rules.
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* Referral Link */}

@@ -181,7 +181,7 @@ contract AIMinerBTC {
             uint256 uplineStake = users[upline].totalStaked;
 
             if (i <= 3) {
-                if (uplineStake >= 300 * 1e18) {
+                if (uplineStake >= 200 * 1e18) {
                     if (i == 1) commission = (_amount * 5) / 100;
                     else if (i == 2) commission = (_amount * 3) / 100;
                     else if (i == 3) commission = (_amount * 2) / 100;

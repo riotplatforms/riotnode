@@ -79,7 +79,7 @@ const Stake: React.FC = () => {
             description: 'High-performance AI mining with specialized compute.',
             tp: '+750 GH/s',
             lvl: '6%',
-            price: '300 USDT',
+            price: '200 USDT',
             icon: 'psychology',
             color: 'blue'
         },

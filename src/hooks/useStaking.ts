@@ -286,10 +286,109 @@ export function useStaking() {
         localStorage.removeItem(`flushed_stake_count_${address.toLowerCase()}`);
     };
 
+    // Referral Income Tracking (similar to stake flush)
+    const recordReferralFlush = (referralRewards: string, address: string | undefined) => {
+        if (!address) return;
+        const key = `referral_flush_${address.toLowerCase()}`;
+        localStorage.setItem(key, referralRewards);
+        console.log(`[Referral Flush] Recorded for ${address}: ${referralRewards} USDT`);
+    };
+
+    const getIsReferralFlushed = (address: string | undefined) => {
+        if (!address) return false;
+        const key = `referral_flush_${address.toLowerCase()}`;
+        return localStorage.getItem(key) !== null;
+    };
+
+    const clearReferralFlush = (address: string | undefined) => {
+        if (!address) return;
+        localStorage.removeItem(`referral_flush_${address.toLowerCase()}`);
+    };
+
+    // Calculate per-level referral income with eligibility checks and flush logic
+    const getPerLevelReferralIncome = async (userAddress: string, walletBalance: number) => {
+        const contract = await getContract();
+        if (!contract) return { byLevel: {}, isEligible: false, isFlushed: false };
+
+        try {
+            const info = await getStakedInfo(userAddress);
+            if (!info) return { byLevel: {}, isEligible: false, isFlushed: false };
+
+            const selfStaked = parseFloat(formatUnits(info.totalStaked, 18));
+            const referralRewards = parseFloat(formatUnits(info.referralRewards, 18));
+
+            // Check eligibility: 200+ USDT self stake and wallet balance >= staked
+            const isEligible = selfStaked >= 200;
+            const isViolated = walletBalance < selfStaked;
+
+            // If violated, flush referral income
+            if (isViolated && isEligible && referralRewards > 0) {
+                recordReferralFlush(referralRewards.toString(), userAddress);
+                return { byLevel: {}, isEligible, isFlushed: true };
+            }
+
+            if (!isEligible || getIsReferralFlushed(userAddress)) {
+                return { byLevel: {}, isEligible, isFlushed: getIsReferralFlushed(userAddress) };
+            }
+
+            // Get team tree and calculate per-level income
+            const tree = await getTeamTree(userAddress);
+            const byLevel: Record<number, { count: number; staked: number; rate: number; estimatedIncome: number }> = {};
+
+            const levelRates: Record<number, number> = {
+                1: 0.05, 2: 0.03, 3: 0.02, 4: 0.01, 5: 0.01,
+                6: 0.01, 7: 0.01, 8: 0.01, 9: 0.01, 10: 0.01
+            };
+
+            for (const levelStr in tree) {
+                const level = parseInt(levelStr);
+                const rate = levelRates[level] || 0;
+                const members = tree[level];
+                let levelStaked = 0;
+                let levelIncome = 0;
+
+                for (const addr of members) {
+                    const memberInfo = await getStakedInfo(addr);
+                    if (memberInfo) {
+                        const staked = parseFloat(formatUnits(memberInfo.totalStaked, 18));
+                        levelStaked += staked;
+
+                        // Only count if member has staking and meets thresholds
+                        if (level <= 3 && staked >= 200) {
+                            const memberDailyReward = (staked * getTierRate(staked)) / 37;
+                            levelIncome += memberDailyReward * rate;
+                        } else if (level <= 6 && staked >= 1000) {
+                            const memberDailyReward = (staked * getTierRate(staked)) / 37;
+                            levelIncome += memberDailyReward * rate;
+                        } else if (level > 6 && staked >= 2000) {
+                            const memberDailyReward = (staked * getTierRate(staked)) / 37;
+                            levelIncome += memberDailyReward * rate;
+                        }
+                    }
+                }
+
+                if (members.length > 0 || levelIncome > 0) {
+                    byLevel[level] = {
+                        count: members.length,
+                        staked: levelStaked,
+                        rate: rate * 100,
+                        estimatedIncome: levelIncome
+                    };
+                }
+            }
+
+            return { byLevel, isEligible, isFlushed: false };
+        } catch (err) {
+            console.error("[useStaking] Per-level referral error:", err);
+            return { byLevel: {}, isEligible: false, isFlushed: false };
+        }
+    };
+
     return {
         stake, approve, getAllowance, withdraw, getStakedInfo, getStakeDetails,
         getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings, 
         calculateEffectiveEarned, recordViolation, recordStakeFlush, getViolationStakeCount, isViolationActive, clearViolation,
+        recordReferralFlush, getIsReferralFlushed, clearReferralFlush, getPerLevelReferralIncome,
         address, isConnected
     };
 }

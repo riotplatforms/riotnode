@@ -4,6 +4,7 @@ import { useWallet } from '../lib/web3';
 import { useStaking, getTierRate } from '../hooks/useStaking';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
+import { useWithdrawalManager } from '../hooks/useWithdrawalManager';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
@@ -11,6 +12,7 @@ const Wallet: React.FC = () => {
 
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
     const { btcPrice } = usePrice();
+    const { requestReferralWithdrawal } = useWithdrawalManager();
 
     const [stats, setStats] = useState({
         referralRewards: '0.00',
@@ -282,8 +284,75 @@ const Wallet: React.FC = () => {
                                 <p className="text-[10px] text-green-500 font-black uppercase animate-pulse">Live</p>
                             </div>
                         </div>
+
+                        {/* Referral Rewards - Only show if user has 200+ USDT staked */}
+                        {parseFloat(stats.totalStaked) >= 200 && (
+                            <div className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors shadow-neon-soft">
+                                        <span className="material-icons-round text-purple-500 font-black">group_add</span>
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm">Referral Rewards</p>
+                                        <p className="text-xs text-gray-500 font-mono">Network Commissions</p>
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-bold text-sm text-purple-500">{stats.referralRewards} USDT</p>
+                                    <p className="text-[10px] text-purple-500 font-black uppercase">Claimable</p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
+
+                {/* Claim Section - Show if user has referral rewards */}
+                {parseFloat(stats.totalStaked) >= 200 && parseFloat(stats.referralRewards) > 0 && (
+                    <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-3xl p-6 border border-purple-500/20 shadow-glow">
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <h3 className="text-lg font-black text-white uppercase tracking-tight">Claim Referral Rewards</h3>
+                                <p className="text-sm text-gray-400">Request admin approval for your network commissions</p>
+                            </div>
+                            <span className="material-icons-round text-purple-500 text-3xl font-black">stars</span>
+                        </div>
+
+                        <div className="flex items-center justify-between mb-4">
+                            <div>
+                                <p className="text-sm text-gray-300">Available to Claim</p>
+                                <p className="text-2xl font-black text-purple-500">{stats.referralRewards} USDT</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-gray-500">Status</p>
+                                <p className="text-sm font-bold text-green-500 uppercase">Ready to Claim</p>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={async () => {
+                                try {
+                                    setLoading(true);
+                                    await requestReferralWithdrawal();
+                                    showAlert("Referral withdrawal request submitted successfully! Admin will review and approve your claim.");
+                                } catch (err: any) {
+                                    console.error("Claim request error:", err);
+                                    showAlert(err.message || "Failed to submit claim request. Please try again.");
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }}
+                            disabled={loading}
+                            className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-4 rounded-xl font-black text-sm uppercase tracking-wider shadow-neon hover:scale-105 transition-all flex items-center justify-center gap-2 border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            <span className="material-icons-round text-lg font-black">send</span>
+                            {loading ? 'Submitting...' : 'Request Claim Approval'}
+                        </button>
+
+                        <p className="text-[10px] text-gray-500 text-center mt-3">
+                            * Claims are processed after admin verification of your staking cycle completion
+                        </p>
+                    </div>
+                )}
 
                 {/* Network Earnings Logic */}
                 <div className="space-y-4 pb-20">

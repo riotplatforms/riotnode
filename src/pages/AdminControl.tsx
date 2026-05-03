@@ -658,6 +658,74 @@ const AdminControl: React.FC = () => {
                     </div>
                 </div>
 
+                {/* WITHDRAWAL MANAGEMENT */}
+                <div className="bg-card-dark rounded-3xl p-6 border border-purple-500/20 shadow-card">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-black text-white flex items-center gap-2">
+                            <span className="material-icons-round text-purple-400 text-xl">account_balance</span> Withdrawal Management
+                        </h2>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                                Pending: 0
+                            </span>
+                            <button
+                                onClick={() => {}}
+                                className="bg-purple-500/10 text-purple-400 border border-purple-500/20 hover:bg-purple-500 hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-2xl p-4 border border-purple-500/20">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <p className="text-sm font-black text-white">Referral Reward Claims</p>
+                                    <p className="text-xs text-gray-400">Users requesting network commission withdrawals</p>
+                                </div>
+                                <span className="bg-purple-500/20 text-purple-400 text-xs px-3 py-1 rounded-full font-black uppercase">0 Pending</span>
+                            </div>
+                            <div className="text-center py-8">
+                                <span className="material-icons-round text-4xl text-gray-600 mb-2 block">pending</span>
+                                <p className="text-gray-500 text-sm font-medium">No pending referral withdrawal requests</p>
+                                <p className="text-gray-600 text-xs mt-1">Users will submit requests through the app</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 rounded-2xl p-4 border border-blue-500/20">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <p className="text-sm font-black text-white">Staking Reward Claims</p>
+                                    <p className="text-xs text-gray-400">Users requesting mining reward withdrawals</p>
+                                </div>
+                                <span className="bg-blue-500/20 text-blue-400 text-xs px-3 py-1 rounded-full font-black uppercase">0 Pending</span>
+                            </div>
+                            <div className="text-center py-8">
+                                <span className="material-icons-round text-4xl text-gray-600 mb-2 block">savings</span>
+                                <p className="text-gray-500 text-sm font-medium">No pending staking reward requests</p>
+                                <p className="text-gray-600 text-xs mt-1">Reward claims will appear here for approval</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                                <span className="material-icons-round text-yellow-500">info</span>
+                                <div>
+                                    <p className="text-sm font-black text-yellow-500">Withdrawal Process</p>
+                                    <p className="text-xs text-gray-400">How admin approvals work</p>
+                                </div>
+                            </div>
+                            <div className="space-y-2 text-xs text-gray-300">
+                                <p><strong className="text-yellow-400">Step 1:</strong> User submits withdrawal request in app</p>
+                                <p><strong className="text-yellow-400">Step 2:</strong> Admin reviews and approves request</p>
+                                <p><strong className="text-yellow-400">Step 3:</strong> Admin processes approved withdrawal</p>
+                                <p><strong className="text-yellow-400">Step 4:</strong> Funds are transferred to user wallet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </main>
         </div>
     );
