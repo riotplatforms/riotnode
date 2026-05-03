@@ -54,7 +54,7 @@ const Team: React.FC = () => {
             let unlocked = 0;
             if (myStake >= 2000) unlocked = 10;
             else if (myStake >= 1000) unlocked = 6;
-            else if (myStake >= 300) unlocked = 3;
+            else if (myStake >= 200) unlocked = 3;
 
             // Fetch team tree from events
             const tree = await getTeamTree(address);

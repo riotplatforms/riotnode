@@ -484,7 +484,7 @@ const Stake: React.FC = () => {
                              <div className="p-3 bg-purple-900/10 border border-purple-500/20 rounded-2xl mb-2">
                                  <div className="text-[10px] text-purple-400 font-black uppercase tracking-widest mb-2 flex justify-between">
                                      <span>Levels 1-3</span>
-                                     <span className="text-white">Stake Req: 300$</span>
+                                     <span className="text-white">Stake Req: 200$</span>
                                  </div>
                                  <div className="grid grid-cols-3 gap-2">
                                     <div className="bg-black/40 p-2 rounded-xl text-center"><span className="block text-[10px] text-gray-500">L-1</span><span className="text-[11px] text-white font-black">5%</span></div>
