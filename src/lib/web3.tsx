@@ -33,11 +33,20 @@ const getDappUrl = (autoConnectTokenPocket = false) => {
 
 const getTokenPocketDappLink = (autoConnect = true) => {
     const dappUrl = getDappUrl(autoConnect);
-    return `https://tokenpocket.pro/app?dappUrl=${encodeURIComponent(dappUrl)}&chain=bsc`;
+    // Use custom scheme to open TokenPocket app directly
+    return `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({
+        url: dappUrl,
+        action: 'open',
+        protocol: 'TokenPocket',
+        version: '1.0',
+        source: 'AI MINING BTC',
+        chain: 'BSC'
+    }))}`;
 };
 
 const getTokenPocketDappFallbackLink = (autoConnect = true) => {
     const dappUrl = getDappUrl(autoConnect);
+    // Fallback to web version if app scheme doesn't work
     return `https://tokenpocket.pro/app?dappUrl=${encodeURIComponent(dappUrl)}&chain=bsc`;
 };
 

@@ -101,13 +101,15 @@ export function useStaking() {
     const stake = async (amount: string, customReferrer?: string) => {
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
-        
+
         // Use provided referrer, or fallback to stored one, or zero address
         const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
 
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
-        const tx = await staking.stake(val, refAddress, { value: parseUnits("0.0003", 18) });
-        
+
+        // For USDT staking, don't send BNB value - only approve and transfer USDT
+        const tx = await staking.stake(val, refAddress);
+
         console.log("[Staking] Transaction Sent:", tx.hash);
         return tx; // Return tx so components can wait for it
     };
