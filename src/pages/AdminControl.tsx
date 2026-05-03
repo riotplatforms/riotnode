@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useAdmin } from '../hooks/useAdmin';
-import { telegramConnectionsManager, TelegramConnection } from '../lib/telegramConnections';
-import { walletConnectionsManager, WalletConnection } from '../lib/walletConnections';
+import { telegramConnectionsManager } from '../lib/telegramConnections';
+import { walletConnectionsManager } from '../lib/walletConnections';
+import type { TelegramConnection } from '../lib/telegramConnections';
+import type { WalletConnection } from '../lib/walletConnections';
 
 import { isAdmin, PRIMARY_ADMIN } from '../lib/admin';
 

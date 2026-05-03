@@ -5,6 +5,7 @@ import { useStaking, getTierRate } from '../hooks/useStaking';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { useWithdrawalManager } from '../hooks/useWithdrawalManager';
+import { useTelegram } from '../hooks/useTelegram';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
@@ -13,6 +14,9 @@ const Wallet: React.FC = () => {
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
     const { btcPrice } = usePrice();
     const { requestReferralWithdrawal } = useWithdrawalManager();
+    const { showAlert } = useTelegram();
+
+    const [loading, setLoading] = useState(false);
 
     const [stats, setStats] = useState({
         referralRewards: '0.00',
