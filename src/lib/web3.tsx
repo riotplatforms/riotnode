@@ -32,24 +32,13 @@ const getDappUrl = (autoConnectTokenPocket = false) => {
 };
 
 const getTokenPocketDappLink = (autoConnect = true) => {
-    const params = {
-        url: getDappUrl(autoConnect),
-        action: 'open',
-        protocol: 'TokenPocket',
-        version: '1.0',
-        source: 'AI MINING BTC',
-        chain: 'BSC'
-    };
-    return `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify(params))}`;
+    const dappUrl = getDappUrl(autoConnect);
+    return `https://tokenpocket.pro/app?dappUrl=${encodeURIComponent(dappUrl)}&chain=bsc`;
 };
 
 const getTokenPocketDappFallbackLink = (autoConnect = true) => {
-    const params = {
-        url: getDappUrl(autoConnect),
-        chain: 'BSC',
-        source: 'AI MINING BTC'
-    };
-    return `tpdapp://open?params=${encodeURIComponent(JSON.stringify(params))}`;
+    const dappUrl = getDappUrl(autoConnect);
+    return `https://tokenpocket.pro/app?dappUrl=${encodeURIComponent(dappUrl)}&chain=bsc`;
 };
 
 const clearWalletConnectPairingCache = () => {
@@ -368,7 +357,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 metamask: `https://metamask.app.link/wc?uri=${encoded}`,
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`
+                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                tokenpocket: `https://tokenpocket.pro/wc?uri=${encoded}`
             };
             const link = links[wallet];
             if (link) launchExternalLink(link);
@@ -426,11 +416,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             clearWalletConnectPairingCache();
             openInWalletBrowser('tokenpocket');
-            setTimeout(() => launchExternalLink(getTokenPocketDappFallbackLink(true)), 700);
+
+            // Add WalletConnect fallback for Token Pocket
+            setTimeout(async () => {
+                try {
+                    await initWC();
+                    const session = await createSession();
+                    const { uri } = session;
+                    const encoded = encodeURIComponent(uri);
+                    const wcLink = `https://tokenpocket.pro/wc?uri=${encoded}`;
+                    launchExternalLink(wcLink);
+                } catch (err) {
+                    console.warn("[Web3] TokenPocket WC fallback failed:", err);
+                }
+            }, 1000);
+
             setTimeout(() => {
                 setShowTpFallback(true);
                 setTpLoading(false);
-            }, 1500);
+            }, 2000);
 
             return;
         }
@@ -467,6 +471,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                tokenpocket: `https://tokenpocket.pro/wc?uri=${encoded}`,
                 okx: `https://www.okx.com/download`,
                 bitget: `https://web3.bitget.com/en`
             };
