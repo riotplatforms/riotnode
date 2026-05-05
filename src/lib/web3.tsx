@@ -711,6 +711,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         _setIsDisconnectModalOpen(isOpen);
     };
 
+
     return (
         <WalletContext.Provider value={{
             address: finalAddress || undefined,
