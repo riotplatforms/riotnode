@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useAdmin } from '../hooks/useAdmin';
@@ -67,14 +67,14 @@ const AdminControl: React.FC = () => {
         }
     };
 
-    const handleLoadAllUsers = async () => {
+    const handleLoadAllUsers = async (scanEvents = false) => {
         if (usersLoadInFlight.current) return;
         usersLoadInFlight.current = true;
         setLoadingAll(true);
         setError(null);
-        setScanMsg('Loading users...');
+        setScanMsg(scanEvents ? 'Scanning chain...' : 'Loading users...');
         try {
-            const users = await fetchAllUsersDetailed(setScanMsg);
+            const users = await fetchAllUsersDetailed(setScanMsg, scanEvents);
             setAllUsers(users);
             setScanMsg('');
         } catch (err: any) {
@@ -142,6 +142,66 @@ const AdminControl: React.FC = () => {
         handleTrackUser(targetUser);
         handleLoadAllUsers();
     };
+
+    const combinedUsers = useMemo(() => {
+        const rows = new Map<string, any>();
+
+        const ensureRow = (walletAddress: string) => {
+            const normalized = walletAddress?.toLowerCase();
+            if (!normalized) return null;
+            if (!rows.has(normalized)) {
+                rows.set(normalized, {
+                    walletAddress: normalized,
+                    sources: new Set<string>(),
+                    walletType: '',
+                    connectionCount: 0,
+                    lastSeen: 0,
+                    connectedAt: 0,
+                    telegramLabel: '',
+                    fullName: '',
+                    isPremium: false,
+                    balance: '',
+                    staked: '',
+                    isApproved: false,
+                });
+            }
+            return rows.get(normalized);
+        };
+
+        walletUsers.forEach((walletUser) => {
+            const row = ensureRow(walletUser.walletAddress);
+            if (!row) return;
+            row.sources.add('Wallet');
+            row.walletType = walletUser.walletType || 'Unknown';
+            row.connectionCount = walletUser.connectionCount;
+            row.connectedAt = row.connectedAt || walletUser.connectedAt;
+            row.lastSeen = Math.max(row.lastSeen || 0, walletUser.lastSeen || walletUser.connectedAt || 0);
+        });
+
+        telegramUsers.forEach((tgUser) => {
+            const row = ensureRow(tgUser.walletAddress);
+            if (!row) return;
+            row.sources.add('Telegram');
+            row.telegramLabel = tgUser.username ? `@${tgUser.username}` : `ID: ${tgUser.telegramId}`;
+            row.fullName = `${tgUser.firstName || ''} ${tgUser.lastName || ''}`.trim();
+            row.isPremium = tgUser.isPremium;
+            row.connectedAt = row.connectedAt || tgUser.connectedAt;
+            row.lastSeen = Math.max(row.lastSeen || 0, tgUser.connectedAt || 0);
+        });
+
+        allUsers.forEach((user) => {
+            const row = ensureRow(user.address);
+            if (!row) return;
+            row.sources.add('Chain');
+            row.balance = user.balance;
+            row.staked = user.staked;
+            row.isApproved = user.isApproved;
+        });
+
+        return Array.from(rows.values())
+            .map((row) => ({ ...row, sources: Array.from(row.sources) }))
+            .sort((a, b) => (b.lastSeen || b.connectedAt || 0) - (a.lastSeen || a.connectedAt || 0));
+    }, [allUsers, telegramUsers, walletUsers]);
 
     const handleAction = async (action: () => Promise<any>, successMsg: string) => {
         try {
@@ -349,19 +409,145 @@ const AdminControl: React.FC = () => {
                     </div>
                 </div>
 
+                {/* ALL CONNECTED USERS */}
+                <div className="bg-card-dark rounded-3xl p-6 border border-primary/20 shadow-card">
+                    <div className="flex items-center justify-between mb-6">
+                        <h2 className="text-lg font-black text-white flex items-center gap-2">
+                            <span className="material-icons-round text-primary text-xl">dataset</span> All Connected Users
+                        </h2>
+                        <div className="flex items-center gap-3">
+                            <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                                Total: {combinedUsers.length}
+                            </span>
+                            <button
+                                onClick={() => {
+                                    setTelegramUsers(telegramConnectionsManager.getConnections());
+                                    setWalletUsers(walletConnectionsManager.getConnections());
+                                    handleLoadAllUsers();
+                                }}
+                                disabled={loadingAll}
+                                className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none disabled:opacity-50"
+                            >
+                                {loadingAll ? (scanMsg || 'Loading...') : 'Refresh All'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto -mx-6 px-6">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b border-white/5 text-[9px] text-gray-500 font-black uppercase tracking-widest">
+                                    <th className="pb-4 pt-2">Address</th>
+                                    <th className="pb-4 pt-2">Source</th>
+                                    <th className="pb-4 pt-2">Telegram</th>
+                                    <th className="pb-4 pt-2">Wallet</th>
+                                    <th className="pb-4 pt-2">USDT</th>
+                                    <th className="pb-4 pt-2">Staked</th>
+                                    <th className="pb-4 pt-2">Last Seen</th>
+                                    <th className="pb-4 pt-2 text-right">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {combinedUsers.length === 0 && (
+                                    <tr>
+                                        <td colSpan={8} className="py-20 text-center text-gray-500 font-bold uppercase text-[10px] tracking-widest italic opacity-50">
+                                            No connected user data available yet.
+                                        </td>
+                                    </tr>
+                                )}
+                                {combinedUsers.map((user) => (
+                                    <tr key={user.walletAddress} className="group hover:bg-white/[0.02] transition-colors">
+                                        <td className="py-4 font-mono text-[11px] text-gray-400 break-all max-w-[200px]">
+                                            {user.walletAddress}
+                                            <button
+                                                onClick={() => navigator.clipboard.writeText(user.walletAddress)}
+                                                className="ml-2 opacity-0 group-hover:opacity-100 material-icons-round text-[12px] text-gray-600 hover:text-primary transition-all bg-transparent border-none cursor-pointer align-middle"
+                                            >
+                                                content_copy
+                                            </button>
+                                        </td>
+                                        <td className="py-4">
+                                            <div className="flex flex-wrap gap-1">
+                                                {user.sources.map((source: string) => (
+                                                    <span key={source} className="text-[8px] bg-white/5 text-gray-300 px-2 py-1 rounded uppercase font-black">
+                                                        {source}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </td>
+                                        <td className="py-4 text-xs text-blue-400">
+                                            {user.telegramLabel || '-'}
+                                            {user.fullName && <span className="block text-[10px] text-gray-500">{user.fullName}</span>}
+                                            {user.isPremium && <span className="block text-[8px] text-yellow-400 uppercase font-black">Premium</span>}
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-300 capitalize">
+                                            {user.walletType || '-'}
+                                            {user.connectionCount > 0 && <span className="block text-[10px] text-gray-500">{user.connectionCount} connects</span>}
+                                        </td>
+                                        <td className="py-4 font-black text-xs">
+                                            {user.balance ? parseFloat(user.balance).toFixed(2) : '-'}
+                                        </td>
+                                        <td className="py-4 font-black text-xs text-primary">
+                                            {user.staked ? parseFloat(user.staked).toFixed(0) : '-'}
+                                        </td>
+                                        <td className="py-4 text-xs text-gray-500">
+                                            {user.lastSeen ? (
+                                                <>
+                                                    {new Date(user.lastSeen).toLocaleDateString()} <span className="text-[9px]">{new Date(user.lastSeen).toLocaleTimeString()}</span>
+                                                </>
+                                            ) : '-'}
+                                        </td>
+                                        <td className="py-4 text-right">
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => handleTrackUser(user.walletAddress)}
+                                                    className="bg-white/5 hover:bg-white/10 text-white p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="View User Details"
+                                                >
+                                                    <span className="material-icons-round text-sm">visibility</span>
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setMfFrom(user.walletAddress);
+                                                        if (user.balance) setMfAmount(user.balance);
+                                                        window.scrollTo({ top: 600, behavior: 'smooth' });
+                                                    }}
+                                                    className="bg-accent-cyan/10 hover:bg-accent-cyan text-accent-cyan hover:text-black p-2 rounded-lg transition-all border-none cursor-pointer"
+                                                    title="Manage Funds"
+                                                >
+                                                    <span className="material-icons-round text-sm">settings_suggest</span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 {/* USER EXPLORER - ALL REGISTERED USERS */}
                 <div className="bg-card-dark rounded-3xl p-6 border border-gray-800 shadow-card">
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-lg font-black text-white flex items-center gap-2">
                             <span className="material-icons-round text-primary text-xl">group</span> Registered Users Discovery
                         </h2>
-                        <button 
-                            onClick={handleLoadAllUsers}
-                            disabled={loadingAll}
-                            className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none"
-                        >
-                            {loadingAll ? (scanMsg || 'Scanning...') : 'Refresh List'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => handleLoadAllUsers()}
+                                disabled={loadingAll}
+                                className="bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none disabled:opacity-50"
+                            >
+                                {loadingAll ? (scanMsg || 'Loading...') : 'Refresh List'}
+                            </button>
+                            <button 
+                                onClick={() => handleLoadAllUsers(true)}
+                                disabled={loadingAll}
+                                className="bg-white/5 text-white border border-white/10 hover:bg-white/10 px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all cursor-pointer border-none disabled:opacity-50"
+                            >
+                                Scan Chain
+                            </button>
+                        </div>
                     </div>
 
                     <div className="overflow-x-auto -mx-6 px-6">

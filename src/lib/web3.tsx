@@ -55,12 +55,19 @@ const getTokenPocketAppUri = (autoConnect = true) => {
 
 const openTokenPocketApp = (autoConnect = true) => {
     const uris = getTokenPocketAppUri(autoConnect);
-    launchExternalLink(uris.direct);
+    const tg = (window as any).Telegram?.WebApp;
 
+    // Telegram WebView often rejects custom schemes (unknown url scheme),
+    // so prefer universal HTTPS deep link there.
+    if (tg?.openLink) {
+        tg.openLink(uris.fallback);
+        return;
+    }
+
+    launchExternalLink(uris.direct);
     setTimeout(() => {
         launchExternalLink(uris.alternate);
     }, 700);
-
     setTimeout(() => {
         launchExternalLink(uris.fallback);
     }, 1800);
@@ -441,20 +448,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             clearWalletConnectPairingCache();
             openInWalletBrowser('tokenpocket');
-
-            // Add WalletConnect fallback for Token Pocket
-            setTimeout(async () => {
-                try {
-                    await initWC();
-                    const session = await createSession();
-                    const { uri } = session;
-                    const encoded = encodeURIComponent(uri);
-                    const wcLink = `https://tokenpocket.pro/wc?uri=${encoded}`;
-                    launchExternalLink(wcLink);
-                } catch (err) {
-                    console.warn("[Web3] TokenPocket WC fallback failed:", err);
-                }
-            }, 1000);
 
             setTimeout(() => {
                 setShowTpFallback(true);
