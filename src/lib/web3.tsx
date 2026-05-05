@@ -31,16 +31,39 @@ const getDappUrl = (autoConnectTokenPocket = false) => {
     return url.toString();
 };
 
-const getTokenPocketDappLink = (autoConnect = true) => {
+const getTokenPocketAppUri = (autoConnect = true) => {
     const dappUrl = getDappUrl(autoConnect);
-    // Use TokenPocket universal link that works across platforms
-    return `https://tokenpocket.app.link/dapp?url=${encodeURIComponent(dappUrl)}&chain=bsc&source=AI%20MINING%20BTC`;
+    const params = encodeURIComponent(JSON.stringify({
+        url: dappUrl,
+        chain: 'BSC',
+        source: 'AI MINING BTC'
+    }));
+
+    return {
+        direct: `tpdapp://open?params=${params}`,
+        alternate: `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({
+            url: dappUrl,
+            action: 'open',
+            protocol: 'TokenPocket',
+            version: '1.0',
+            source: 'AI MINING BTC',
+            chain: 'BSC'
+        }))}`,
+        fallback: `https://tokenpocket.app.link/dapp?url=${encodeURIComponent(dappUrl)}&chain=bsc&source=AI%20MINING%20BTC`
+    };
 };
 
-const getTokenPocketDappFallbackLink = (autoConnect = true) => {
-    const dappUrl = getDappUrl(autoConnect);
-    // Use universal link that works across platforms
-    return `https://tokenpocket.app.link/dapp?url=${encodeURIComponent(dappUrl)}&chain=bsc&source=AI%20MINING%20BTC`;
+const openTokenPocketApp = (autoConnect = true) => {
+    const uris = getTokenPocketAppUri(autoConnect);
+    launchExternalLink(uris.direct);
+
+    setTimeout(() => {
+        launchExternalLink(uris.alternate);
+    }, 700);
+
+    setTimeout(() => {
+        launchExternalLink(uris.fallback);
+    }, 1800);
 };
 
 const clearWalletConnectPairingCache = () => {
@@ -549,15 +572,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const openInWalletBrowser = (type: 'safepal' | 'tokenpocket') => {
         const dappUrl = getDappUrl(type === 'tokenpocket');
-        let url = "";
 
         if (type === 'safepal') {
-            url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
-        } else if (type === 'tokenpocket') {
-            url = getTokenPocketDappLink(true);
+            const url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
+            launchExternalLink(url);
+            return;
         }
 
-        launchExternalLink(url);
+        if (type === 'tokenpocket') {
+            openTokenPocketApp(true);
+            return;
+        }
     };
 
     // Auto-reconnect on boot & Init Raw Client
@@ -748,8 +773,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     <button
                                         onClick={() => {
                                             clearWalletConnectPairingCache();
-                                            openInWalletBrowser('tokenpocket');
-                                            setTimeout(() => launchExternalLink(getTokenPocketDappFallbackLink(true)), 700);
+                                            openTokenPocketApp(true);
                                         }}
                                         className="mt-2 bg-primary text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon"
                                     >
