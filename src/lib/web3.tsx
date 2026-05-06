@@ -129,6 +129,11 @@ const launchExternalLink = (url: string) => {
         return;
     }
 
+    if (!isHttpLink && tg) {
+        console.warn("[Web3] Telegram blocked custom wallet URL scheme:", url.split('?')[0]);
+        return;
+    }
+
     const anchor = document.createElement('a');
     anchor.href = url;
     anchor.rel = 'noreferrer';
@@ -485,6 +490,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setShowTpFallback(false);
 
             if (await connectInjectedWallet('tokenpocket')) {
+                return;
+            }
+
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg) {
+                clearWalletConnectPairingCache();
+                setTpLoading(false);
+                setShowTpFallback(false);
+                await open({ view: 'Connect', namespace: 'eip155' });
                 return;
             }
 
