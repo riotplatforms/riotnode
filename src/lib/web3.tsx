@@ -49,21 +49,15 @@ const getTokenPocketAppUri = (autoConnect = true) => {
             source: 'AI MINING BTC',
             chain: 'BSC'
         }))}`,
-        fallback: `https://tokenpocket.app.link/dapp?url=${encodeURIComponent(dappUrl)}&chain=bsc&source=AI%20MINING%20BTC`
+        fallback: `https://www.tokenpocket.pro/download/app`
     };
 };
 
 const openTokenPocketApp = (autoConnect = true) => {
     const uris = getTokenPocketAppUri(autoConnect);
-    const tg = (window as any).Telegram?.WebApp;
 
-    // Telegram WebView often rejects custom schemes (unknown url scheme),
-    // so prefer universal HTTPS deep link there.
-    if (tg?.openLink) {
-        tg.openLink(uris.fallback);
-        return;
-    }
-
+    // TokenPocket documents tpdapp://open for opening a DApp URL. The older
+    // app.link DApp fallback can show "that link could not be found".
     launchExternalLink(uris.direct);
     setTimeout(() => {
         launchExternalLink(uris.alternate);
