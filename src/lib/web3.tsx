@@ -86,8 +86,9 @@ const clearWalletConnectPairingCache = () => {
 
 const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
+    const isHttpLink = url.startsWith('http');
 
-    if (url.startsWith('http') && tg?.openLink) {
+    if (isHttpLink && tg?.openLink) {
         tg.openLink(url);
         return;
     }
@@ -98,6 +99,12 @@ const launchExternalLink = (url: string) => {
     anchor.style.display = 'none';
     document.body.appendChild(anchor);
     anchor.click();
+
+    if (!isHttpLink) {
+        setTimeout(() => anchor.remove(), 150);
+        return;
+    }
+
     setTimeout(() => {
         window.location.href = url;
         anchor.remove();
@@ -440,6 +447,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 return;
             }
 
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg) {
+                connectWalletConnectMobile('tokenpocket').catch((err) => {
+                    console.warn("[Web3] TokenPocket WalletConnect failed:", err);
+                    setTpLoading(false);
+                    setShowTpFallback(true);
+                });
+
+                setTimeout(() => {
+                    setShowTpFallback(true);
+                    setTpLoading(false);
+                }, 2500);
+
+                return;
+            }
+
             clearWalletConnectPairingCache();
             openInWalletBrowser('tokenpocket');
 
@@ -761,6 +784,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     <button
                                         onClick={() => {
                                             clearWalletConnectPairingCache();
+                                            const tg = (window as any).Telegram?.WebApp;
+                                            if (tg) {
+                                                connectWalletConnectMobile('tokenpocket').catch((err) => {
+                                                    console.warn("[Web3] TokenPocket retry failed:", err);
+                                                });
+                                                return;
+                                            }
                                             openTokenPocketApp(true);
                                         }}
                                         className="mt-2 bg-primary text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon"
