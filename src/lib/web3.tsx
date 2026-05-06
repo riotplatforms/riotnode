@@ -80,6 +80,29 @@ const openTokenPocketApp = (autoConnect = true) => {
     }, 1800);
 };
 
+const getTokenPocketWalletConnectLinks = (uri: string) => {
+    const encoded = encodeURIComponent(uri);
+
+    return {
+        primary: `tpoutside://wc?uri=${encoded}`,
+        alternate: `tpdapp://wc?uri=${encoded}`,
+        androidIntent: `intent://wc?uri=${encoded}#Intent;scheme=tpoutside;package=${TOKENPOCKET_ANDROID_PACKAGE};S.browser_fallback_url=${encodeURIComponent(TOKENPOCKET_DOWNLOAD_URL)};end`
+    };
+};
+
+const openTokenPocketWalletConnect = (uri: string) => {
+    const links = getTokenPocketWalletConnectLinks(uri);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+
+    launchExternalLink(isAndroid ? links.androidIntent : links.primary);
+    setTimeout(() => {
+        launchExternalLink(links.primary);
+    }, 600);
+    setTimeout(() => {
+        launchExternalLink(links.alternate);
+    }, 1200);
+};
+
 const clearWalletConnectPairingCache = () => {
     const shouldRemove = (key: string) =>
         key.startsWith('wc@2') ||
@@ -404,8 +427,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                tokenpocket: uri
+                tokenpocket: ''
             };
+            if (wallet === 'tokenpocket') {
+                openTokenPocketWalletConnect(uri);
+                return;
+            }
+
             const link = links[wallet];
             if (link) launchExternalLink(link);
         });
@@ -460,25 +488,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 return;
             }
 
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg) {
-                openInWalletBrowser('tokenpocket');
-
-                setTimeout(() => {
-                    setShowTpFallback(true);
-                    setTpLoading(false);
-                }, 2500);
-
-                return;
-            }
-
             clearWalletConnectPairingCache();
-            openInWalletBrowser('tokenpocket');
+            connectWalletConnectMobile('tokenpocket').catch((err) => {
+                console.warn("[Web3] TokenPocket WalletConnect failed, falling back to DApp browser:", err);
+                openInWalletBrowser('tokenpocket');
+            });
 
             setTimeout(() => {
                 setShowTpFallback(true);
                 setTpLoading(false);
-            }, 2000);
+            }, 2500);
 
             return;
         }
