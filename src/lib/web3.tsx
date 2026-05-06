@@ -80,22 +80,6 @@ const openTokenPocketApp = (autoConnect = true) => {
     }, 1800);
 };
 
-const showTokenPocketManualOpen = () => {
-    const dappUrl = getDappUrl(true);
-    const tg = (window as any).Telegram?.WebApp;
-    const message = "Link copied. Open TokenPocket app, go to DApp Browser, and paste this link.";
-
-    navigator.clipboard?.writeText(dappUrl).catch(() => {
-        console.warn("[Web3] Could not copy TokenPocket DApp link");
-    });
-
-    if (tg?.showAlert) {
-        tg.showAlert(message);
-    } else {
-        alert(message);
-    }
-};
-
 const clearWalletConnectPairingCache = () => {
     const shouldRemove = (key: string) =>
         key.startsWith('wc@2') ||
@@ -119,11 +103,6 @@ const launchExternalLink = (url: string) => {
 
     if (isHttpLink && tg?.openLink) {
         tg.openLink(url);
-        return;
-    }
-
-    if (!isHttpLink && tg) {
-        showTokenPocketManualOpen();
         return;
     }
 
@@ -483,7 +462,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             const tg = (window as any).Telegram?.WebApp;
             if (tg) {
-                showTokenPocketManualOpen();
+                openInWalletBrowser('tokenpocket');
 
                 setTimeout(() => {
                     setShowTpFallback(true);
@@ -816,7 +795,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                             clearWalletConnectPairingCache();
                                             const tg = (window as any).Telegram?.WebApp;
                                             if (tg) {
-                                                showTokenPocketManualOpen();
+                                                openInWalletBrowser('tokenpocket');
                                                 return;
                                             }
                                             openTokenPocketApp(true);
