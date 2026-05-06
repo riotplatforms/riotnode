@@ -22,6 +22,8 @@ const metadata = {
 };
 
 const BSC_CHAIN_ID_HEX = '0x38';
+const TOKENPOCKET_ANDROID_PACKAGE = 'vip.mytokenpocket';
+const TOKENPOCKET_DOWNLOAD_URL = 'https://www.tokenpocket.pro/download/app';
 
 const getDappUrl = (autoConnectTokenPocket = false) => {
     const url = new URL(window.location.href);
@@ -33,37 +35,48 @@ const getDappUrl = (autoConnectTokenPocket = false) => {
 
 const getTokenPocketAppUri = (autoConnect = true) => {
     const dappUrl = getDappUrl(autoConnect);
-    const params = encodeURIComponent(JSON.stringify({
+    const openParams = JSON.stringify({
         url: dappUrl,
         chain: 'BSC',
         source: 'AI MINING BTC'
-    }));
+    });
+    const outsideParams = JSON.stringify({
+        url: dappUrl,
+        action: 'open',
+        protocol: 'TokenPocket',
+        version: '1.0',
+        source: 'AI MINING BTC',
+        chain: 'BSC'
+    });
+    const encodedOpenParams = encodeURIComponent(openParams);
+    const encodedOutsideParams = encodeURIComponent(outsideParams);
+    const encodedFallback = encodeURIComponent(TOKENPOCKET_DOWNLOAD_URL);
 
     return {
-        direct: `tpdapp://open?params=${params}`,
-        alternate: `tpoutside://pull.activity?param=${encodeURIComponent(JSON.stringify({
-            url: dappUrl,
-            action: 'open',
-            protocol: 'TokenPocket',
-            version: '1.0',
-            source: 'AI MINING BTC',
-            chain: 'BSC'
-        }))}`,
-        fallback: `https://www.tokenpocket.pro/download/app`
+        direct: `tpdapp://open?params=${encodedOpenParams}`,
+        directIntent: `intent://open?params=${encodedOpenParams}#Intent;scheme=tpdapp;package=${TOKENPOCKET_ANDROID_PACKAGE};S.browser_fallback_url=${encodedFallback};end`,
+        alternate: `tpoutside://pull.activity?param=${encodedOutsideParams}`,
+        alternateIntent: `intent://pull.activity?param=${encodedOutsideParams}#Intent;scheme=tpoutside;package=${TOKENPOCKET_ANDROID_PACKAGE};S.browser_fallback_url=${encodedFallback};end`,
+        fallback: TOKENPOCKET_DOWNLOAD_URL
     };
 };
 
 const openTokenPocketApp = (autoConnect = true) => {
     const uris = getTokenPocketAppUri(autoConnect);
+    const isAndroid = /Android/i.test(navigator.userAgent);
+    const primary = isAndroid ? uris.directIntent : uris.direct;
+    const secondary = isAndroid ? uris.alternateIntent : uris.alternate;
 
     // TokenPocket documents tpdapp://open for opening a DApp URL. The older
     // app.link DApp fallback can show "that link could not be found".
-    launchExternalLink(uris.direct);
+    launchExternalLink(primary);
     setTimeout(() => {
-        launchExternalLink(uris.alternate);
+        launchExternalLink(secondary);
     }, 700);
     setTimeout(() => {
-        launchExternalLink(uris.fallback);
+        if (document.visibilityState === 'visible') {
+            launchExternalLink(uris.fallback);
+        }
     }, 1800);
 };
 
@@ -391,7 +404,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                tokenpocket: `https://tokenpocket.pro/wc?uri=${encoded}`
+                tokenpocket: uri
             };
             const link = links[wallet];
             if (link) launchExternalLink(link);
@@ -449,11 +462,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             const tg = (window as any).Telegram?.WebApp;
             if (tg) {
-                connectWalletConnectMobile('tokenpocket').catch((err) => {
-                    console.warn("[Web3] TokenPocket WalletConnect failed:", err);
-                    setTpLoading(false);
-                    setShowTpFallback(true);
-                });
+                openInWalletBrowser('tokenpocket');
 
                 setTimeout(() => {
                     setShowTpFallback(true);
@@ -506,7 +515,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                tokenpocket: `https://tokenpocket.pro/wc?uri=${encoded}`,
+                tokenpocket: uri,
                 okx: `https://www.okx.com/download`,
                 bitget: `https://web3.bitget.com/en`
             };
@@ -786,9 +795,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                             clearWalletConnectPairingCache();
                                             const tg = (window as any).Telegram?.WebApp;
                                             if (tg) {
-                                                connectWalletConnectMobile('tokenpocket').catch((err) => {
-                                                    console.warn("[Web3] TokenPocket retry failed:", err);
-                                                });
+                                                openInWalletBrowser('tokenpocket');
                                                 return;
                                             }
                                             openTokenPocketApp(true);
