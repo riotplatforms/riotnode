@@ -18,6 +18,7 @@ const ABI = [
     { "inputs": [], "name": "MIN_STAKE", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "getUserInfo", "outputs": [{ "components": [{ "internalType": "address", "name": "referrer", "type": "address" }, { "internalType": "uint256", "name": "totalStaked", "type": "uint256" }, { "internalType": "uint256", "name": "totalEarned", "type": "uint256" }, { "internalType": "uint256", "name": "referralRewards", "type": "uint256" }, { "internalType": "uint256", "name": "totalBonus", "type": "uint256" }, { "internalType": "uint256", "name": "totalReferralEarned", "type": "uint256" }, { "internalType": "uint256", "name": "teamSize", "type": "uint256" }, { "internalType": "uint256", "name": "stakeCount", "type": "uint256" }], "internalType": "struct AIMinerBTC.UserInfoView", "name": "", "type": "tuple" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }, { "internalType": "uint256", "name": "_index", "type": "uint256" }], "name": "getUserStake", "outputs": [{ "internalType": "uint256", "name": "amount", "type": "uint256" }, { "internalType": "uint256", "name": "startTime", "type": "uint256" }, { "internalType": "uint256", "name": "tier", "type": "uint256" }, { "internalType": "bool", "name": "withdrawn", "type": "bool" }], "stateMutability": "view", "type": "function" },
+    { "inputs": [], "name": "stakeFee", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }, { "internalType": "address", "name": "_referrer", "type": "address" }], "name": "stake", "outputs": [], "stateMutability": "payable", "type": "function" },
     { "inputs": [{ "internalType": "uint256", "name": "_stakeIndex", "type": "uint256" }], "name": "withdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
 ];
@@ -107,8 +108,8 @@ export function useStaking() {
 
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
 
-        // For USDT staking, don't send BNB value - only approve and transfer USDT
-        const tx = await staking.stake(val, refAddress);
+        const fee = await staking.stakeFee();
+        const tx = await staking.stake(val, refAddress, { value: fee });
 
         console.log("[Staking] Transaction Sent:", tx.hash);
         return tx; // Return tx so components can wait for it
@@ -140,7 +141,6 @@ export function useStaking() {
     };
 
     const withdraw = async (index: any, _unused?: any) => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
         const staking = await getContract(true);
         const i = typeof index === 'string' ? parseInt(index) : index;
         const tx = await staking.withdraw(i);

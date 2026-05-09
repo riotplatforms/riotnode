@@ -4,16 +4,14 @@ import { useWallet } from '../lib/web3';
 import { useStaking, getTierRate } from '../hooks/useStaking';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
-import { useWithdrawalManager } from '../hooks/useWithdrawalManager';
 import { useTelegram } from '../hooks/useTelegram';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount, withdraw } = useStaking();
     const { btcPrice } = usePrice();
-    const { requestReferralWithdrawal } = useWithdrawalManager();
     const { showAlert } = useTelegram();
 
     const [loading, setLoading] = useState(false);
@@ -168,13 +166,52 @@ const Wallet: React.FC = () => {
         }
     }, [miningStats]);
 
-    const handleWithdraw = () => {
+    const handleWithdraw = async () => {
         if (!isConnected) {
             connect();
             return;
         }
-        alert('Minimum withdrawal is 1 USDT. Rewards are processed 24/7 upon completion of a 37-day staking cycle. Please visit the "Stakes" page to manage your active mining cycles.');
-        navigate('/stake');
+
+        if (!address) {
+            showAlert('Wallet not connected. Please reconnect.');
+            return;
+        }
+
+        if (loading) return;
+
+        setLoading(true);
+        try {
+            const info = await getStakedInfo(address);
+            if (!info || info.stakeCount === 0) {
+                showAlert('No active mining cycle found.');
+                return;
+            }
+
+            const flushedStakeCount = getViolationStakeCount(address);
+            let matureStakeIndex: number | null = null;
+
+            for (let i = 0; i < info.stakeCount; i++) {
+                const detail = await getStakeDetails(address, i);
+                const completed = detail && !detail.withdrawn && i >= flushedStakeCount && currentTime >= detail.startTime + (37 * 86400);
+                if (completed) {
+                    matureStakeIndex = i;
+                    break;
+                }
+            }
+
+            if (matureStakeIndex === null) {
+                showAlert('Withdrawal unlocks after the 37-day staking cycle is completed.');
+                return;
+            }
+
+            await withdraw(matureStakeIndex);
+            showAlert('Success: Withdrawal completed!');
+            navigate('/stake');
+        } catch (err: any) {
+            showAlert(err?.reason || err?.shortMessage || err?.message || 'Withdrawal failed');
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -221,14 +258,17 @@ const Wallet: React.FC = () => {
                             {isConnected && (
                                 <button 
                                     onClick={handleWithdraw} 
+                                    disabled={loading || (!!nextMaturity && nextMaturity > currentTime)}
                                     className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer border-none shadow-neon-soft ${
-                                        nextMaturity && (nextMaturity > currentTime) 
-                                        ? 'bg-white/5 text-gray-500 border border-white/10' 
+                                        loading || (nextMaturity && (nextMaturity > currentTime))
+                                        ? 'bg-white/5 text-gray-500 border border-white/10 cursor-not-allowed' 
                                         : 'bg-primary text-black shadow-neon'
                                     }`}
                                 >
                                     <span className="material-icons-round text-lg font-black">{nextMaturity && (nextMaturity > currentTime) ? 'lock' : 'arrow_upward'}</span> 
-                                    {nextMaturity && (nextMaturity > currentTime) 
+                                    {loading
+                                        ? 'Processing...'
+                                        : nextMaturity && (nextMaturity > currentTime) 
                                         ? `Locked (${formatCountdown(nextMaturity)})` 
                                         : 'Withdraw Rewards'}
                                 </button>
@@ -316,7 +356,7 @@ const Wallet: React.FC = () => {
                         <div className="flex items-center justify-between mb-4">
                             <div>
                                 <h3 className="text-lg font-black text-white uppercase tracking-tight">Claim Referral Rewards</h3>
-                                <p className="text-sm text-gray-400">Request admin approval for your network commissions</p>
+                                <p className="text-sm text-gray-400">Paid automatically with your completed mining cycle withdrawal</p>
                             </div>
                             <span className="material-icons-round text-purple-500 text-3xl font-black">stars</span>
                         </div>
@@ -333,27 +373,16 @@ const Wallet: React.FC = () => {
                         </div>
 
                         <button
-                            onClick={async () => {
-                                try {
-                                    setLoading(true);
-                                    await requestReferralWithdrawal();
-                                    showAlert("Referral withdrawal request submitted successfully! Admin will review and approve your claim.");
-                                } catch (err: any) {
-                                    console.error("Claim request error:", err);
-                                    showAlert(err.message || "Failed to submit claim request. Please try again.");
-                                } finally {
-                                    setLoading(false);
-                                }
-                            }}
+                            onClick={handleWithdraw}
                             disabled={loading}
                             className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-4 rounded-xl font-black text-sm uppercase tracking-wider shadow-neon hover:scale-105 transition-all flex items-center justify-center gap-2 border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             <span className="material-icons-round text-lg font-black">send</span>
-                            {loading ? 'Submitting...' : 'Request Claim Approval'}
+                            {loading ? 'Processing...' : 'Claim with Completed Cycle'}
                         </button>
 
                         <p className="text-[10px] text-gray-500 text-center mt-3">
-                            * Claims are processed after admin verification of your staking cycle completion
+                            * Claim unlocks after at least one 37-day staking cycle is completed
                         </p>
                     </div>
                 )}
