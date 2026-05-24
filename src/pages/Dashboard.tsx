@@ -86,7 +86,28 @@ const Dashboard: React.FC = () => {
                 setLoading(false);
                 return;
             }
-            const stakeableBalance = parseFloat(balanceStr);
+            const info = await getStakedInfo(address);
+            let activeStaked = 0;
+            const wBalanceNum = parseFloat(balanceStr);
+
+            if (info) {
+                const count = info.stakeCount;
+                let runningStakedSum = 0;
+                const flushedStakeCount = getViolationStakeCount(address);
+                for (let i = 0; i < count; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail && !detail.withdrawn) {
+                        const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                        const isViolated = i < flushedStakeCount || wBalanceNum < runningStakedSum + stakeAmount;
+                        if (!isViolated) {
+                            activeStaked += stakeAmount;
+                            runningStakedSum += stakeAmount;
+                        }
+                    }
+                }
+            }
+
+            const stakeableBalance = Math.max(0, wBalanceNum - activeStaked);
 
             if (stakeableBalance < 50) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
@@ -149,13 +170,14 @@ const Dashboard: React.FC = () => {
                     const earned = parseFloat(formatUnits(info.totalEarned, 18));
                     const finalizedEarnedBtc = earned / btcPrice;
 
+                    let runningStakedSum = 0;
                     for (let i = 0; i < count; i++) {
                         const detail = await getStakeDetails(address, i);
                         if (detail && !detail.withdrawn) {
                             const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                             
-                            // Check violation for this individual stake
-                            const isViolated = i < newFlushCount || liveWalletUsdt < stakeAmount;
+                            // Check violation for this individual stake using running sum
+                            const isViolated = i < newFlushCount || liveWalletUsdt < runningStakedSum + stakeAmount;
                             
                             if (isViolated) {
                                 if (i >= newFlushCount) {
@@ -165,6 +187,7 @@ const Dashboard: React.FC = () => {
                             } else {
                                 totalContractAmount += stakeAmount;
                                 activeStaked += stakeAmount;
+                                runningStakedSum += stakeAmount;
 
                                 const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - detail.startTime);
                                 const stakeRate = getTierRate(stakeAmount);

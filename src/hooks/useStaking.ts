@@ -323,6 +323,10 @@ export function useStaking() {
             const isEligible = selfStaked >= 200;
             const isViolated = walletBalance < selfStaked;
 
+            if (!isViolated) {
+                clearReferralFlush(userAddress);
+            }
+
             // If violated, flush referral income
             if (isViolated && isEligible && referralRewards > 0) {
                 recordReferralFlush(referralRewards.toString(), userAddress);

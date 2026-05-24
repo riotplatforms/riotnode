@@ -9,7 +9,7 @@ import { usePrice } from '../hooks/usePrice';
 const Team: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected } = useWallet();
-    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, recordViolation } = useStaking();
+    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, recordViolation, getViolationStakeCount, getStakeDetails } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -38,12 +38,33 @@ const Team: React.FC = () => {
 
             const walletBalance = await getWalletBalance(address);
             const walletBalanceNum = walletBalance ? parseFloat(walletBalance) : 0;
-            const myStake = parseFloat(formatUnits(info.totalStaked, 18));
+            
+            // Calculate activeStaked dynamically using running sum check
+            let activeStaked = 0;
+            let runningStakedSum = 0;
+            const count = info.stakeCount;
+            const flushedStakeCount = getViolationStakeCount(address);
+
+            for (let i = 0; i < count; i++) {
+                const detail = await getStakeDetails(address, i);
+                if (detail && !detail.withdrawn) {
+                    const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                    const isViolated = i < flushedStakeCount || walletBalanceNum < runningStakedSum + stakeAmount;
+                    if (!isViolated) {
+                        activeStaked += stakeAmount;
+                        runningStakedSum += stakeAmount;
+                    }
+                }
+            }
+
+            const myStake = activeStaked;
             const isEligible = myStake >= 200;
-            const violationActive = walletBalanceNum < myStake;
+            
+            const rawStake = parseFloat(formatUnits(info.totalStaked, 18));
+            const hasRawViolation = walletBalanceNum < rawStake;
 
             // Flush self mining and referral income when balance falls below own staked amount
-            if (violationActive && isEligible) {
+            if (hasRawViolation && rawStake >= 200) {
                 recordViolation(formatUnits(info.totalEarned, 18), address);
             }
 
