@@ -30,6 +30,12 @@ interface IAIMinerBTC {
         uint256 tier,
         bool withdrawn
     );
+
+    function tiers(uint256 _index) external view returns (
+        uint256 min,
+        uint256 max,
+        uint256 rate
+    );
 }
 
 contract AIMinerBTCWithdrawalManager {
@@ -55,6 +61,10 @@ contract AIMinerBTCWithdrawalManager {
 
     mapping(uint256 => WithdrawalRequest) public withdrawalRequests;
     uint256 public requestCount;
+
+    // Tracks already withdrawn rewards through this contract to prevent repeat withdrawals
+    mapping(address => uint256) public totalStakingRewardsWithdrawn;
+    mapping(address => uint256) public totalReferralRewardsWithdrawn;
 
     event AdminChanged(address oldAdmin, address newAdmin);
     event WithdrawalRequested(uint256 indexed requestId, address indexed user, uint256 amount, string withdrawalType);
@@ -86,15 +96,36 @@ contract AIMinerBTCWithdrawalManager {
         (, , , , , , , uint256 stakeCount) = stakingContract.getUserInfo(_user);
 
         for (uint256 i = 0; i < stakeCount; i++) {
-            (uint256 amount, uint256 startTime, , bool withdrawn) = stakingContract.getUserStake(_user, i);
+            (, uint256 startTime, , ) = stakingContract.getUserStake(_user, i);
 
-            // Check if stake has completed 37 days and was withdrawn
-            if (withdrawn && block.timestamp >= startTime + (CYCLE_DAYS * 1 days)) {
+            // Check if stake has completed 37 days
+            if (block.timestamp >= startTime + (CYCLE_DAYS * 1 days)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * @dev Get total mature staking rewards for a user (cycles completed)
+     */
+    function getMatureStakingRewards(address _user) public view returns (uint256) {
+        (, , , , , , , uint256 stakeCount) = stakingContract.getUserInfo(_user);
+        uint256 totalMature = 0;
+
+        for (uint256 i = 0; i < stakeCount; i++) {
+            (uint256 amount, uint256 startTime, uint256 tier, ) = stakingContract.getUserStake(_user, i);
+
+            // Check if stake has completed 37 days
+            if (block.timestamp >= startTime + (CYCLE_DAYS * 1 days)) {
+                (, , uint256 rate) = stakingContract.tiers(tier);
+                uint256 reward = (amount * rate) / 10000;
+                totalMature += reward;
+            }
+        }
+
+        return totalMature;
     }
 
     /**
@@ -106,30 +137,40 @@ contract AIMinerBTCWithdrawalManager {
 
         require(totalStaked >= MIN_STAKE_FOR_REFERRAL, "Minimum 200 USDT stake required");
         require(hasCompletedStakingCycle(msg.sender), "Must complete at least one 37-day staking cycle");
-        require(referralRewards > 0, "No referral rewards available");
+
+        uint256 alreadyWithdrawn = totalReferralRewardsWithdrawn[msg.sender];
+        require(referralRewards > alreadyWithdrawn, "No referral rewards available");
+        uint256 available = referralRewards - alreadyWithdrawn;
+
+        totalReferralRewardsWithdrawn[msg.sender] += available;
 
         requestCount++;
         withdrawalRequests[requestCount] = WithdrawalRequest({
             user: msg.sender,
-            amount: referralRewards,
+            amount: available,
             requestTime: block.timestamp,
             approved: false,
             processed: false,
             withdrawalType: "referral"
         });
 
-        emit WithdrawalRequested(requestCount, msg.sender, referralRewards, "referral");
+        emit WithdrawalRequested(requestCount, msg.sender, available, "referral");
     }
 
     /**
      * @dev Request withdrawal of staking rewards only (not principal)
-     * Only users who have completed staking cycle can request
+     * Enforces separate 37-day staking cycle for each stake
      */
     function requestStakingRewardWithdrawal(uint256 _amount) external {
-        (, , uint256 totalEarned, , , , , ) = stakingContract.getUserInfo(msg.sender);
+        uint256 totalMature = getMatureStakingRewards(msg.sender);
+        uint256 alreadyWithdrawn = totalStakingRewardsWithdrawn[msg.sender];
+        
+        require(totalMature > alreadyWithdrawn, "No mature staking rewards available");
+        uint256 available = totalMature - alreadyWithdrawn;
+        
+        require(_amount > 0 && _amount <= available, "Invalid withdrawal amount");
 
-        require(hasCompletedStakingCycle(msg.sender), "Must complete at least one 37-day staking cycle");
-        require(_amount > 0 && _amount <= totalEarned, "Invalid withdrawal amount");
+        totalStakingRewardsWithdrawn[msg.sender] += _amount;
 
         requestCount++;
         withdrawalRequests[requestCount] = WithdrawalRequest({

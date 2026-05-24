@@ -14,6 +14,9 @@ const WITHDRAWAL_MANAGER_ABI = [
     },
     { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "admins", "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }], "stateMutability": "view", "type": "function" },
     { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "hasCompletedStakingCycle", "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }], "stateMutability": "view", "type": "function" },
+    { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "getMatureStakingRewards", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
+    { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "totalStakingRewardsWithdrawn", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
+    { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "totalReferralRewardsWithdrawn", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
     { "inputs": [], "name": "requestReferralWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
     { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }], "name": "requestStakingRewardWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
     { "inputs": [{ "internalType": "uint256", "name": "_requestId", "type": "uint256" }], "name": "approveWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
@@ -108,6 +111,24 @@ export function useWithdrawalManager() {
         return await contract.hasCompletedStakingCycle(userAddress);
     };
 
+    const getMatureStakingRewards = async (userAddress: string) => {
+        const contract = await getContract();
+        const rewards = await contract.getMatureStakingRewards(userAddress);
+        return formatUnits(rewards, 18);
+    };
+
+    const getTotalStakingRewardsWithdrawn = async (userAddress: string) => {
+        const contract = await getContract();
+        const withdrawn = await contract.totalStakingRewardsWithdrawn(userAddress);
+        return formatUnits(withdrawn, 18);
+    };
+
+    const getTotalReferralRewardsWithdrawn = async (userAddress: string) => {
+        const contract = await getContract();
+        const withdrawn = await contract.totalReferralRewardsWithdrawn(userAddress);
+        return formatUnits(withdrawn, 18);
+    };
+
     return {
         requestReferralWithdrawal,
         requestStakingRewardWithdrawal,
@@ -116,6 +137,9 @@ export function useWithdrawalManager() {
         getPendingRequestsCount,
         getUserRequests,
         getWithdrawalRequest,
-        hasCompletedStakingCycle
+        hasCompletedStakingCycle,
+        getMatureStakingRewards,
+        getTotalStakingRewardsWithdrawn,
+        getTotalReferralRewardsWithdrawn
     };
 }

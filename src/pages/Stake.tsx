@@ -5,6 +5,7 @@ import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
+import { parseEthersError } from '../utils/errors';
 
 const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
@@ -23,7 +24,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
-    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, calculateEffectiveEarned, getViolationStakeCount } = useStaking();
+    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, getViolationStakeCount, recordStakeFlush } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -182,60 +183,45 @@ const Stake: React.FC = () => {
                 let totalContractAmount = 0;
                 let dailyUsdtYield = 0;
                 const details = [];
-                const flushedStakeCount = getViolationStakeCount(address);
+                let newFlushCount = getViolationStakeCount(address);
 
-                // 1. Calculate Contract Totals
-                for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
-                       totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
-                    }
-                }
+                const earned = parseFloat(formatUnits(info.totalEarned, 18));
+                const finalizedEarnedBtc = earned / btcPrice;
 
-                // 2. Apply the Global Synchronized Clamp
-                // If balance drops below total staked, mining is FLUSHED globally
-                let activeStaked = 0;
-                const isGloballyViolated = usdtBalance < totalContractAmount;
-                const extraFund = Math.max(0, usdtBalance - totalContractAmount);
-
-                if (!isGloballyViolated && usdtBalance >= 50) {
-                    activeStaked = totalContractAmount;
-                }
-
-                const infoEarned = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
-                calculateEffectiveEarned(infoEarned.toString(), address); // Call to ensure flushing if needed, though usually handled in updateMiningData
-
-                // 3. Populate Details for UI
-                dailyUsdtYield = 0;
-                details.length = 0; // Clear the existing array instead of redeclaring
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                        const rate = getTierRate(stakeAmount); 
                         
-                        // If balance is less than total stake or less than 50, mining is marked as Violated (Flushed)
-                        const isViolated = i < flushedStakeCount || isGloballyViolated || usdtBalance < 50;
+                        // Check violation for this individual stake
+                        const isViolated = i < newFlushCount || usdtBalance < stakeAmount;
                         
-                        if (!isViolated) {
+                        if (isViolated) {
+                            if (i >= newFlushCount) {
+                                newFlushCount = i + 1;
+                                recordStakeFlush(finalizedEarnedBtc.toString(), address, newFlushCount);
+                            }
+                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
+                        } else {
+                            totalContractAmount += stakeAmount;
+                            
+                            const rate = getTierRate(stakeAmount); 
                             dailyUsdtYield += (stakeAmount * rate) / 37;
                             details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
-                        } else {
-                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
                         }
                     }
                 }
 
                 const newStats = {
-                    totalStaked: activeStaked.toFixed(2),
+                    totalStaked: totalContractAmount.toFixed(2),
                     dailyYield: (dailyUsdtYield / btcPrice).toFixed(14),
-                    totalTP: (activeStaked * 2.5).toFixed(0)
+                    totalTP: (totalContractAmount * 2.5).toFixed(0)
                 };
 
                 setStats(newStats);
                 setFunds({
                     walletBalance: usdtBalance.toFixed(2),
-                    extraFund: extraFund.toFixed(2)
+                    extraFund: usdtBalance.toFixed(2)
                 });
                 setUserStakes(details);
 
@@ -260,7 +246,6 @@ const Stake: React.FC = () => {
     useEffect(() => {
         if (miningStats.isLoaded) {
             const walletBalance = parseFloat(miningStats.walletBalance || '0');
-            const totalStaked = parseFloat(miningStats.totalStaked || '0');
             setStats(prev => ({
                 ...prev,
                 totalStaked: miningStats.totalStaked,
@@ -269,7 +254,7 @@ const Stake: React.FC = () => {
             }));
             setFunds({
                 walletBalance: walletBalance.toFixed(2),
-                extraFund: Math.max(0, walletBalance - totalStaked).toFixed(2)
+                extraFund: walletBalance.toFixed(2)
             });
         }
     }, [miningStats]);
@@ -322,20 +307,7 @@ const Stake: React.FC = () => {
             
             const balance = parseFloat(balanceStr);
             const refAddress = referrer || '0x0000000000000000000000000000000000000000';
-            const info = await getStakedInfo(address);
-            let activeStaked = 0;
-            const flushedStakeCount = getViolationStakeCount(address);
-
-            if (info) {
-                for (let i = 0; i < info.stakeCount; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
-                        activeStaked += parseFloat(formatUnits(detail.amount, 18));
-                    }
-                }
-            }
-
-            const stakeableBalance = Math.max(0, balance - activeStaked);
+            const stakeableBalance = balance;
 
             if (stakeableBalance < 50) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
@@ -346,7 +318,7 @@ const Stake: React.FC = () => {
             await tx.wait();
             showAlert(`Success: Extra ${stakeableBalance.toFixed(2)} USDT staked and mining upgraded!`);
         } catch (err: any) {
-            showAlert(err.message || 'Transaction failed');
+            showAlert(parseEthersError(err));
         } finally {
             setLoading(null);
         }
@@ -358,7 +330,7 @@ const Stake: React.FC = () => {
             await withdraw(index);
             showAlert('Success: Withdrawal completed!');
         } catch (err: any) {
-            showAlert(err.message || 'Withdrawal failed');
+            showAlert(parseEthersError(err));
         } finally {
             setLoading(null);
         }

@@ -6,6 +6,7 @@ import { useTelegram } from '../hooks/useTelegram';
 import { telegramConnectionsManager } from '../lib/telegramConnections';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
+import { parseEthersError } from '../utils/errors';
 
 const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
@@ -25,7 +26,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, recordStakeFlush, getViolationStakeCount } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -85,20 +86,7 @@ const Dashboard: React.FC = () => {
                 setLoading(false);
                 return;
             }
-            const info = await getStakedInfo(address);
-            let activeStaked = 0;
-            const flushedStakeCount = getViolationStakeCount(address);
-
-            if (info) {
-                for (let i = 0; i < info.stakeCount; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
-                        activeStaked += parseFloat(formatUnits(detail.amount, 18));
-                    }
-                }
-            }
-
-            const stakeableBalance = Math.max(0, parseFloat(balanceStr) - activeStaked);
+            const stakeableBalance = parseFloat(balanceStr);
 
             if (stakeableBalance < 50) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
@@ -121,7 +109,7 @@ const Dashboard: React.FC = () => {
             } else if (err.message && (err.message.includes("50") || err.message.includes("Activation"))) {
                 showAlert("Minimum 50 USDT required to activate mining node.");
             } else {
-                showAlert(err.message || 'Transaction rejected. Please try again.');
+                showAlert(parseEthersError(err));
             }
         } finally {
             setLoading(false);
@@ -155,46 +143,38 @@ const Dashboard: React.FC = () => {
                     const count = info.stakeCount;
                     let totalContractAmount = 0;
                     let totalAccruedBtc = 0;
-                    const flushedStakeCount = getViolationStakeCount(address);
+                    let activeStaked = 0;
+                    let newFlushCount = getViolationStakeCount(address);
 
-                    for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
-                        if (detail && !detail.withdrawn && i >= flushedStakeCount) {
-                            totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
-                        }
-                    }
-
-                    totalAccruedBtc = 0;
                     const earned = parseFloat(formatUnits(info.totalEarned, 18));
                     const finalizedEarnedBtc = earned / btcPrice;
 
-                    // HOLDING REQUIREMENT CHECK (Violation Logic)
-                    // If balance drops below total staked, mining is FLUSHED
-                    let activeStaked = 0;
-                    const isCurrentlyViolated = liveWalletUsdt < totalContractAmount;
+                    for (let i = 0; i < count; i++) {
+                        const detail = await getStakeDetails(address, i);
+                        if (detail && !detail.withdrawn) {
+                            const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                            
+                            // Check violation for this individual stake
+                            const isViolated = i < newFlushCount || liveWalletUsdt < stakeAmount;
+                            
+                            if (isViolated) {
+                                if (i >= newFlushCount) {
+                                    newFlushCount = i + 1;
+                                    recordStakeFlush(finalizedEarnedBtc.toString(), address, newFlushCount);
+                                }
+                            } else {
+                                totalContractAmount += stakeAmount;
+                                activeStaked += stakeAmount;
 
-                    if (!isCurrentlyViolated && liveWalletUsdt >= 50) {
-                        activeStaked = totalContractAmount;
-                        
-                        // Calculate accrued for active stakes
-                        for (let i = 0; i < count; i++) {
-                            const detail = await getStakeDetails(address, i);
-                            if (detail && !detail.withdrawn && i >= flushedStakeCount) {
-                                const timePassed = (Date.now() / 1000) - detail.startTime;
-                                const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                                const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - detail.startTime);
                                 const stakeRate = getTierRate(stakeAmount);
                                 const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
                                 totalAccruedBtc += accrued;
                             }
                         }
-                    } else if (isCurrentlyViolated && totalContractAmount > 0) {
-                        // Record the violation (Flush the rewards)
-                        recordStakeFlush(finalizedEarnedBtc.toString(), address, count);
                     }
 
-                    const effectiveContractEarned = calculateEffectiveEarned(finalizedEarnedBtc.toString(), address);
-                    const currentTotalBalance = activeStaked > 0 ? (parseFloat(effectiveContractEarned) + totalAccruedBtc) : 0;
-
+                    const currentTotalBalance = activeStaked > 0 ? totalAccruedBtc : 0;
                     const rate = getTierRate(activeStaked);
                     const dailyProfitBtc = activeStaked > 0 ? ((activeStaked * rate) / (37 * btcPrice)) : 0;
 

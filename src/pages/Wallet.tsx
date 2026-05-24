@@ -5,12 +5,13 @@ import { useStaking, getTierRate } from '../hooks/useStaking';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { useTelegram } from '../hooks/useTelegram';
+import { parseEthersError } from '../utils/errors';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, calculateEffectiveEarned, recordStakeFlush, getViolationStakeCount, withdraw } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, recordStakeFlush, getViolationStakeCount, withdraw } = useStaking();
     const { btcPrice } = usePrice();
     const { showAlert } = useTelegram();
 
@@ -71,52 +72,42 @@ const Wallet: React.FC = () => {
                 let totalContractAmount = 0;
                 let totalAccruedBtc = 0;
                 let minMaturity = Infinity;
-                const flushedStakeCount = getViolationStakeCount(address);
-
-                // 1. Calculate Contract Totals
-                for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
-                        totalContractAmount += parseFloat(formatUnits(detail.amount, 18));
-                    }
-                }
-
-                // 2. Apply the Global Synchronized Clamp
-                // If balance drops below total staked, mining state is FLUSHED globally
                 let activeStaked = 0;
-                const isCurrentlyViolated = wBalanceNum < totalContractAmount;
+                let newFlushCount = getViolationStakeCount(address);
 
-                if (!isCurrentlyViolated && wBalanceNum >= 50) {
-                    activeStaked = totalContractAmount;
-                } else if (isCurrentlyViolated && totalContractAmount > 0) {
-                    // Record the violation (Flush the rewards)
-                    recordStakeFlush((parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice).toString(), address, count);
-                }
+                const earned = parseFloat(formatUnits(info.totalEarned, 18));
+                const finalizedEarnedBtc = earned / btcPrice;
 
-                // 3. Calculate Accrued Rewards & Maturity based on Clamp
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn && i >= flushedStakeCount) {
+                    if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                        const rate = getTierRate(stakeAmount);
                         
-                        // Only add to rewards if wallet has enough fund (global state check)
-                        if (activeStaked > 0) {
-                            const logicalStartTime = detail.startTime;
-                            const timePassed = (Date.now() / 1000) - logicalStartTime;
+                        // Check violation for this individual stake
+                        const isViolated = i < newFlushCount || wBalanceNum < stakeAmount;
+                        
+                        if (isViolated) {
+                            if (i >= newFlushCount) {
+                                newFlushCount = i + 1;
+                                recordStakeFlush(finalizedEarnedBtc.toString(), address, newFlushCount);
+                            }
+                        } else {
+                            totalContractAmount += stakeAmount;
+                            activeStaked += stakeAmount;
+
+                            const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - detail.startTime);
+                            const rate = getTierRate(stakeAmount);
                             const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / btcPrice;
                             totalAccruedBtc += accrued;
-                        }
 
-                        const maturity = detail.startTime + (37 * 86400);
-                        if (maturity < minMaturity) minMaturity = maturity;
+                            const maturity = detail.startTime + (37 * 86400);
+                            if (maturity < minMaturity) minMaturity = maturity;
+                        }
                     }
                 }
                 setNextMaturity(minMaturity === Infinity ? null : minMaturity);
 
-                const infoEarnedRaw = parseFloat(formatUnits(info.totalEarned, 18)) / btcPrice;
-                const effectiveContractEarned = calculateEffectiveEarned(infoEarnedRaw.toString(), address);
-                const currentTotalBtc = activeStaked > 0 ? (parseFloat(effectiveContractEarned) + totalAccruedBtc) : 0;
+                const currentTotalBtc = activeStaked > 0 ? totalAccruedBtc : 0;
 
                 // Networking Logic
                 const isEligible = activeStaked >= 200;
@@ -208,7 +199,7 @@ const Wallet: React.FC = () => {
             showAlert('Success: Withdrawal completed!');
             navigate('/stake');
         } catch (err: any) {
-            showAlert(err?.reason || err?.shortMessage || err?.message || 'Withdrawal failed');
+            showAlert(parseEthersError(err));
         } finally {
             setLoading(false);
         }

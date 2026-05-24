@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useAdmin } from '../hooks/useAdmin';
+import { parseEthersError } from '../utils/errors';
 import { telegramConnectionsManager } from '../lib/telegramConnections';
 import { walletConnectionsManager } from '../lib/walletConnections';
 import type { TelegramConnection } from '../lib/telegramConnections';
@@ -61,7 +62,7 @@ const AdminControl: React.FC = () => {
                 setUserData(null);
             }
         } catch (err: any) {
-            setError(err.message);
+            setError(parseEthersError(err));
         } finally {
             setFetching(false);
         }
@@ -78,7 +79,7 @@ const AdminControl: React.FC = () => {
             setAllUsers(users);
             setScanMsg('');
         } catch (err: any) {
-            setError(err.message);
+            setError(parseEthersError(err));
             setScanMsg('');
         } finally {
             usersLoadInFlight.current = false;
@@ -214,7 +215,7 @@ const AdminControl: React.FC = () => {
             if (targetUser) handleFetchUser();
         } catch (err: any) {
             console.error(err);
-            setError(err.reason || err.message || "An error occurred");
+            setError(parseEthersError(err));
         } finally {
             setLoading(false);
         }
