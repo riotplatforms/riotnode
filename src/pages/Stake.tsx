@@ -24,7 +24,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
-    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, getViolationStakeCount, recordStakeFlush } = useStaking();
+    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordStakeViolation } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -183,11 +183,6 @@ const Stake: React.FC = () => {
                 let totalContractAmount = 0;
                 let dailyUsdtYield = 0;
                 const details = [];
-                let newFlushCount = getViolationStakeCount(address);
-
-                const earned = parseFloat(formatUnits(info.totalEarned, 18));
-                const finalizedEarnedBtc = earned / btcPrice;
-
                 let runningStakedSum = 0;
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
@@ -195,13 +190,10 @@ const Stake: React.FC = () => {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         
                         // Check violation for this individual stake using running sum
-                        const isViolated = i < newFlushCount || usdtBalance < runningStakedSum + stakeAmount;
+                        const isViolated = usdtBalance < runningStakedSum + stakeAmount;
                         
                         if (isViolated) {
-                            if (i >= newFlushCount) {
-                                newFlushCount = i + 1;
-                                recordStakeFlush(finalizedEarnedBtc.toString(), address, newFlushCount);
-                            }
+                            recordStakeViolation(address, i);
                             details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
                         } else {
                             totalContractAmount += stakeAmount;
@@ -316,12 +308,11 @@ const Stake: React.FC = () => {
             if (info) {
                 const count = info.stakeCount;
                 let runningStakedSum = 0;
-                const flushedStakeCount = getViolationStakeCount(address);
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                        const isViolated = i < flushedStakeCount || balance < runningStakedSum + stakeAmount;
+                        const isViolated = balance < runningStakedSum + stakeAmount;
                         if (!isViolated) {
                             activeStaked += stakeAmount;
                             runningStakedSum += stakeAmount;

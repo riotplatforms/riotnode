@@ -9,7 +9,7 @@ import { usePrice } from '../hooks/usePrice';
 const Team: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected } = useWallet();
-    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, recordViolation, getViolationStakeCount, getStakeDetails } = useStaking();
+    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, recordViolation, getStakeDetails } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -43,13 +43,12 @@ const Team: React.FC = () => {
             let activeStaked = 0;
             let runningStakedSum = 0;
             const count = info.stakeCount;
-            const flushedStakeCount = getViolationStakeCount(address);
 
             for (let i = 0; i < count; i++) {
                 const detail = await getStakeDetails(address, i);
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                    const isViolated = i < flushedStakeCount || walletBalanceNum < runningStakedSum + stakeAmount;
+                    const isViolated = walletBalanceNum < runningStakedSum + stakeAmount;
                     if (!isViolated) {
                         activeStaked += stakeAmount;
                         runningStakedSum += stakeAmount;

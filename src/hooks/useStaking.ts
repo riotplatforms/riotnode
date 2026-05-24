@@ -288,6 +288,20 @@ export function useStaking() {
         localStorage.removeItem(`flushed_stake_count_${address.toLowerCase()}`);
     };
 
+    const getStakeLastFlushedTime = (address: string | undefined, index: number, startTime: number) => {
+        if (!address) return startTime;
+        const key = `stake_flushed_time_${address.toLowerCase()}_${index}`;
+        const stored = localStorage.getItem(key);
+        if (!stored) return startTime;
+        return Math.max(startTime, parseFloat(stored) || 0);
+    };
+
+    const recordStakeViolation = (address: string | undefined, index: number) => {
+        if (!address) return;
+        const key = `stake_flushed_time_${address.toLowerCase()}_${index}`;
+        localStorage.setItem(key, (Date.now() / 1000).toString());
+    };
+
     // Referral Income Tracking (similar to stake flush)
     const recordReferralFlush = (referralRewards: string, address: string | undefined) => {
         if (!address) return;
@@ -395,6 +409,7 @@ export function useStaking() {
         getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings, 
         calculateEffectiveEarned, recordViolation, recordStakeFlush, getViolationStakeCount, isViolationActive, clearViolation,
         recordReferralFlush, getIsReferralFlushed, clearReferralFlush, getPerLevelReferralIncome,
+        getStakeLastFlushedTime, recordStakeViolation,
         address, isConnected
     };
 }
