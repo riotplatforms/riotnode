@@ -39,15 +39,20 @@ const Team: React.FC = () => {
             const walletBalance = await getWalletBalance(address);
             const walletBalanceNum = walletBalance ? parseFloat(walletBalance) : 0;
             
-            // Calculate activeStaked dynamically using running sum check
+            // activeStaked: violation-adjusted (for rewards/eligibility display)
             let activeStaked = 0;
             let runningStakedSum = 0;
+            // contractStaked: sum of all non-withdrawn on-chain stakes (for level unlock)
+            let contractStaked = 0;
             const count = info.stakeCount;
 
             for (let i = 0; i < count; i++) {
                 const detail = await getStakeDetails(address, i);
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                    // Always count toward on-chain stake for level unlock
+                    contractStaked += stakeAmount;
+                    // Only count toward active rewards if not violated
                     const isViolated = walletBalanceNum < runningStakedSum + stakeAmount;
                     if (!isViolated) {
                         activeStaked += stakeAmount;
@@ -58,7 +63,7 @@ const Team: React.FC = () => {
 
             const myStake = activeStaked;
             const isEligible = myStake >= 200;
-            
+
             const rawStake = parseFloat(formatUnits(info.totalStaked, 18));
             const hasRawViolation = walletBalanceNum < rawStake;
 
@@ -71,10 +76,12 @@ const Team: React.FC = () => {
             setPerLevelIncome(referralIncomeData.byLevel);
             setIsReferralFlushed(referralIncomeData.isFlushed);
 
+            // Level unlock uses contractStaked (on-chain locked amount), not violation-adjusted amount
+            // Staked funds are locked for 37 days so levels should remain accessible
             let unlocked = 0;
-            if (myStake >= 2000) unlocked = 10;
-            else if (myStake >= 1000) unlocked = 6;
-            else if (myStake >= 200) unlocked = 3;
+            if (contractStaked >= 2000) unlocked = 10;
+            else if (contractStaked >= 1000) unlocked = 6;
+            else if (contractStaked >= 200) unlocked = 3;
 
             // Fetch team tree from events
             const tree = await getTeamTree(address);
