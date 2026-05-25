@@ -242,7 +242,7 @@ const Stake: React.FC = () => {
             }
 
             const newStats = {
-                totalStaked: totalContractAmount.toFixed(2),
+                totalStaked: totalActiveStaked.toFixed(2),
                 dailyYield: (dailyUsdtYield / btcPrice).toFixed(14),
                 totalTP: (activeStakedForPower * 2.5).toFixed(0)
             };
@@ -255,16 +255,16 @@ const Stake: React.FC = () => {
             setUserStakes(details);
 
             // Update global context for other pages
-            setMiningStats({
-                balance: miningStats.balance, // Preserve balance from dashboard/wallet
+            setMiningStats((prev: any) => ({
+                ...prev,
                 miningPower: newStats.totalTP,
                 dailyProfit: newStats.dailyYield,
                 totalStaked: newStats.totalStaked,
                 walletBalance: usdtBalanceStr,
                 isLoaded: true
-            });
+            }));
         }
-    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, btcPrice, miningStats.balance, setMiningStats]);
+    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, btcPrice, setMiningStats]);
 
     useEffect(() => {
         updateStakes();

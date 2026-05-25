@@ -319,7 +319,7 @@ export function useStaking() {
     };
 
     // Calculate per-level referral income with eligibility checks and flush logic
-    const getPerLevelReferralIncome = async (userAddress: string, walletBalance: number) => {
+    const getPerLevelReferralIncome = async (userAddress: string, _walletBalance: number) => {
         const contract = await getContract();
         if (!contract) return { byLevel: {}, isEligible: false, isFlushed: false };
 
@@ -328,20 +328,13 @@ export function useStaking() {
             if (!info) return { byLevel: {}, isEligible: false, isFlushed: false };
 
             const selfStaked = parseFloat(formatUnits(info.totalStaked, 18));
-            const referralRewards = parseFloat(formatUnits(info.referralRewards, 18));
 
-            // Check eligibility: 200+ USDT self stake and wallet balance >= staked
+            // Check eligibility: 200+ USDT self stake (Bypassing violation checks on level eligibility)
             const isEligible = selfStaked >= 200;
-            const isViolated = walletBalance < selfStaked;
+            const isViolated = false;
 
             if (!isViolated) {
                 clearReferralFlush(userAddress);
-            }
-
-            // If violated, flush referral income
-            if (isViolated && isEligible && referralRewards > 0) {
-                recordReferralFlush(referralRewards.toString(), userAddress);
-                return { byLevel: {}, isEligible, isFlushed: true };
             }
 
             if (!isEligible || getIsReferralFlushed(userAddress)) {

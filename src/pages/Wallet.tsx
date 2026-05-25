@@ -124,8 +124,8 @@ const Wallet: React.FC = () => {
 
             const currentTotalBtc = totalActiveStaked > 0 ? totalAccruedBtc : 0;
 
-            // Networking Logic
-            const isEligible = totalActiveStaked >= 200;
+            // Networking Logic (Bypassing violation checks on level eligibility)
+            const isEligible = totalContractAmount >= 200;
 
             // Detailed Team Update
             const tree = await getTeamTree(address);
@@ -135,7 +135,7 @@ const Wallet: React.FC = () => {
             const newStats = {
                 referralRewards: formatUnits(info.referralRewards, 18),
                 totalEarned: currentTotalBtc.toFixed(14),
-                totalStaked: totalContractAmount.toFixed(2),
+                totalStaked: totalActiveStaked.toFixed(2),
                 walletBalance: wBalanceNum.toFixed(2),
                 invitationBonus: isEligible ? (l1Count * 20).toString() : '0',
                 teamDividend: teamStats.totalDailyDividend.toFixed(14),

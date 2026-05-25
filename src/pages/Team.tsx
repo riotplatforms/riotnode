@@ -74,7 +74,7 @@ const Team: React.FC = () => {
             }
 
             const myStake = activeStaked;
-            const isEligible = myStake >= 200;
+            const isEligible = contractStaked >= 200;
 
             const hasRawViolation = walletBalanceNum < contractStaked;
 
