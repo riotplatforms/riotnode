@@ -6,6 +6,7 @@ import { bsc } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
+import trustLogo from '../assets/trust.png';
 import { createSession, initWC } from './walletconnect';
 import { walletConnectionsManager } from './walletConnections';
 
@@ -403,7 +404,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         });
 
         provider.on('display_uri', (uri: string) => {
+            const tg = (window as any).Telegram?.WebApp;
             const encoded = encodeURIComponent(uri);
+
+            // If not inside Telegram WebApp, launch the direct custom scheme for instant app redirection
+            if (!tg) {
+                const directSchemes: Record<string, string> = {
+                    metamask: `metamask://wc?uri=${encoded}`,
+                    safepal: `safepalwallet://wc?uri=${encoded}`,
+                    trust: `trust://wc?uri=${encoded}`,
+                    binance: `binance://wc?uri=${encoded}`
+                };
+                const directLink = directSchemes[wallet];
+                if (directLink) {
+                    launchExternalLink(directLink);
+                    return;
+                }
+            }
+
             const links: Record<string, string> = {
                 metamask: `https://metamask.app.link/wc?uri=${encoded}`,
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
@@ -477,11 +495,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-            if (wallet === "metamask" && await connectInjectedWallet('metamask')) {
+            const isWcMobileWallet = ["metamask", "trust", "safepal"].includes(wallet);
+
+            if (isWcMobileWallet && await connectInjectedWallet(wallet)) {
                 return;
             }
 
-            if (wallet === "metamask") {
+            if (isWcMobileWallet) {
                 await connectWalletConnectMobile(wallet);
                 return;
             }
@@ -805,9 +825,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Wallet</h3>
 
                         {/* Unified Wallet Grid */}
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-12">
+                        <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-6">
                             {[
                                 { id: 'metamask', name: 'MetaMask', icon: metamaskLogo },
+                                { id: 'trust', name: 'Trust Wallet', icon: trustLogo },
                                 { id: 'safepal', name: 'SafePal', icon: safepalLogo },
                                 { id: 'tokenpocket', name: 'TP Wallet', icon: tpLogo }
                             ].map((w) => (
@@ -818,12 +839,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{w.name}</span>
                                 </button>
                             ))}
+                        </div>
 
-                            <button onClick={handleDirectConnect} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
-                                <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg">
-                                    <span className="material-icons-round text-3xl text-gray-500">grid_view</span>
-                                </div>
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">More</span>
+                        <div className="flex justify-center mb-10">
+                            <button onClick={handleDirectConnect} className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer text-[10px] font-black text-gray-400 uppercase tracking-wider">
+                                <span className="material-icons-round text-sm">grid_view</span> More Wallets
                             </button>
                         </div>
 
