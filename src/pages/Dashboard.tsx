@@ -118,14 +118,7 @@ const Dashboard: React.FC = () => {
         } catch (err: any) {
             console.error("[Mining] Error:", err);
             
-            // CLEAR ERROR MESSAGE FOR LOW BALANCE
-            if (err.message && err.message.includes("extra USDT")) {
-                showAlert(err.message);
-            } else if (err.message && (err.message.includes("50") || err.message.includes("Activation"))) {
-                showAlert("Minimum 50 USDT required to activate mining node.");
-            } else {
-                showAlert(parseEthersError(err));
-            }
+            showAlert(parseEthersError(err));
         } finally {
             setLoading(false);
         }
