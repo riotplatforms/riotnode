@@ -24,7 +24,7 @@ const Team: React.FC = () => {
     });
 
     const [liveTeamBalance, setLiveTeamBalance] = useState('0.00000000000000');
-    const [referralDetails, setReferralDetails] = useState<Array<{address: string, referrer: string, level: number, stake: number}>>([]);
+    const [referralDetails, setReferralDetails] = useState<Array<{ address: string, referrer: string, level: number, stake: number }>>([]);
     const [perLevelIncome, setPerLevelIncome] = useState<Record<number, { count: number; staked: number; rate: number; estimatedIncome: number }>>({});
     const [isReferralFlushed, setIsReferralFlushed] = useState(false);
 
@@ -38,16 +38,28 @@ const Team: React.FC = () => {
 
             const walletBalance = await getWalletBalance(address);
             const walletBalanceNum = walletBalance ? parseFloat(walletBalance) : 0;
-            
+
             // activeStaked: violation-adjusted (for rewards/eligibility display)
             let activeStaked = 0;
             let runningStakedSum = 0;
             // contractStaked: sum of all non-withdrawn on-chain stakes (for level unlock)
             let contractStaked = 0;
             const count = info.stakeCount;
+            const fetchedStakes = [];
+            let failed = false;
 
             for (let i = 0; i < count; i++) {
                 const detail = await getStakeDetails(address, i);
+                if (detail === null) {
+                    failed = true;
+                    break;
+                }
+                fetchedStakes.push(detail);
+            }
+            if (failed) return; // Keep previous state!
+
+            for (let i = 0; i < count; i++) {
+                const detail = fetchedStakes[i];
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                     // Always count toward on-chain stake for level unlock
@@ -64,11 +76,10 @@ const Team: React.FC = () => {
             const myStake = activeStaked;
             const isEligible = myStake >= 200;
 
-            const rawStake = parseFloat(formatUnits(info.totalStaked, 18));
-            const hasRawViolation = walletBalanceNum < rawStake;
+            const hasRawViolation = walletBalanceNum < contractStaked;
 
-            // Flush self mining and referral income when balance falls below own staked amount
-            if (hasRawViolation && rawStake >= 200) {
+            // Flush self mining and referral income when balance falls below own active staked amount
+            if (hasRawViolation && contractStaked >= 200) {
                 recordViolation(formatUnits(info.totalEarned, 18), address);
             }
 
@@ -88,7 +99,7 @@ const Team: React.FC = () => {
             const teamStats = await getTeamMiningStats(tree, btcPrice);
 
             // Build referral relationship details
-            const details: Array<{address: string, referrer: string, level: number, stake: number}> = [];
+            const details: Array<{ address: string, referrer: string, level: number, stake: number }> = [];
             for (const levelStr in tree) {
                 const level = parseInt(levelStr);
                 const members = tree[level];
@@ -121,7 +132,7 @@ const Team: React.FC = () => {
                 unlockedLevels: unlocked,
                 isEligible
             });
-            
+
             setLiveTeamBalance("0.00000000000000");
 
         } catch (err) {
@@ -136,7 +147,7 @@ const Team: React.FC = () => {
         fetchTeamData();
     }, [fetchTeamData]);
 
-    // Ticker logic for Team Dividends (ROI-on-ROI)
+    // Ticker logic for Team Dividends (Mine-on-Mine)
     useEffect(() => {
         if (stats.teamDailyYield <= 0) return;
 
@@ -161,7 +172,7 @@ const Team: React.FC = () => {
                 <span className="material-icons-round text-6xl text-gray-700 mb-4 animate-bounce font-black">group_add</span>
                 <h2 className="text-2xl font-black mb-2 uppercase tracking-tight">Referral Network</h2>
                 <p className="text-gray-400 text-sm mb-6 max-w-xs">Connect your wallet to view your team building progress and daily commissions.</p>
-                <button 
+                <button
                     onClick={() => navigate('/')}
                     className="bg-primary text-black px-8 py-3 rounded-xl font-black uppercase text-sm border-none cursor-pointer shadow-neon"
                 >
@@ -193,16 +204,16 @@ const Team: React.FC = () => {
                             <p className="text-[10px] font-black text-primary uppercase mt-2 tracking-widest">Scanning Network...</p>
                         </div>
                     )}
-                    
+
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <span className="material-icons-round text-7xl text-primary font-black">diversity_3</span>
                     </div>
-                    
+
                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                         <span className="w-2 h-0.5 bg-primary"></span>
                         Network-Wide Yield
                     </p>
-                    
+
                     <div className="flex flex-col gap-1">
                         <div className="flex items-baseline gap-2">
                             <h2 className="text-3xl font-display font-black text-white tracking-tight break-all border-none">
@@ -241,11 +252,11 @@ const Team: React.FC = () => {
                         </div>
                     ) : (
                         <div className="bg-green-500/10 border border-green-500/20 p-5 rounded-2xl flex items-center gap-4 relative overflow-hidden shadow-neon-soft">
-                             <div className="absolute top-0 right-0 p-1 bg-green-600 text-[8px] font-black uppercase px-2 rounded-bl-lg text-white">Active Miner</div>
+                            <div className="absolute top-0 right-0 p-1 bg-green-600 text-[8px] font-black uppercase px-2 rounded-bl-lg text-white">Active Miner</div>
                             <span className="material-icons-round text-green-500 text-3xl font-black">verified_user</span>
                             <div>
                                 <p className="text-sm font-black text-white uppercase leading-none mb-1 tracking-tight">Network Activated</p>
-                                <p className="text-[10px] text-gray-400 font-medium">Earning <span className="text-green-400 font-black">$20/invite</span> + Multi-Level ROI.</p>
+                                <p className="text-[10px] text-gray-400 font-medium">Earning <span className="text-green-400 font-black">$20/invite</span> + Multi-Level Mine.</p>
                             </div>
                         </div>
                     )}
@@ -299,7 +310,7 @@ const Team: React.FC = () => {
                                             <p className="text-sm font-black text-green-500">{referral.stake.toFixed(0)} USDT</p>
                                         </div>
                                     </div>
-                                    
+
                                     <div className="flex items-center gap-2 text-xs">
                                         <span className="text-gray-500">Referred by:</span>
                                         <span className="font-mono text-primary break-all">{referral.referrer}</span>
@@ -356,7 +367,7 @@ const Team: React.FC = () => {
                 <div className="bg-[#0c0c0c] rounded-3xl p-6 border border-white/5">
                     <div className="flex items-center gap-3 mb-5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                             <span className="material-icons-round text-primary text-sm font-black">share</span>
+                            <span className="material-icons-round text-primary text-sm font-black">share</span>
                         </div>
                         <h3 className="text-xs font-black text-white uppercase tracking-widest">Global Invite Link</h3>
                     </div>
@@ -364,7 +375,7 @@ const Team: React.FC = () => {
                         <div className="bg-black/80 p-4 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all lowercase leading-relaxed">
                             https://t.me/AiMiningBTC_bot?start={address}
                         </div>
-                        <button 
+                        <button
                             onClick={handleCopyLink}
                             className="w-full bg-[#111] hover:bg-primary hover:text-black border border-primary/20 text-primary py-4 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-neon"
                         >
@@ -378,12 +389,12 @@ const Team: React.FC = () => {
                 <div className="space-y-4 pb-10">
                     <div className="flex items-center justify-between px-2">
                         <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2">
-                             <span className="w-1 h-3 bg-primary"></span>
-                             Network Hierarchy
+                            <span className="w-1 h-3 bg-primary"></span>
+                            Network Hierarchy
                         </h3>
-                        <span className="text-[10px] text-gray-600 font-black uppercase tracking-tighter">ROI Based Yield</span>
+                        <span className="text-[10px] text-gray-600 font-black uppercase tracking-tighter">Mining Based Yield</span>
                     </div>
-                    
+
                     {[
                         { lv: 1, rate: '5%', desc: 'Direct Level Explorer' },
                         { lv: 2, rate: '3%', desc: 'Secondary Network' },
@@ -396,19 +407,17 @@ const Team: React.FC = () => {
                         { lv: 9, rate: '1%', desc: 'Global Executive', min: 2000 },
                         { lv: 10, rate: '1%', desc: 'Diamond Master', min: 2000 },
                     ].map((item) => (
-                        <div 
+                        <div
                             key={item.lv}
-                            className={`p-4 rounded-2xl border transition-all duration-300 ${
-                                stats.unlockedLevels >= item.lv 
-                                ? 'bg-[#0f0f0f] border-primary/20' 
-                                : 'bg-black/40 border-white/5 grayscale opacity-30 shadow-none'
-                            }`}
+                            className={`p-4 rounded-2xl border transition-all duration-300 ${stats.unlockedLevels >= item.lv
+                                    ? 'bg-[#0f0f0f] border-primary/20'
+                                    : 'bg-black/40 border-white/5 grayscale opacity-30 shadow-none'
+                                }`}
                         >
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
-                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs transition-all ${
-                                        stats.unlockedLevels >= item.lv ? 'bg-primary text-black shadow-neon rotate-2' : 'bg-gray-900 text-gray-700'
-                                    }`}>
+                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs transition-all ${stats.unlockedLevels >= item.lv ? 'bg-primary text-black shadow-neon rotate-2' : 'bg-gray-900 text-gray-700'
+                                        }`}>
                                         {item.lv}
                                     </div>
                                     <div>

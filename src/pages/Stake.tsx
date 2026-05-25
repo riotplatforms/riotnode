@@ -12,11 +12,7 @@ const getTierRate = (val: number) => {
     if (val >= 5000) return 0.08;
     if (val >= 2000) return 0.07;
     if (val >= 1000) return 0.065;
-    if (val >= 500) return 0.0625;
-    if (val >= 400) return 0.06;
-    if (val >= 300) return 0.0575;
-    if (val >= 200) return 0.056;
-    if (val >= 100) return 0.055;
+    if (val >= 500) return 0.06;
     if (val >= 50) return 0.055;
     return 0;
 };
@@ -45,7 +41,7 @@ const Stake: React.FC = () => {
 
     const upgrades = [
         {
-            id: 1,
+            id: 'lite',
             name: 'Lite Mining Node',
             description: 'Entry-level mining node for stable daily returns.',
             tp: '+125 GH/s',
@@ -69,49 +65,69 @@ const Stake: React.FC = () => {
             name: 'Referral Pro Miner',
             description: 'Optimized for high network rewards and stable hash power.',
             tp: '+500 GH/s',
-            lvl: '6%',
+            lvl: '5.5%',
             price: '200 USDT',
             icon: 'hub',
             color: 'orange'
-        },
-        {
-            id: 'advanced',
-            name: 'Advanced AI Node',
-            description: 'High-performance AI mining with specialized compute.',
-            tp: '+750 GH/s',
-            lvl: '6%',
-            price: '200 USDT',
-            icon: 'psychology',
-            color: 'blue'
         },
         {
             id: 'precision',
             name: 'Precision Node',
             description: 'Precision-tuned for industrial mining consistency.',
             tp: '+1,000 GH/s',
-            lvl: '6.5%',
+            lvl: '5.5%',
             price: '400 USDT',
             icon: 'model_training',
             color: 'purple'
         },
         {
-            id: 2,
+            id: 'standard',
             name: 'Standard Cluster',
             description: 'Advanced mining cluster for increased hash power.',
             tp: '+1,250 GH/s',
-            lvl: '6.5%',
+            lvl: '6%',
             price: '500 USDT',
             icon: 'developer_board',
             color: 'orange'
         },
         {
-            id: 3,
+            id: 'pro_ai',
             name: 'Pro AI Node',
             description: 'AI-optimized node for professional mining performance.',
             tp: '+2,500 GH/s',
             lvl: '6.5%',
             price: '1000 USDT',
             icon: 'psychology',
+            color: 'blue'
+        },
+        {
+            id: 'enterprise',
+            name: 'Enterprise Cluster',
+            description: 'Enterprise grade mining cluster for high throughput.',
+            tp: '+5,000 GH/s',
+            lvl: '7%',
+            price: '2000 USDT',
+            icon: 'business',
+            color: 'purple'
+        },
+        {
+            id: 'industrial',
+            name: 'Industrial Node',
+            description: 'Industrial-grade mining node for massive returns.',
+            tp: '+12,500 GH/s',
+            lvl: '8%',
+            price: '5000 USDT',
+            icon: 'settings_input_component',
+            color: 'orange'
+        },
+        {
+            id: 'apex_ai',
+            name: 'Apex AI Cluster',
+            description: 'Apex AI cluster optimized for maximum mining efficiency.',
+            tp: '+25,000 GH/s',
+            lvl: '12%',
+            price: '10000 USDT',
+            icon: 'bolt',
             color: 'blue'
         }
     ];
@@ -174,6 +190,17 @@ const Stake: React.FC = () => {
             const info = await getStakedInfo(address);
             if (info) {
                 const count = info.stakeCount;
+                const fetchedStakes = [];
+                let failed = false;
+                for (let i = 0; i < count; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail === null) {
+                        failed = true;
+                        break;
+                    }
+                    fetchedStakes.push(detail);
+                }
+                if (failed) return; // Keep previous state!
                 
                 // FETCH LIVE WALLET BALANCE - One Truth Policy
                 const usdtBalanceStr = await getWalletBalance(address);
@@ -181,27 +208,36 @@ const Stake: React.FC = () => {
                 const usdtBalance = parseFloat(usdtBalanceStr);
 
                 let totalContractAmount = 0;
+                let totalActiveStaked = 0;
+                let activeStakedForPower = 0;
                 let dailyUsdtYield = 0;
                 const details = [];
                 let runningStakedSum = 0;
                 for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
+                    const detail = fetchedStakes[i];
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         
                         // Check violation for this individual stake using running sum
                         const isViolated = usdtBalance < runningStakedSum + stakeAmount;
                         
+                        totalContractAmount += stakeAmount;
+
                         if (isViolated) {
                             recordStakeViolation(address, i);
-                            details.push({ ...detail, index: i, displayVal: 0, isViolated: true });
+                            details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: true });
                         } else {
-                            totalContractAmount += stakeAmount;
                             runningStakedSum += stakeAmount;
+                            totalActiveStaked += stakeAmount;
                             
                             const rate = getTierRate(stakeAmount); 
-                            dailyUsdtYield += (stakeAmount * rate) / 37;
                             details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
+
+                            const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                            if (!finished) {
+                                activeStakedForPower += stakeAmount;
+                                dailyUsdtYield += (stakeAmount * rate) / 37;
+                            }
                         }
                     }
                 }
@@ -209,13 +245,13 @@ const Stake: React.FC = () => {
                 const newStats = {
                     totalStaked: totalContractAmount.toFixed(2),
                     dailyYield: (dailyUsdtYield / btcPrice).toFixed(14),
-                    totalTP: (totalContractAmount * 2.5).toFixed(0)
+                    totalTP: (activeStakedForPower * 2.5).toFixed(0)
                 };
 
                 setStats(newStats);
                 setFunds({
                     walletBalance: usdtBalance.toFixed(2),
-                    extraFund: Math.max(0, usdtBalance - totalContractAmount).toFixed(2)
+                    extraFund: usdtBalance.toFixed(2)
                 });
                 setUserStakes(details);
 
@@ -240,7 +276,6 @@ const Stake: React.FC = () => {
     useEffect(() => {
         if (miningStats.isLoaded) {
             const walletBalance = parseFloat(miningStats.walletBalance || '0');
-            const totalStaked = parseFloat(miningStats.totalStaked || '0');
             setStats(prev => ({
                 ...prev,
                 totalStaked: miningStats.totalStaked,
@@ -249,7 +284,7 @@ const Stake: React.FC = () => {
             }));
             setFunds({
                 walletBalance: walletBalance.toFixed(2),
-                extraFund: Math.max(0, walletBalance - totalStaked).toFixed(2)
+                extraFund: walletBalance.toFixed(2)
             });
         }
     }, [miningStats]);
@@ -303,34 +338,21 @@ const Stake: React.FC = () => {
             const balance = parseFloat(balanceStr);
             const refAddress = referrer || '0x0000000000000000000000000000000000000000';
 
-            const info = await getStakedInfo(address);
-            let activeStaked = 0;
-            if (info) {
-                const count = info.stakeCount;
-                let runningStakedSum = 0;
-                for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
-                    if (detail && !detail.withdrawn) {
-                        const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                        const isViolated = balance < runningStakedSum + stakeAmount;
-                        if (!isViolated) {
-                            activeStaked += stakeAmount;
-                            runningStakedSum += stakeAmount;
-                        }
-                    }
-                }
-            }
+            const priceVal = id === 'extra-fund' ? balance : parseFloat(priceStr.replace(/[^0-9.]/g, ''));
 
-            const stakeableBalance = Math.max(0, balance - activeStaked);
-
-            if (stakeableBalance < 50) {
-                showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
+            if (balance < priceVal) {
+                showAlert(`Insufficient wallet balance. You need at least ${priceVal} USDT.`);
                 return;
             }
 
-            const tx = await stake(formatUsdtAmount(stakeableBalance), refAddress);
+            if (priceVal < 50) {
+                showAlert("Minimum 50 USDT required to activate mining node.");
+                return;
+            }
+
+            const tx = await stake(formatUsdtAmount(priceVal), refAddress);
             await tx.wait();
-            showAlert(`Success: Extra ${stakeableBalance.toFixed(2)} USDT staked and mining upgraded!`);
+            showAlert(`Success: Staked ${priceVal.toFixed(2)} USDT and upgraded mining node!`);
         } catch (err: any) {
             showAlert(parseEthersError(err));
         } finally {

@@ -69,25 +69,41 @@ const Wallet: React.FC = () => {
 
             if (info) {
                 const count = info.stakeCount;
+                const fetchedStakes = [];
+                let failed = false;
+                for (let i = 0; i < count; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail === null) {
+                        failed = true;
+                        break;
+                    }
+                    fetchedStakes.push(detail);
+                }
+                if (failed) return; // Keep previous state!
+
                 let totalContractAmount = 0;
                 let totalAccruedBtc = 0;
                 let minMaturity = Infinity;
-                let activeStaked = 0;
+                let activeStakedForPower = 0;
+                let totalActiveStaked = 0;
                 let runningStakedSum = 0;
+                let dailyProfitBtc = 0;
+
                 for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
+                    const detail = fetchedStakes[i];
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         
                         // Check violation for this individual stake using running sum
                         const isViolated = wBalanceNum < runningStakedSum + stakeAmount;
                         
+                        totalContractAmount += stakeAmount;
+
                         if (isViolated) {
                             recordStakeViolation(address, i);
                         } else {
-                            totalContractAmount += stakeAmount;
-                            activeStaked += stakeAmount;
                             runningStakedSum += stakeAmount;
+                            totalActiveStaked += stakeAmount;
 
                             const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
                             const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
@@ -95,17 +111,22 @@ const Wallet: React.FC = () => {
                             const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / btcPrice;
                             totalAccruedBtc += accrued;
 
+                            const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                             const maturity = detail.startTime + (37 * 86400);
-                            if (maturity < minMaturity) minMaturity = maturity;
+                            if (!finished) {
+                                activeStakedForPower += stakeAmount;
+                                dailyProfitBtc += ((stakeAmount * rate) / (37 * btcPrice));
+                                if (maturity < minMaturity) minMaturity = maturity;
+                            }
                         }
                     }
                 }
                 setNextMaturity(minMaturity === Infinity ? null : minMaturity);
 
-                const currentTotalBtc = activeStaked > 0 ? totalAccruedBtc : 0;
+                const currentTotalBtc = totalActiveStaked > 0 ? totalAccruedBtc : 0;
 
                 // Networking Logic
-                const isEligible = activeStaked >= 200;
+                const isEligible = totalActiveStaked >= 200;
 
                 // Detailed Team Update
                 const tree = await getTeamTree(address);
@@ -115,7 +136,7 @@ const Wallet: React.FC = () => {
                 const newStats = {
                     referralRewards: formatUnits(info.referralRewards, 18),
                     totalEarned: currentTotalBtc.toFixed(14),
-                    totalStaked: activeStaked.toFixed(2),
+                    totalStaked: totalContractAmount.toFixed(2),
                     walletBalance: wBalanceNum.toFixed(2),
                     invitationBonus: isEligible ? (l1Count * 20).toString() : '0',
                     teamDividend: teamStats.totalDailyDividend.toFixed(14),
@@ -127,8 +148,8 @@ const Wallet: React.FC = () => {
                 // Update global context for other pages
                 setMiningStats({
                     balance: newStats.totalEarned,
-                    miningPower: (activeStaked * 2.5).toFixed(1),
-                    dailyProfit: (activeStaked * (getTierRate(activeStaked)) / (37 * btcPrice)).toFixed(14),
+                    miningPower: (activeStakedForPower * 2.5).toFixed(1),
+                    dailyProfit: dailyProfitBtc.toFixed(14),
                     totalStaked: newStats.totalStaked,
                     walletBalance: newStats.walletBalance,
                     isLoaded: true
@@ -186,7 +207,10 @@ const Wallet: React.FC = () => {
 
             for (let i = 0; i < info.stakeCount; i++) {
                 const detail = await getStakeDetails(address, i);
-                if (!detail || detail.withdrawn) continue;
+                if (detail === null) {
+                    throw new Error("RPC error: Failed to fetch stake details. Please try again.");
+                }
+                if (detail.withdrawn) continue;
 
                 const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                 // Same running-sum violation check as data fetch
@@ -434,7 +458,7 @@ const Wallet: React.FC = () => {
 
                     {!stats.isEligible && (
                         <p className="text-[9px] text-gray-600 px-2 italic">
-                            * Note: Stake minimum $200 USDT to activate invitation bonuses and ROI dividends.
+                            * Note: Stake minimum $200 USDT to activate invitation bonuses and Mine dividends.
                         </p>
                     )}
                 </div>

@@ -36,11 +36,7 @@ export const getTierRate = (val: number) => {
     if (val >= 5000) return 0.08;
     if (val >= 2000) return 0.07;
     if (val >= 1000) return 0.065;
-    if (val >= 500) return 0.0625;
-    if (val >= 400) return 0.061;
-    if (val >= 300) return 0.0575;
-    if (val >= 200) return 0.056;
-    if (val >= 100) return 0.055;
+    if (val >= 500) return 0.06;
     if (val >= 50) return 0.055;
     return 0;
 };
