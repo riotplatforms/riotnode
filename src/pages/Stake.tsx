@@ -19,7 +19,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, miningStats, setMiningStats } = useWallet();
     const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -311,15 +311,15 @@ const Stake: React.FC = () => {
     };
 
     useEffect(() => {
-        if (isConnected && localStorage.getItem('pending_upgrade')) {
+        if (signer && localStorage.getItem('pending_upgrade')) {
             const data = JSON.parse(localStorage.getItem('pending_upgrade')!);
             localStorage.removeItem('pending_upgrade');
             handleBuy(data.id, data.priceStr);
         }
-    }, [isConnected, address, showAlert, stake, referrer]);
+    }, [signer, address, showAlert, stake, referrer]);
 
     const handleBuy = async (id: number | string, priceStr: string) => {
-        if (!isConnected || !address) {
+        if (!signer) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             connect();
             return;
@@ -363,6 +363,10 @@ const Stake: React.FC = () => {
     };
 
     const handleWithdraw = async (index: number) => {
+        if (!signer) {
+            connect();
+            return;
+        }
         setLoading(`withdraw-${index}`);
         try {
             await withdraw(index);

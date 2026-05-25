@@ -21,7 +21,7 @@ const getTierRate = (val: number) => {
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
     const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
@@ -51,11 +51,11 @@ const Dashboard: React.FC = () => {
 
     // Auto-resume mining after connection
     useEffect(() => {
-        if (isConnected && localStorage.getItem('pending_mining') === 'true') {
+        if (signer && localStorage.getItem('pending_mining') === 'true') {
             localStorage.removeItem('pending_mining');
             handleStartMining();
         }
-    }, [isConnected]);
+    }, [signer]);
 
     // Save Telegram connection when wallet connects
     useEffect(() => {
@@ -65,7 +65,8 @@ const Dashboard: React.FC = () => {
     }, [address, isConnected, telegramUser]);
 
     const handleStartMining = async () => {
-        if (!isConnected || !address) {
+        const userAddress = address || (signer ? await signer.getAddress() : undefined);
+        if (!signer || !userAddress) {
             localStorage.setItem('pending_mining', 'true');
             showAlert("Redirecting to Wallet for connection...");
             await connect();
@@ -76,24 +77,24 @@ const Dashboard: React.FC = () => {
         try {
             await approve();
 
-            const balanceStr = await getWalletBalance(address);
+            const balanceStr = await getWalletBalance(userAddress);
             if (!balanceStr || parseFloat(balanceStr) < 50) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
                 setLoading(false);
                 return;
             }
-            const info = await getStakedInfo(address);
+            const info = await getStakedInfo(userAddress);
             let activeStaked = 0;
             const wBalanceNum = parseFloat(balanceStr);
             if (info) {
                 const count = info.stakeCount;
                 let runningStakedSum = 0;
                 for (let i = 0; i < count; i++) {
-                    const detail = await getStakeDetails(address, i);
+                    const detail = await getStakeDetails(userAddress, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                         const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                        const wasFlushed = isStakePermanentlyFlushed(address, i);
+                        const wasFlushed = isStakePermanentlyFlushed(userAddress, i);
                         const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
                         if (!isViolated && !finished) {
                             activeStaked += stakeAmount;

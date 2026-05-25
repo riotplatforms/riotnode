@@ -9,7 +9,7 @@ import { parseEthersError } from '../utils/errors';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { btcPrice } = usePrice();
@@ -181,7 +181,7 @@ const Wallet: React.FC = () => {
     }, [miningStats]);
 
     const handleWithdraw = async () => {
-        if (!isConnected) {
+        if (!signer) {
             connect();
             return;
         }
