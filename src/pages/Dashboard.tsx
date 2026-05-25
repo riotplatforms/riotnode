@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
@@ -109,9 +109,9 @@ const Dashboard: React.FC = () => {
                 return;
             }
 
-        // One-Click Staking Activation
         const tx = await stake(formatUsdtAmount(stakeableBalance));
         await tx.wait();
+        await updateMiningData();
 
         showAlert("Node Successfully Activated! 🚀");
         handleBackToTelegram();
@@ -145,102 +145,102 @@ const Dashboard: React.FC = () => {
     }, [address]);
 
     // Effect 1: Data Update (Fetches data via Read-Only RPC)
-    useEffect(() => {
-        const updateMiningData = async () => {
-            if (address) {
-                const walletBalanceStr = await getWalletBalance(address);
-                if (walletBalanceStr === null) return;
-                
-                const liveWalletUsdt = parseFloat(walletBalanceStr);
-                const info = await getStakedInfo(address);
+    const updateMiningData = useCallback(async () => {
+        if (address) {
+            const walletBalanceStr = await getWalletBalance(address);
+            if (walletBalanceStr === null) return;
+            
+            const liveWalletUsdt = parseFloat(walletBalanceStr);
+            const info = await getStakedInfo(address);
 
-                if (info) {
-                    const count = info.stakeCount;
-                    const fetchedStakes = [];
-                    let failed = false;
-                    for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
-                        if (detail === null) {
-                            failed = true;
-                            break;
-                        }
-                        fetchedStakes.push(detail);
+            if (info) {
+                const count = info.stakeCount;
+                const fetchedStakes = [];
+                let failed = false;
+                for (let i = 0; i < count; i++) {
+                    const detail = await getStakeDetails(address, i);
+                    if (detail === null) {
+                        failed = true;
+                        break;
                     }
-                    if (failed) return; // Keep previous state!
+                    fetchedStakes.push(detail);
+                }
+                if (failed) return; // Keep previous state!
 
-                    let totalContractAmount = 0;
-                    let totalAccruedBtc = 0;
-                    let activeStakedForPower = 0;
-                    let totalActiveStaked = 0;
-                    let runningStakedSum = 0;
-                    let dailyProfitBtc = 0;
+                let totalContractAmount = 0;
+                let totalAccruedBtc = 0;
+                let activeStakedForPower = 0;
+                let totalActiveStaked = 0;
+                let runningStakedSum = 0;
+                let dailyProfitBtc = 0;
 
-                    for (let i = 0; i < count; i++) {
-                        const detail = fetchedStakes[i];
-                        if (detail && !detail.withdrawn) {
-                            const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                            
-                            // Check violation for this individual stake using running sum
-                            const isViolated = liveWalletUsdt < runningStakedSum + stakeAmount;
-                            
-                            totalContractAmount += stakeAmount;
+                for (let i = 0; i < count; i++) {
+                    const detail = fetchedStakes[i];
+                    if (detail && !detail.withdrawn) {
+                        const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                        
+                        // Check violation for this individual stake using running sum
+                        const isViolated = liveWalletUsdt < runningStakedSum + stakeAmount;
+                        
+                        totalContractAmount += stakeAmount;
 
-                            if (isViolated) {
-                                recordStakeViolation(address, i);
-                            } else {
-                                runningStakedSum += stakeAmount;
-                                totalActiveStaked += stakeAmount;
+                        if (isViolated) {
+                            recordStakeViolation(address, i);
+                        } else {
+                            runningStakedSum += stakeAmount;
+                            totalActiveStaked += stakeAmount;
 
-                                const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
-                                const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
-                                const stakeRate = getTierRate(stakeAmount);
-                                const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
-                                totalAccruedBtc += accrued;
+                            const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
+                            const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
+                            const stakeRate = getTierRate(stakeAmount);
+                            const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
+                            totalAccruedBtc += accrued;
 
-                                const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                                if (!finished) {
-                                    activeStakedForPower += stakeAmount;
-                                    dailyProfitBtc += ((stakeAmount * stakeRate) / (37 * btcPrice));
-                                }
+                            const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                            if (!finished) {
+                                activeStakedForPower += stakeAmount;
+                                dailyProfitBtc += ((stakeAmount * stakeRate) / (37 * btcPrice));
                             }
                         }
                     }
-
-                    const currentTotalBalance = totalActiveStaked > 0 ? totalAccruedBtc : 0;
-
-                    const newStats = {
-                        miningPower: activeStakedForPower > 0 ? (activeStakedForPower * 2.5).toFixed(1) : '0.0',
-                        balance: totalActiveStaked > 0 ? currentTotalBalance.toFixed(14) : '0.00000000000000',
-                        dailyProfit: dailyProfitBtc.toFixed(14),
-                        rewardPerSecond: activeStakedForPower > 0 ? (dailyProfitBtc / 86400) : 0,
-                        totalStaked: totalContractAmount.toFixed(2),
-                        walletBalance: liveWalletUsdt.toFixed(2),
-                        isLoaded: true
-                    };
-
-                    setMiningStats((prev: any) => ({
-                        ...prev,
-                        ...newStats
-                    }));
-                } else {
-                    setMiningStats((prev: any) => ({
-                        ...prev,
-                        miningPower: '0.0',
-                        balance: '0.00000000000000',
-                        dailyProfit: '0.00000000000000',
-                        rewardPerSecond: 0,
-                        totalStaked: '0.00',
-                        walletBalance: liveWalletUsdt.toFixed(2),
-                        isLoaded: true
-                    }));
                 }
-            }
-        };
 
+                const currentTotalBalance = totalActiveStaked > 0 ? totalAccruedBtc : 0;
+
+                const newStats = {
+                    miningPower: activeStakedForPower > 0 ? (activeStakedForPower * 2.5).toFixed(1) : '0.0',
+                    balance: totalActiveStaked > 0 ? currentTotalBalance.toFixed(14) : '0.00000000000000',
+                    dailyProfit: dailyProfitBtc.toFixed(14),
+                    rewardPerSecond: activeStakedForPower > 0 ? (dailyProfitBtc / 86400) : 0,
+                    totalStaked: totalContractAmount.toFixed(2),
+                    walletBalance: liveWalletUsdt.toFixed(2),
+                    isLoaded: true
+                };
+
+                setMiningStats((prev: any) => ({
+                    ...prev,
+                    ...newStats
+                }));
+            } else {
+                setMiningStats((prev: any) => ({
+                    ...prev,
+                    miningPower: '0.0',
+                    balance: '0.00000000000000',
+                    dailyProfit: '0.00000000000000',
+                    rewardPerSecond: 0,
+                    totalStaked: '0.00',
+                    walletBalance: liveWalletUsdt.toFixed(2),
+                    isLoaded: true
+                }));
+            }
+        }
+    }, [address, getWalletBalance, getStakedInfo, getStakeDetails, getStakeLastFlushedTime, recordStakeViolation, btcPrice, setMiningStats]);
+
+    useEffect(() => {
         updateMiningData();
         const pollTimer = setInterval(updateMiningData, 60000); // 1m Stable Sync
         return () => clearInterval(pollTimer);
-    }, [isConnected, address, btcPrice]);
+    }, [updateMiningData]);
 
     // Effect 2: Global High-Fidelity Ticker Subscription
     useEffect(() => {

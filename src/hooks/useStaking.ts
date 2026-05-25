@@ -125,6 +125,7 @@ export function useStaking() {
         const usdt = await getUsdtContract(true);
         const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
+        await tx.wait(); // Wait for approval transaction to be mined
         return tx;
     };
 
