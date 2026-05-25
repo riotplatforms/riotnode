@@ -353,7 +353,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             chainId: BSC_CHAIN_ID_HEX,
                             chainName: 'BNB Smart Chain',
                             nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-                            rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                            rpcUrls: ['https://bsc-rpc.publicnode.com'],
                             blockExplorerUrls: ['https://bscscan.com']
                         }]
                     });
@@ -399,7 +399,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             chains: [56],
             methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
             events: ["accountsChanged", "chainChanged"],
-            rpcMap: { 56: 'https://bsc-dataseed.binance.org/' }
+            rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
         });
 
         provider.on('display_uri', (uri: string) => {
@@ -546,7 +546,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 chains: [56],
                                 methods: ["eth_sendTransaction", "personal_sign"],
                                 events: ["accountsChanged", "chainChanged"],
-                                rpcMap: { 56: 'https://bsc-dataseed.binance.org/' }
+                                rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
                             });
                             await provider.connect();
                             setManualWalletProvider(provider);
@@ -629,7 +629,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             chains: [56],
                             methods: ["eth_sendTransaction", "personal_sign"],
                             events: ["accountsChanged", "chainChanged"],
-                            rpcMap: { 56: 'https://bsc-dataseed.binance.org/' }
+                            rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
                         });
                         await provider.connect();
                         setManualWalletProvider(provider);

@@ -4,7 +4,7 @@ import { useWallet } from '../lib/web3';
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const RPC_NODES = [
-    'https://bsc-dataseed.binance.org/',
+    'https://bsc-rpc.publicnode.com',
     'https://binance.llamarpc.com',
     'https://bsc.meowrpc.com'
 ];

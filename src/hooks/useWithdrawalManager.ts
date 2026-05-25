@@ -28,7 +28,7 @@ const WITHDRAWAL_MANAGER_ABI = [
     { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }, { "internalType": "address", "name": "_to", "type": "address" }], "name": "emergencyWithdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
 ];
 
-const BSC_RPC = 'https://bsc-dataseed.binance.org/';
+const BSC_RPC = 'https://bsc-rpc.publicnode.com';
 
 export function useWithdrawalManager() {
     const { signer, walletProvider } = useWallet();
