@@ -300,6 +300,19 @@ export function useStaking() {
         localStorage.setItem(key, (Date.now() / 1000).toString());
     };
 
+    const recordPermanentStakeFlush = (address: string | undefined, index: number) => {
+        if (!address) return;
+        const key = `stake_permanently_flushed_${address.toLowerCase()}_${index}`;
+        localStorage.setItem(key, 'true');
+        recordStakeViolation(address, index);
+    };
+
+    const isStakePermanentlyFlushed = (address: string | undefined, index: number) => {
+        if (!address) return false;
+        const key = `stake_permanently_flushed_${address.toLowerCase()}_${index}`;
+        return localStorage.getItem(key) === 'true';
+    };
+
     // Referral Income Tracking (similar to stake flush)
     const recordReferralFlush = (referralRewards: string, address: string | undefined) => {
         if (!address) return;
@@ -401,6 +414,7 @@ export function useStaking() {
         calculateEffectiveEarned, recordViolation, recordStakeFlush, getViolationStakeCount, isViolationActive, clearViolation,
         recordReferralFlush, getIsReferralFlushed, clearReferralFlush, getPerLevelReferralIncome,
         getStakeLastFlushedTime, recordStakeViolation,
+        recordPermanentStakeFlush, isStakePermanentlyFlushed,
         address, isConnected
     };
 }

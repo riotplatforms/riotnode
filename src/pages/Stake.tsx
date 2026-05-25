@@ -20,7 +20,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
-    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordStakeViolation } = useStaking();
+    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -216,27 +216,27 @@ const Stake: React.FC = () => {
                 const detail = fetchedStakes[i];
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                    const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                    const wasFlushed = isStakePermanentlyFlushed(address, i);
                     
-                    // Check violation for this individual stake using running sum
-                    const isViolated = usdtBalance < runningStakedSum + stakeAmount;
+                    // Check violation for this individual active (non-finished) stake using running sum
+                    const isViolated = wasFlushed || (!finished && usdtBalance < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
                     if (isViolated) {
-                        recordStakeViolation(address, i);
+                        recordPermanentStakeFlush(address, i);
                         details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: true });
                     } else {
-                        runningStakedSum += stakeAmount;
-                        totalActiveStaked += stakeAmount;
-                        
-                        const rate = getTierRate(stakeAmount); 
-                        details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
-
-                        const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                         if (!finished) {
+                            runningStakedSum += stakeAmount;
+                            totalActiveStaked += stakeAmount;
                             activeStakedForPower += stakeAmount;
+                            
+                            const rate = getTierRate(stakeAmount); 
                             dailyUsdtYield += (stakeAmount * rate) / 37;
                         }
+                        details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: false });
                     }
                 }
             }
@@ -250,7 +250,7 @@ const Stake: React.FC = () => {
             setStats(newStats);
             setFunds({
                 walletBalance: usdtBalance.toFixed(2),
-                extraFund: usdtBalance.toFixed(2)
+                extraFund: Math.max(0, usdtBalance - totalActiveStaked).toFixed(2)
             });
             setUserStakes(details);
 
@@ -264,7 +264,7 @@ const Stake: React.FC = () => {
                 isLoaded: true
             }));
         }
-    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, btcPrice, setMiningStats]);
+    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
 
     useEffect(() => {
         updateStakes();
@@ -276,6 +276,7 @@ const Stake: React.FC = () => {
     useEffect(() => {
         if (miningStats.isLoaded) {
             const walletBalance = parseFloat(miningStats.walletBalance || '0');
+            const totalStakedVal = parseFloat(miningStats.totalStaked || '0');
             setStats(prev => ({
                 ...prev,
                 totalStaked: miningStats.totalStaked,
@@ -284,7 +285,7 @@ const Stake: React.FC = () => {
             }));
             setFunds({
                 walletBalance: walletBalance.toFixed(2),
-                extraFund: walletBalance.toFixed(2)
+                extraFund: Math.max(0, walletBalance - totalStakedVal).toFixed(2)
             });
         }
     }, [miningStats]);
@@ -338,7 +339,7 @@ const Stake: React.FC = () => {
             const balance = parseFloat(balanceStr);
             const refAddress = referrer || '0x0000000000000000000000000000000000000000';
 
-            const priceVal = id === 'extra-fund' ? balance : parseFloat(priceStr.replace(/[^0-9.]/g, ''));
+            const priceVal = id === 'extra-fund' ? parseFloat(funds.extraFund) : parseFloat(priceStr.replace(/[^0-9.]/g, ''));
 
             if (balance < priceVal) {
                 showAlert(`Insufficient wallet balance. You need at least ${priceVal} USDT.`);

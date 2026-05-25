@@ -9,7 +9,7 @@ import { usePrice } from '../hooks/usePrice';
 const Team: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected } = useWallet();
-    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, recordViolation, getStakeDetails } = useStaking();
+    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, getIsReferralFlushed, recordViolation, getStakeDetails, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -62,13 +62,21 @@ const Team: React.FC = () => {
                 const detail = fetchedStakes[i];
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                    // Always count toward on-chain stake for level unlock
-                    contractStaked += stakeAmount;
-                    // Only count toward active rewards if not violated
-                    const isViolated = walletBalanceNum < runningStakedSum + stakeAmount;
-                    if (!isViolated) {
-                        activeStaked += stakeAmount;
-                        runningStakedSum += stakeAmount;
+                    const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                    const wasFlushed = isStakePermanentlyFlushed(address, i);
+                    
+                    if (!finished) {
+                        contractStaked += stakeAmount;
+                    }
+                    
+                    const isViolated = wasFlushed || (!finished && walletBalanceNum < runningStakedSum + stakeAmount);
+                    if (isViolated) {
+                        recordPermanentStakeFlush(address, i);
+                    } else {
+                        if (!finished) {
+                            activeStaked += stakeAmount;
+                            runningStakedSum += stakeAmount;
+                        }
                     }
                 }
             }
@@ -141,7 +149,7 @@ const Team: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [isConnected, address, getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, recordReferralFlush, getIsReferralFlushed, btcPrice]);
+    }, [isConnected, address, getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, getIsReferralFlushed, recordViolation, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice]);
 
     useEffect(() => {
         fetchTeamData();
@@ -341,7 +349,11 @@ const Team: React.FC = () => {
                     {Object.keys(perLevelIncome).length === 0 ? (
                         <div className="text-center py-10">
                             <p className="text-sm font-black text-white">No active referral income found.</p>
-                            <p className="text-[10px] text-gray-500 mt-2">Make sure you have 200+ USDT self stake and your downline members are staking.</p>
+                            <p className="text-[10px] text-gray-500 mt-2">
+                                {stats.isEligible 
+                                    ? "You have active self-staking. Invite members to start earning referral income." 
+                                    : "Make sure you have 200+ USDT self stake and your downline members are staking."}
+                            </p>
                             {isReferralFlushed && (
                                 <p className="text-[10px] text-red-400 mt-3">Referral income flushed because your wallet balance dropped below your own stake.</p>
                             )}

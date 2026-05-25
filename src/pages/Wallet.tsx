@@ -11,7 +11,7 @@ const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordStakeViolation } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { btcPrice } = usePrice();
     const { showAlert } = useTelegram();
 
@@ -92,37 +92,43 @@ const Wallet: React.FC = () => {
                 const detail = fetchedStakes[i];
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                    const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                    const wasFlushed = isStakePermanentlyFlushed(address, i);
                     
-                    // Check violation for this individual stake using running sum
-                    const isViolated = wBalanceNum < runningStakedSum + stakeAmount;
+                    // Check violation for this individual active (non-finished) stake using running sum
+                    const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
                     if (isViolated) {
-                        recordStakeViolation(address, i);
+                        recordPermanentStakeFlush(address, i);
                     } else {
-                        runningStakedSum += stakeAmount;
-                        totalActiveStaked += stakeAmount;
+                        // Only active (non-finished) stakes require wallet balance and count towards active staked sum
+                        if (!finished) {
+                            runningStakedSum += stakeAmount;
+                            totalActiveStaked += stakeAmount;
+                            activeStakedForPower += stakeAmount;
+                            const rate = getTierRate(stakeAmount);
+                            dailyProfitBtc += ((stakeAmount * rate) / (37 * btcPrice));
+                        }
 
+                        // Rewards continue to accrue up to the maturity cap
                         const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
                         const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
                         const rate = getTierRate(stakeAmount);
                         const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / btcPrice;
                         totalAccruedBtc += accrued;
 
-                        const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                         const maturity = detail.startTime + (37 * 86400);
-                        if (!finished) {
-                            activeStakedForPower += stakeAmount;
-                            dailyProfitBtc += ((stakeAmount * rate) / (37 * btcPrice));
-                            if (maturity < minMaturity) minMaturity = maturity;
+                        if (!finished && maturity < minMaturity) {
+                            minMaturity = maturity;
                         }
                     }
                 }
             }
             setNextMaturity(minMaturity === Infinity ? null : minMaturity);
 
-            const currentTotalBtc = totalActiveStaked > 0 ? totalAccruedBtc : 0;
+            const currentTotalBtc = totalAccruedBtc;
 
             // Networking Logic (Bypassing violation checks on level eligibility)
             const isEligible = totalContractAmount >= 200;
@@ -154,7 +160,7 @@ const Wallet: React.FC = () => {
                 isLoaded: true
             });
         }
-    }, [address, getStakedInfo, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordStakeViolation, btcPrice, getTeamTree, getTeamMiningStats, setMiningStats]);
+    }, [address, getStakedInfo, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, getTeamTree, getTeamMiningStats, setMiningStats]);
 
     useEffect(() => {
         fetchWalletData();
@@ -214,13 +220,15 @@ const Wallet: React.FC = () => {
                 if (detail.withdrawn) continue;
 
                 const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                // Same running-sum violation check as data fetch
-                const isViolated = wBalanceNum < runningStakedSum + stakeAmount;
+                const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                const wasFlushed = isStakePermanentlyFlushed(address, i);
+                const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
 
                 if (!isViolated) {
-                    runningStakedSum += stakeAmount;
-                    // Check if this valid stake is mature
-                    if (currentTime >= detail.startTime + (37 * 86400)) {
+                    if (!finished) {
+                        runningStakedSum += stakeAmount;
+                    } else {
+                        // It is mature and not violated
                         matureStakeIndex = i;
                         break;
                     }

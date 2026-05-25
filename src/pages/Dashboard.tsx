@@ -22,7 +22,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, getStakeLastFlushedTime, recordStakeViolation } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -92,8 +92,10 @@ const Dashboard: React.FC = () => {
                     const detail = await getStakeDetails(address, i);
                     if (detail && !detail.withdrawn) {
                         const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                        const isViolated = wBalanceNum < runningStakedSum + stakeAmount;
-                        if (!isViolated) {
+                        const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                        const wasFlushed = isStakePermanentlyFlushed(address, i);
+                        const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
+                        if (!isViolated && !finished) {
                             activeStaked += stakeAmount;
                             runningStakedSum += stakeAmount;
                         }
@@ -171,34 +173,36 @@ const Dashboard: React.FC = () => {
                 const detail = fetchedStakes[i];
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                    const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                    const wasFlushed = isStakePermanentlyFlushed(address, i);
                     
-                    // Check violation for this individual stake using running sum
-                    const isViolated = liveWalletUsdt < runningStakedSum + stakeAmount;
+                    // Check violation for this individual active (non-finished) stake using running sum
+                    const isViolated = wasFlushed || (!finished && liveWalletUsdt < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
                     if (isViolated) {
-                        recordStakeViolation(address, i);
+                        recordPermanentStakeFlush(address, i);
                     } else {
-                        runningStakedSum += stakeAmount;
-                        totalActiveStaked += stakeAmount;
+                        if (!finished) {
+                            runningStakedSum += stakeAmount;
+                            totalActiveStaked += stakeAmount;
+                            activeStakedForPower += stakeAmount;
+
+                            const stakeRate = getTierRate(stakeAmount);
+                            dailyProfitBtc += ((stakeAmount * stakeRate) / (37 * btcPrice));
+                        }
 
                         const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
                         const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
                         const stakeRate = getTierRate(stakeAmount);
                         const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
                         totalAccruedBtc += accrued;
-
-                        const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                        if (!finished) {
-                            activeStakedForPower += stakeAmount;
-                            dailyProfitBtc += ((stakeAmount * stakeRate) / (37 * btcPrice));
-                        }
                     }
                 }
             }
 
-            const currentTotalBalance = totalActiveStaked > 0 ? totalAccruedBtc : 0;
+            const currentTotalBalance = totalAccruedBtc;
 
             const newStats = {
                 miningPower: activeStakedForPower > 0 ? (activeStakedForPower * 2.5).toFixed(1) : '0.0',
@@ -215,7 +219,7 @@ const Dashboard: React.FC = () => {
                 ...newStats
             }));
         }
-    }, [address, getWalletBalance, getStakedInfo, getStakeDetails, getStakeLastFlushedTime, recordStakeViolation, btcPrice, setMiningStats]);
+    }, [address, getWalletBalance, getStakedInfo, getStakeDetails, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
 
     useEffect(() => {
         updateMiningData();
