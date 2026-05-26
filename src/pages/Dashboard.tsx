@@ -28,7 +28,6 @@ const Dashboard: React.FC = () => {
     const [loading, setLoading] = useState(false);
 
     const isSuccessLanding = new URLSearchParams(location.search).get('v') === 'success';
-    const formatUsdtAmount = (value: number) => value.toFixed(18).replace(/\.?0+$/, '');
 
     const handleBackToTelegram = () => {
         // If we're inside the Mini App, we might be able to close the webview

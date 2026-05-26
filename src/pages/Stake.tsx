@@ -37,8 +37,6 @@ const Stake: React.FC = () => {
         extraFund: '0.00'
     });
 
-    const formatUsdtAmount = (value: number) => value.toFixed(18).replace(/\.?0+$/, '');
-
     const upgrades = [
         {
             id: 'lite',
@@ -319,7 +317,7 @@ const Stake: React.FC = () => {
     }, [signer, address, showAlert, stake, referrer]);
 
     const handleBuy = async (id: number | string, priceStr: string) => {
-        if (!signer) {
+        if (!signer || !address) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             connect();
             return;
