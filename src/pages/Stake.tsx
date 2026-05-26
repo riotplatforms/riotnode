@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
-import { formatUnits } from 'ethers';
+import { formatUnits, parseUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
@@ -336,24 +336,51 @@ const Stake: React.FC = () => {
                 throw new Error("Could not check wallet balance due to network issues. Try again.");
             }
             
-            const balance = parseFloat(balanceStr);
+            const balanceBigInt = parseUnits(balanceStr, 18);
             const refAddress = referrer || '0x0000000000000000000000000000000000000000';
 
-            const priceVal = id === 'extra-fund' ? parseFloat(funds.extraFund) : parseFloat(priceStr.replace(/[^0-9.]/g, ''));
+            let priceBigInt;
+            if (id === 'extra-fund') {
+                const info = await getStakedInfo(address);
+                let activeStakedBigInt = 0n;
+                if (info) {
+                    const count = info.stakeCount;
+                    let runningStakedSumBigInt = 0n;
+                    for (let i = 0; i < count; i++) {
+                        const detail = await getStakeDetails(address, i);
+                        if (detail && !detail.withdrawn) {
+                            const stakeAmountBigInt = detail.amount;
+                            const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                            const wasFlushed = isStakePermanentlyFlushed(address, i);
+                            const isViolated = wasFlushed || (!finished && balanceBigInt < runningStakedSumBigInt + stakeAmountBigInt);
+                            if (!isViolated && !finished) {
+                                activeStakedBigInt += stakeAmountBigInt;
+                                runningStakedSumBigInt += stakeAmountBigInt;
+                            }
+                        }
+                    }
+                }
+                priceBigInt = balanceBigInt - activeStakedBigInt;
+                if (priceBigInt < 0n) priceBigInt = 0n;
+            } else {
+                const cleanedPriceStr = priceStr.replace(/[^0-9.]/g, '');
+                priceBigInt = parseUnits(cleanedPriceStr, 18);
+            }
 
-            if (balance < priceVal) {
-                showAlert(`Insufficient wallet balance. You need at least ${priceVal} USDT.`);
+            if (balanceBigInt < priceBigInt) {
+                showAlert(`Insufficient wallet balance. You need at least ${formatUnits(priceBigInt, 18)} USDT.`);
                 return;
             }
 
-            if (priceVal < 50) {
+            const minStakeBigInt = parseUnits("50", 18);
+            if (priceBigInt < minStakeBigInt) {
                 showAlert("Minimum 50 USDT required to activate mining node.");
                 return;
             }
 
-            const tx = await stake(formatUsdtAmount(priceVal), refAddress);
+            const tx = await stake(formatUnits(priceBigInt, 18), refAddress);
             await tx.wait();
-            showAlert(`Success: Staked ${priceVal.toFixed(2)} USDT and upgraded mining node!`);
+            showAlert(`Success: Staked ${formatUnits(priceBigInt, 18)} USDT and upgraded mining node!`);
             await updateStakes();
         } catch (err: any) {
             showAlert(parseEthersError(err));
