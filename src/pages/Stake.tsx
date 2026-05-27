@@ -706,7 +706,7 @@ const Stake: React.FC = () => {
                             </p>
                         </div>
 
-                        {/* YouTube Embed Cards */}
+                        {/* YouTube & Social Media Embed Cards */}
                         {[
                             {
                                 id: '1FGvORXQjr4',
@@ -748,29 +748,69 @@ const Stake: React.FC = () => {
                                 id: '0BvJwTMsG2k',
                                 title: 'Global Bitcoin Hashrate Leader',
                                 desc: "Tracking Riot's growth toward 20 EH/s capacity and leadership in global Bitcoin mining infrastructure."
+                            },
+                            {
+                                id: 'UQQu81TVpvM',
+                                title: 'Corsicana Site Tour & Progress Update',
+                                desc: "A virtual walkthrough of Riot Platforms' 1 GW Corsicana facility under construction, showing substation engineering and rack installation."
+                            },
+                            {
+                                id: '83y0E_7yTW8',
+                                title: 'MicroBT WhatsMiner Acquisition',
+                                desc: "Riot Platforms CEO Jason Les discusses the strategic purchase of 31,500 WhatsMiners from MicroBT for the Rockdale facility."
+                            },
+                            {
+                                id: 'MWSpwiuUIiw',
+                                title: 'Riot Platforms Sustainability Summit',
+                                desc: "Highlighting Riot's carbon-free energy partnerships and demand response performance in the ERCOT power grid."
+                            },
+                            {
+                                id: 'C8UwGL8vZYl',
+                                type: 'instagram',
+                                url: 'https://www.instagram.com/p/C8UwGL8vZYl/',
+                                title: 'Riot Hardware Spotlight (Instagram)',
+                                desc: "Riot Platforms official hardware close-up: A detailed visual update of ASIC fans, control boards, and server racks at the Rockdale hub."
                             }
-                        ].map((video) => (
-                            <div key={video.id} className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
+                        ].map((item) => (
+                            <div key={item.id} className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
                                 <h3 className="font-black text-white text-base uppercase tracking-tighter italic border-b border-white/10 pb-2 flex items-center gap-2">
-                                    <span className="material-icons-round text-primary text-sm">play_circle_filled</span>
-                                    {video.title}
+                                    <span className="material-icons-round text-primary text-sm">
+                                        {item.type === 'instagram' ? 'photo_camera' : 'play_circle_filled'}
+                                    </span>
+                                    {item.title}
                                 </h3>
                                 
-                                <div className="w-full rounded-2xl overflow-hidden bg-black aspect-video border border-white/5">
-                                    <iframe
-                                        width="100%"
-                                        height="100%"
-                                        src={`https://www.youtube.com/embed/${video.id}${video.start ? `?start=${video.start}` : ''}`}
-                                        title={video.title}
-                                        frameBorder="0"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                                        allowFullScreen
-                                        className="w-full h-full"
-                                    ></iframe>
-                                </div>
+                                {item.type === 'instagram' ? (
+                                    <div className="w-full rounded-2xl overflow-hidden bg-black/60 aspect-video border border-white/5 flex flex-col items-center justify-center p-6 text-center gap-4 relative group">
+                                        <div className="absolute inset-0 bg-[#E1306C] opacity-5 group-hover:opacity-10 transition-opacity"></div>
+                                        <span className="material-icons text-5xl text-[#E1306C]">photo_camera</span>
+                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Official Instagram Image Post</p>
+                                        <a
+                                            href={item.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="bg-[#E1306C] text-white text-[10px] font-black uppercase tracking-widest px-6 py-3 rounded-full hover:scale-105 active:scale-95 transition-all no-underline shadow-glow"
+                                        >
+                                            View Photo on Instagram
+                                        </a>
+                                    </div>
+                                ) : (
+                                    <div className="w-full rounded-2xl overflow-hidden bg-black aspect-video border border-white/5">
+                                        <iframe
+                                            width="100%"
+                                            height="100%"
+                                            src={`https://www.youtube.com/embed/${item.id}${ (item as any).start ? `?start=${(item as any).start}` : ''}`}
+                                            title={item.title}
+                                            frameBorder="0"
+                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                            allowFullScreen
+                                            className="w-full h-full"
+                                        ></iframe>
+                                    </div>
+                                )}
 
                                 <p className="text-[11px] text-gray-400 font-medium leading-relaxed italic px-1">
-                                    "{video.desc}"
+                                    "{item.desc}"
                                 </p>
                             </div>
                         ))}
