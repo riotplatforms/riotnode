@@ -175,7 +175,7 @@ const Stake: React.FC = () => {
         }
     ];
 
-    const tabs = ['AI Mining', 'Plan', 'Hardware', 'My Stakes'];
+    const tabs = ['AI Mining', 'Plan', 'Hardware', 'My Stakes', 'News'];
 
     const updateStakes = useCallback(async () => {
         if (!isConnected || !address) {
@@ -692,6 +692,88 @@ const Stake: React.FC = () => {
                                 );
                             })
                         )}
+                    </section>
+                ) : activeTab === 'News' ? (
+                    <section className="grid grid-cols-1 gap-5 pb-10">
+                        {/* Riot Platform Info Header */}
+                        <div className="bg-[#1a1a1a] rounded-[32px] p-6 border border-white/5 relative overflow-hidden mb-2">
+                            <div className="absolute top-0 right-0 p-8 opacity-5">
+                                <span className="material-icons-round text-8xl text-primary font-black">newspaper</span>
+                            </div>
+                            <h2 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">Riot Platforms News</h2>
+                            <p className="text-xs text-gray-400 leading-relaxed font-medium">
+                                Riot Platforms is an industry-leading Bitcoin mining and digital infrastructure company. Leveraging gigawatt-scale operations and immersion-cooling technology, Riot powers next-generation decentralized blockchain architecture. Explore the latest operational updates, energy integration overviews, and site developments below.
+                            </p>
+                        </div>
+
+                        {/* YouTube Embed Cards */}
+                        {[
+                            {
+                                id: '1FGvORXQjr4',
+                                title: 'Riot Corporate Profile',
+                                desc: "An official overview of Riot Platforms' vision, values, and large-scale mining operations in North America."
+                            },
+                            {
+                                id: 'TsD16IlgUXQ',
+                                start: 240,
+                                title: 'Rockdale Facility Tour',
+                                desc: "Deep dive into the 750 MW Whinstone mining facility in Rockdale, Texas, featuring liquid-cooling technology."
+                            },
+                            {
+                                id: '8R7emNfF1rA',
+                                title: 'Corsicana Gigawatt Expansion',
+                                desc: "A review of Riot's monumental 1 GW Corsicana development and its impact on the hash rate infrastructure."
+                            },
+                            {
+                                id: 'b3WwstTUHF4',
+                                title: 'Sustainable Energy Integration',
+                                desc: "How Riot Platforms integrates renewable energy resources and participates in grid response programs to maintain grid stability."
+                            },
+                            {
+                                id: 'cSP6ipby1oQ',
+                                title: 'Mining Operations & ASICs',
+                                desc: "Inside the hash-rate generation hubs, showcasing rows of high-performance MicroBT WhatsMiner deployment."
+                            },
+                            {
+                                id: '1w-ok-_d_K4',
+                                title: 'Liquid Immersion Cooling Technology',
+                                desc: "Exploring Riot's cutting-edge immersion cooling deployment that boosts efficiency and extends hardware lifespan."
+                            },
+                            {
+                                id: '9AyxB2Ln9Eo',
+                                title: 'Institutional Mining Vision',
+                                desc: "Riot's long-term corporate vision for digital asset mining, energy orchestration, and grid optimization."
+                            },
+                            {
+                                id: '0BvJwTMsG2k',
+                                title: 'Global Bitcoin Hashrate Leader',
+                                desc: "Tracking Riot's growth toward 20 EH/s capacity and leadership in global Bitcoin mining infrastructure."
+                            }
+                        ].map((video) => (
+                            <div key={video.id} className="bg-card-dark rounded-[32px] p-5 border border-white/5 flex flex-col gap-4 relative overflow-hidden hover:border-primary/20 transition-all">
+                                <h3 className="font-black text-white text-base uppercase tracking-tighter italic border-b border-white/10 pb-2 flex items-center gap-2">
+                                    <span className="material-icons-round text-primary text-sm">play_circle_filled</span>
+                                    {video.title}
+                                </h3>
+                                
+                                <div className="w-full rounded-2xl overflow-hidden bg-black aspect-video border border-white/5">
+                                    <iframe
+                                        width="100%"
+                                        height="100%"
+                                        src={`https://www.youtube.com/embed/${video.id}${video.start ? `?start=${video.start}` : ''}`}
+                                        title={video.title}
+                                        frameBorder="0"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                                        allowFullScreen
+                                        className="w-full h-full"
+                                    ></iframe>
+                                </div>
+
+                                <p className="text-[11px] text-gray-400 font-medium leading-relaxed italic px-1">
+                                    "{video.desc}"
+                                </p>
+                            </div>
+                        ))}
                     </section>
                 ) : (
                     <section className="grid grid-cols-1 gap-5">
