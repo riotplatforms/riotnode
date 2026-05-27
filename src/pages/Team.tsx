@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
-import { useStaking } from '../hooks/useStaking';
+import { useStaking, getTierRate } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
@@ -9,11 +9,10 @@ import { usePrice } from '../hooks/usePrice';
 const Team: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected } = useWallet();
-    const { getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, getIsReferralFlushed, recordViolation, getStakeDetails, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { getStakedInfo, getTeamTree, getIsReferralFlushed } = useStaking();
     const { showAlert, copyToClipboard } = useTelegram();
     const { btcPrice } = usePrice();
 
-    const [loading, setLoading] = useState(true);
     const [stats, setStats] = useState({
         myStake: 0,
         directEarnings: 0,
@@ -23,149 +22,154 @@ const Team: React.FC = () => {
         isEligible: false
     });
 
-    const [liveTeamBalance, setLiveTeamBalance] = useState('0.00000000000000');
+    const [baseReferralBalance, setBaseReferralBalance] = useState(0);
+    const [liveReferralBalance, setLiveReferralBalance] = useState('0.00000000');
     const [referralDetails, setReferralDetails] = useState<Array<{ address: string, referrer: string, level: number, stake: number }>>([]);
     const [perLevelIncome, setPerLevelIncome] = useState<Record<number, { count: number; staked: number; rate: number; estimatedIncome: number }>>({});
     const [isReferralFlushed, setIsReferralFlushed] = useState(false);
 
     const fetchTeamData = useCallback(async () => {
         if (!isConnected || !address) return;
-        setLoading(true);
 
         try {
-            const info = await getStakedInfo(address);
-            if (!info) return;
+            const [info, tree] = await Promise.all([
+                getStakedInfo(address),
+                getTeamTree(address)
+            ]);
 
-            const walletBalance = await getWalletBalance(address);
-            const walletBalanceNum = walletBalance ? parseFloat(walletBalance) : 0;
-
-            // activeStaked: violation-adjusted (for rewards/eligibility display)
-            let activeStaked = 0;
-            let runningStakedSum = 0;
-            // contractStaked: sum of all non-withdrawn on-chain stakes (for level unlock)
-            let contractStaked = 0;
-            const count = info.stakeCount;
-            const fetchedStakes = [];
-            let failed = false;
-
-            for (let i = 0; i < count; i++) {
-                const detail = await getStakeDetails(address, i);
-                if (detail === null) {
-                    failed = true;
-                    break;
-                }
-                fetchedStakes.push(detail);
-            }
-            if (failed) return; // Keep previous state!
-
-            for (let i = 0; i < count; i++) {
-                const detail = fetchedStakes[i];
-                if (detail && !detail.withdrawn) {
-                    const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
-                    const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                    const wasFlushed = isStakePermanentlyFlushed(address, i);
-                    
-                    if (!finished) {
-                        contractStaked += stakeAmount;
-                    }
-                    
-                    const isViolated = wasFlushed || (!finished && walletBalanceNum < runningStakedSum + stakeAmount);
-                    if (isViolated) {
-                        recordPermanentStakeFlush(address, i);
-                    } else {
-                        if (!finished) {
-                            activeStaked += stakeAmount;
-                            runningStakedSum += stakeAmount;
-                        }
-                    }
-                }
+            if (!info) {
+                return;
             }
 
-            const myStake = activeStaked;
-            const isEligible = contractStaked >= 200;
+            const totalStakedNum = parseFloat(formatUnits(info.totalStaked, 18));
+            const isEligible = totalStakedNum >= 200;
 
-            const hasRawViolation = walletBalanceNum < contractStaked;
-
-            // Flush self mining and referral income when balance falls below own active staked amount
-            if (hasRawViolation && contractStaked >= 200) {
-                recordViolation(formatUnits(info.totalEarned, 18), address);
-            }
-
-            const referralIncomeData = await getPerLevelReferralIncome(address, walletBalanceNum);
-            setPerLevelIncome(referralIncomeData.byLevel);
-            setIsReferralFlushed(referralIncomeData.isFlushed);
-
-            // Level unlock uses contractStaked (on-chain locked amount), not violation-adjusted amount
-            // Staked funds are locked for 37 days so levels should remain accessible
             let unlocked = 0;
-            if (contractStaked >= 2000) unlocked = 10;
-            else if (contractStaked >= 1000) unlocked = 6;
-            else if (contractStaked >= 200) unlocked = 3;
+            if (totalStakedNum >= 2000) unlocked = 10;
+            else if (totalStakedNum >= 1000) unlocked = 6;
+            else if (totalStakedNum >= 200) unlocked = 3;
 
-            // Fetch team tree from events
-            const tree = await getTeamTree(address);
-            const teamStats = await getTeamMiningStats(tree, btcPrice);
-
-            // Build referral relationship details
-            const details: Array<{ address: string, referrer: string, level: number, stake: number }> = [];
+            const allMembers: Array<{ address: string, level: number }> = [];
             for (const levelStr in tree) {
                 const level = parseInt(levelStr);
                 const members = tree[level];
                 for (const memberAddr of members) {
-                    const memberInfo = await getStakedInfo(memberAddr);
-                    if (memberInfo) {
-                        details.push({
-                            address: memberAddr,
-                            referrer: memberInfo.referrer,
-                            level: level,
-                            stake: parseFloat(formatUnits(memberInfo.totalStaked, 18))
-                        });
+                    allMembers.push({ address: memberAddr, level });
+                }
+            }
+
+            const memberInfos = await Promise.all(
+                allMembers.map(async (m) => {
+                    try {
+                        const memberInfo = await getStakedInfo(m.address);
+                        return { ...m, info: memberInfo };
+                    } catch (e) {
+                        return { ...m, info: null };
+                    }
+                })
+            );
+
+            const details: Array<{ address: string, referrer: string, level: number, stake: number }> = [];
+            const byLevel: Record<number, { count: number; staked: number; rate: number; estimatedIncome: number }> = {};
+            
+            const levelRates: Record<number, number> = {
+                1: 0.05, 2: 0.03, 3: 0.02, 4: 0.01, 5: 0.01,
+                6: 0.01, 7: 0.01, 8: 0.01, 9: 0.01, 10: 0.01
+            };
+
+            let totalTeamDailyYieldBtc = 0;
+
+            for (const m of memberInfos) {
+                if (m.info) {
+                    const stakedVal = parseFloat(formatUnits(m.info.totalStaked, 18));
+                    details.push({
+                        address: m.address,
+                        referrer: m.info.referrer,
+                        level: m.level,
+                        stake: stakedVal
+                    });
+
+                    const rate = levelRates[m.level] || 0;
+
+                    let isLevelEligible = false;
+                    if (m.level <= 3 && stakedVal >= 200) {
+                        isLevelEligible = true;
+                    } else if (m.level <= 6 && stakedVal >= 1000) {
+                        isLevelEligible = true;
+                    } else if (m.level > 6 && stakedVal >= 2000) {
+                        isLevelEligible = true;
+                    }
+
+                    if (isLevelEligible) {
+                        const memberDailyRewardUsdt = (stakedVal * getTierRate(stakedVal)) / 37;
+                        const estimatedLevelIncomeUsdt = memberDailyRewardUsdt * rate;
+                        
+                        if (!byLevel[m.level]) {
+                            byLevel[m.level] = { count: 0, staked: 0, rate: rate * 100, estimatedIncome: 0 };
+                        }
+                        byLevel[m.level].count++;
+                        byLevel[m.level].staked += stakedVal;
+                        byLevel[m.level].estimatedIncome += estimatedLevelIncomeUsdt;
+
+                        totalTeamDailyYieldBtc += (estimatedLevelIncomeUsdt / btcPrice);
+                    } else {
+                        if (!byLevel[m.level]) {
+                            byLevel[m.level] = { count: 0, staked: 0, rate: rate * 100, estimatedIncome: 0 };
+                        }
+                        byLevel[m.level].count++;
+                        byLevel[m.level].staked += stakedVal;
                     }
                 }
             }
 
+            setPerLevelIncome(byLevel);
             setReferralDetails(details);
 
-            // Direct Invitations ($20 each) - based on Level 1 count
+            const isFlushed = getIsReferralFlushed(address);
+            setIsReferralFlushed(isFlushed);
+
             const directCount = tree[1]?.length || 0;
             const directEarnings = isEligible ? directCount * 20 : 0;
+            const totalCount = allMembers.length;
 
-            const totalCount = Object.values(tree).reduce((acc, current) => acc + current.length, 0);
+            const baseRewards = isFlushed ? 0 : parseFloat(formatUnits(info.referralRewards, 18));
+            setBaseReferralBalance(baseRewards);
 
             setStats({
-                myStake,
+                myStake: totalStakedNum,
                 directEarnings,
-                teamDailyYield: teamStats.totalDailyDividend,
+                teamDailyYield: totalTeamDailyYieldBtc,
                 totalTeamMembers: totalCount,
                 unlockedLevels: unlocked,
                 isEligible
             });
 
-            setLiveTeamBalance("0.00000000000000");
-
         } catch (err) {
             console.error("Referral fetch error:", err);
-            if ((window as any).tmaLog) (window as any).tmaLog("Referral Error: " + err, "#ef4444");
-        } finally {
-            setLoading(false);
         }
-    }, [isConnected, address, getStakedInfo, getTeamTree, getTeamMiningStats, getWalletBalance, getPerLevelReferralIncome, getIsReferralFlushed, recordViolation, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice]);
+    }, [isConnected, address, getStakedInfo, getTeamTree, getIsReferralFlushed, btcPrice]);
 
     useEffect(() => {
         fetchTeamData();
     }, [fetchTeamData]);
 
-    // Ticker logic for Team Dividends (Mine-on-Mine)
     useEffect(() => {
-        if (stats.teamDailyYield <= 0) return;
+        if (stats.teamDailyYield <= 0 || isReferralFlushed) {
+            setLiveReferralBalance(baseReferralBalance.toFixed(8));
+            return;
+        }
 
-        const rewardPerSec = stats.teamDailyYield / 86400;
+        const yieldPerSecUsdt = (stats.teamDailyYield * btcPrice) / 86400;
         const interval = setInterval(() => {
-            setLiveTeamBalance(prev => (parseFloat(prev) + rewardPerSec).toFixed(14));
+            setLiveReferralBalance(prev => (parseFloat(prev) + yieldPerSecUsdt).toFixed(8));
         }, 1000);
 
         return () => clearInterval(interval);
-    }, [stats.teamDailyYield]);
+    }, [stats.teamDailyYield, btcPrice, baseReferralBalance, isReferralFlushed]);
+
+    useEffect(() => {
+        setLiveReferralBalance(baseReferralBalance.toFixed(8));
+    }, [baseReferralBalance]);
 
     const handleCopyLink = () => {
         if (!address) return;
@@ -204,45 +208,38 @@ const Team: React.FC = () => {
             </header>
 
             <main className="p-6 space-y-6">
-                {/* Team Mining Card (Live Ticker) */}
+                {/* Referral Income Card (Live Ticker) */}
                 <div className="bg-gradient-to-br from-[#0c0c0c] to-black rounded-3xl p-6 border border-primary/10 shadow-glow relative overflow-hidden group">
-                    {loading && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
-                            <span className="material-icons-round text-primary animate-spin text-3xl font-black">sync</span>
-                            <p className="text-[10px] font-black text-primary uppercase mt-2 tracking-widest">Scanning Network...</p>
-                        </div>
-                    )}
-
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                        <span className="material-icons-round text-7xl text-primary font-black">diversity_3</span>
+                        <span className="material-icons-round text-7xl text-primary font-black">payments</span>
                     </div>
 
                     <p className="text-[10px] text-gray-500 font-black uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
                         <span className="w-2 h-0.5 bg-primary"></span>
-                        Network-Wide Yield
+                        Referral Balance (Live)
                     </p>
 
                     <div className="flex flex-col gap-1">
                         <div className="flex items-baseline gap-2">
                             <h2 className="text-3xl font-display font-black text-white tracking-tight break-all border-none">
-                                {liveTeamBalance}
+                                {liveReferralBalance}
                             </h2>
-                            <span className="text-sm font-black text-primary italic uppercase tracking-tighter">BTC</span>
+                            <span className="text-sm font-black text-primary italic uppercase tracking-tighter">USDT</span>
                         </div>
                         <div className="flex items-center gap-2 text-xs font-bold text-green-500">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse border-none"></span>
-                            <span className="uppercase tracking-widest text-[9px] font-black">Team Dividend Mining</span>
+                            <span className="uppercase tracking-widest text-[9px] font-black">Active Income Engine</span>
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 mt-8 pt-6 border-t border-white/5">
                         <div>
-                            <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Network Speed</p>
-                            <p className="text-sm font-black text-white">{(stats.teamDailyYield / 86400).toFixed(14)} <span className="text-[#444] text-[10px]">p/s</span></p>
+                            <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Daily Est. Yield</p>
+                            <p className="text-sm font-black text-white">${(stats.teamDailyYield * btcPrice).toFixed(4)} <span className="text-primary text-[10px]">USDT</span></p>
                         </div>
                         <div className="text-right">
-                            <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Daily Cap</p>
-                            <p className="text-sm font-black text-white">{stats.teamDailyYield.toFixed(10)} <span className="text-primary text-[10px]">BTC</span></p>
+                            <p className="text-[10px] text-gray-500 font-black uppercase mb-1">Yield Speed</p>
+                            <p className="text-sm font-black text-white">+${((stats.teamDailyYield * btcPrice) / 86400).toFixed(8)} <span className="text-[#444] text-[10px]">u/s</span></p>
                         </div>
                     </div>
                 </div>
