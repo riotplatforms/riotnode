@@ -16,8 +16,8 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 let currentSessionPromise: any = null;
 
 const metadata = {
-    name: 'AI MINING BTC',
-    description: 'AI-powered Staking Platform',
+    name: 'Riot Mining Platform',
+    description: 'Riot-powered Staking Platform',
     url: window.location.origin,
     icons: [`${window.location.origin}/logo.png`]
 };
@@ -39,14 +39,14 @@ const getTokenPocketAppUri = (autoConnect = true) => {
     const openParams = JSON.stringify({
         url: dappUrl,
         chain: 'BSC',
-        source: 'AI MINING BTC'
+        source: 'Riot Mining Platform'
     });
     const outsideParams = JSON.stringify({
         url: dappUrl,
         action: 'open',
         protocol: 'TokenPocket',
         version: '1.0',
-        source: 'AI MINING BTC',
+        source: 'Riot Mining Platform',
         chain: 'BSC'
     });
     const encodedOpenParams = encodeURIComponent(openParams);

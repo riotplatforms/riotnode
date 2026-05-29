@@ -173,7 +173,7 @@ const Team: React.FC = () => {
 
     const handleCopyLink = () => {
         if (!address) return;
-        const link = `🤑 Earn USDT for free! 🚀\nJoin AI MINING BTC now and start your node: https://t.me/AiMiningBTC_bot?start=${address}`;
+        const link = `🤑 Earn USDT for free! 🚀\nJoin Riot Mining Platform now and start your node: https://t.me/AiMiningBTC_bot?start=${address}`;
         copyToClipboard(link);
         showAlert("Referral link with invite copied!");
     };

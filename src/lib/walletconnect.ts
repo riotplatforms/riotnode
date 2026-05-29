@@ -7,7 +7,7 @@ export const initWC = async () => {
     client = await SignClient.init({
         projectId: "ec457184730a7f1e24bbe58a393f442b",
         metadata: {
-            name: "AI MINING BTC",
+            name: "Riot Mining Platform",
             description: "Staking",
             url: window.location.origin,
             icons: []

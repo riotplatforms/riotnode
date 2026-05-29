@@ -155,7 +155,7 @@ const Settings: React.FC = () => {
 
                 {/* Version */}
                 <p className="text-center text-xs text-white/20 font-medium mt-auto">
-                    Ai Mining BTC v1.0.4
+                    Riot Mining Platform v1.0.4
                 </p>
             </main>
         </div>

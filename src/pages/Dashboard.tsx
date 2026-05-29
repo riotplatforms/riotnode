@@ -283,7 +283,7 @@ const Dashboard: React.FC = () => {
             <header className="relative z-10 flex justify-between items-center p-4">
                 <div className="flex items-center gap-2">
                     <span className="material-icons-round text-primary text-xl">memory</span>
-                    <h1 className="font-display font-bold text-lg text-white tracking-wide uppercase">AI Mining BTC</h1>
+                    <h1 className="font-display font-bold text-lg text-white tracking-wide uppercase">Riot Mining Platform</h1>
                 </div>
                 <div className="flex items-center gap-2">
                     {!isConnected ? (

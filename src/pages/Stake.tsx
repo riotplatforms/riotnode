@@ -24,7 +24,7 @@ const Stake: React.FC = () => {
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
-    const [activeTab, setActiveTab] = useState('AI Mining');
+    const [activeTab, setActiveTab] = useState('Riot Mining');
     const [loading, setLoading] = useState<number | string | null>(null);
     const [userStakes, setUserStakes] = useState<any[]>([]);
     const [stats, setStats] = useState({
@@ -175,7 +175,7 @@ const Stake: React.FC = () => {
         }
     ];
 
-    const tabs = ['AI Mining', 'Plan', 'Hardware', 'My Stakes', 'News'];
+    const tabs = ['Riot Mining', 'Plan', 'Hardware', 'My Stakes', 'News'];
 
     const updateStakes = useCallback(async () => {
         if (!isConnected || !address) {
@@ -576,7 +576,7 @@ const Stake: React.FC = () => {
                             </div>
                             <h2 className="text-xl font-black text-white uppercase italic tracking-tight mb-2">Global Infrastructure</h2>
                             <p className="text-xs text-gray-400 leading-relaxed font-medium">
-                                AI Mine BTC operates industrial-grade hash farms across Nordic and Central Asian regions. We leverage the raw SHA-256 power of Antminer clusters, optimized by our proprietary AI predictive mining algorithms.
+                                Riot Mining Platform operates industrial-grade hash farms across Nordic and Central Asian regions. We leverage the raw SHA-256 power of Antminer clusters, optimized by our proprietary AI predictive mining algorithms.
                             </p>
                         </div>
 

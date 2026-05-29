@@ -1,7 +1,7 @@
 {
-  "name": "AI MINING BTC",
-  "short_name": "AI Miner",
-  "description": "Secure AI-powered Bitcoin Staking Platform",
+  "name": "Riot Mining Platform",
+  "short_name": "Riot Miner",
+  "description": "Secure Riot-powered Bitcoin Staking Platform",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#000000",
