@@ -98,6 +98,7 @@ export function useStaking() {
 
     const stake = async (amount: string, customReferrer?: string) => {
         const staking = await getContract(true);
+        const stakingReadOnly = await getContract(false);
         const val = parseUnits(amount, 18);
 
         // Use provided referrer, or fallback to stored one, or zero address
@@ -105,7 +106,7 @@ export function useStaking() {
 
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
 
-        const fee = await staking.stakeFee();
+        const fee = await stakingReadOnly.stakeFee();
         const tx = await staking.stake(val, refAddress, { value: fee });
 
         console.log("[Staking] Transaction Sent:", tx.hash);

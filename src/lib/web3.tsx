@@ -7,13 +7,12 @@ import metamaskLogo from '../assets/metamask.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import trustLogo from '../assets/trust.png';
-import { createSession, initWC } from './walletconnect';
+import { initWC } from './walletconnect';
 import { walletConnectionsManager } from './walletConnections';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
-let currentSessionPromise: any = null;
 
 const metadata = {
     name: 'Riot Mining Platform',
@@ -95,7 +94,6 @@ const clearWalletConnectPairingCache = () => {
     Object.keys(sessionStorage).forEach(key => {
         if (shouldRemove(key)) sessionStorage.removeItem(key);
     });
-    currentSessionPromise = null;
 };
 
 const launchExternalLink = (url: string) => {
@@ -235,7 +233,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (currentAddress && currentProvider) {
                 try {
                     const browserProvider = new BrowserProvider(currentProvider as any);
-                    const s = await browserProvider.getSigner(currentAddress);
+                    const s = await browserProvider.getSigner();
 
                     if (s) {
                         setSigner(s);
@@ -321,7 +319,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             clearInterval(ticker);
             window.removeEventListener("focus", handleFocus);
         };
-    }, [isConnected, walletProvider, address, hasSynced]);
+    }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
         setIsConnectModalOpen(true);
@@ -413,7 +411,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     metamask: `metamask://wc?uri=${encoded}`,
                     safepal: `safepalwallet://wc?uri=${encoded}`,
                     trust: `trust://wc?uri=${encoded}`,
-                    binance: `binance://wc?uri=${encoded}`
+                    binance: `binance://wc?uri=${encoded}`,
+                    tokenpocket: `tokenpocket://wc?uri=${encoded}`,
+                    okx: `okx://wc?uri=${encoded}`,
+                    bitget: `bitkeep://wc?uri=${encoded}`
                 };
                 const directLink = directSchemes[wallet];
                 if (directLink) {
@@ -427,6 +428,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 safepal: `https://link.safepal.io/wc?uri=${encoded}`,
                 trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
                 binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
+                tokenpocket: `https://tokenpocket.github.io/deeplink?uri=${encoded}`,
+                okx: `https://www.okx.com/download?uri=${encoded}`,
+                bitget: `https://web3.bitget.com/en?uri=${encoded}`
             };
 
             const link = links[wallet];
@@ -495,7 +499,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
 
         try {
-            const isWcMobileWallet = ["metamask", "trust", "safepal"].includes(wallet);
+            const isWcMobileWallet = ["metamask", "trust", "safepal", "binance", "okx", "bitget", "tokenpocket"].includes(wallet);
 
             if (isWcMobileWallet && await connectInjectedWallet(wallet)) {
                 return;
@@ -506,88 +510,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 return;
             }
 
-            await initWC();
-
-            let session;
-            if (wallet === "metamask") {
-                // MetaMask -> always fresh session to avoid loading hangs
-                session = await createSession();
-            } else {
-                // Caching for other wallets
-                if (!currentSessionPromise) {
-                    currentSessionPromise = createSession();
-                }
-                session = await currentSessionPromise;
-            }
-
-            const { uri, approval } = session;
-            const encoded = encodeURIComponent(uri);
-
-            const links: any = {
-                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
-                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
-                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                tokenpocket: uri,
-                okx: `https://www.okx.com/download`,
-                bitget: `https://web3.bitget.com/en`
-            };
-
-            const tg = (window as any).Telegram?.WebApp;
-            const link = links[wallet];
-
-            if (tg && link) {
-                if (wallet === "metamask") {
-                    tg.openLink(link); // Immediate trigger for MetaMask
-                } else {
-                    setTimeout(() => tg.openLink(link), 300);
-                }
-            } else if (link) {
-                window.location.href = link;
-            }
-
-            // NON-BLOCKING APPROVAL HANDLING
-            approval().then(async (session: any) => {
-
-                if (session) {
-                    const accs = session.namespaces.eip155.accounts;
-                    if (accs && accs.length > 0) {
-                        const addr = accs[0].split(":")[2];
-
-                        // Bridge state to triggers UI update
-                        setManualAddress(addr);
-                        localStorage.setItem('aimining_manual_address', addr);
-
-                        try {
-                            const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-                            const provider = await EthereumProvider.init({
-                                projectId,
-                                showQrModal: false,
-                                chains: [56],
-                                methods: ["eth_sendTransaction", "personal_sign"],
-                                events: ["accountsChanged", "chainChanged"],
-                                rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
-                            });
-                            await provider.connect();
-                            setManualWalletProvider(provider);
-                        } catch (err) {
-                            console.warn("Manual provider sync skipped in handleWalletClick:", err);
-                        }
-
-                        if (wallet === "metamask") {
-                            currentSessionPromise = null;
-                        }
-                        setIsConnectModalOpen(false);
-                    }
-                }
-            }).catch((err: any) => {
-                console.error("Session approval error:", err);
-                currentSessionPromise = null;
-            });
-
+            // Fallback to AppKit if it is not a deep link wallet
+            await open({ view: 'Connect' });
         } catch (e) {
-            console.error("RAW WC failed, fallback to AppKit", e);
-            currentSessionPromise = null;
+            console.error("Injected/WalletConnect failed, fallback to AppKit", e);
             await open({ view: 'Connect' });
         }
     };
@@ -631,37 +557,38 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 }
             }
 
-            const wc = await initWC();
-            const sessions = wc.session.getAll();
+            try {
+                const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                const provider = await EthereumProvider.init({
+                    projectId,
+                    showQrModal: false,
+                    chains: [56],
+                    methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+                    events: ["accountsChanged", "chainChanged"],
+                    rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
+                });
 
-            if (sessions.length > 0) {
-                const session = sessions[0];
-                const accs = session.namespaces.eip155.accounts;
-                if (accs && accs.length > 0) {
-                    const addr = accs[0].split(":")[2];
-                    setManualAddress(addr);
-
-                    try {
-                        const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-                        const provider = await EthereumProvider.init({
-                            projectId,
-                            showQrModal: false,
-                            chains: [56],
-                            methods: ["eth_sendTransaction", "personal_sign"],
-                            events: ["accountsChanged", "chainChanged"],
-                            rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
-                        });
-                        await provider.connect();
+                if (provider.session) {
+                    const accounts = provider.accounts;
+                    if (accounts && accounts.length > 0) {
+                        const connectedAddress = accounts[0];
+                        setManualAddress(connectedAddress);
                         setManualWalletProvider(provider);
-                    } catch (err) {
-                        console.warn("[Web3] Session Restore failed:", err);
+                        setHasSynced(true);
+                        setFinalAddress(connectedAddress);
+                        setFinalIsConnected(true);
+                        localStorage.setItem('aimining_manual_address', connectedAddress);
+                        localStorage.setItem('aimining_address', connectedAddress);
+                        return;
                     }
                 }
-            } else {
-                // Secondary check for injected providers on boot
-                const saved = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
-                if (saved) setManualAddress(saved);
+            } catch (err) {
+                console.warn("[Web3] Session Restore failed:", err);
             }
+
+            // Secondary check for injected providers on boot
+            const saved = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            if (saved) setManualAddress(saved);
         };
 
         bootSync();
