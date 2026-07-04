@@ -42,8 +42,34 @@ export const getTierRate = (val: number) => {
     return 0;
 };
 
-const BSC_RPC = 'https://bsc-rpc.publicnode.com'; // Primary endpoint
-const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
+const RPC_NODES = [
+    'https://bsc-rpc.publicnode.com',
+    'https://binance.llamarpc.com',
+    'https://bsc.meowrpc.com',
+    'https://bsc-dataseed.binance.org/'
+];
+let currentRpcIdx = 0;
+
+const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = false): Promise<T> => {
+    let lastError: any;
+    for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
+        const rpcUrl = RPC_NODES[currentRpcIdx];
+        try {
+            const provider = new JsonRpcProvider(rpcUrl);
+            const contract = new Contract(
+                isUsdt ? USDT_ADDRESS : CONTRACT_ADDRESS,
+                isUsdt ? ERC20_ABI : ABI,
+                provider
+            );
+            return await fn(contract);
+        } catch (err) {
+            console.warn(`[useStaking] RPC Call failed on ${rpcUrl} (attempt ${attempt + 1}/${RPC_NODES.length}):`, err);
+            lastError = err;
+            currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+        }
+    }
+    throw lastError || new Error("All RPC nodes failed");
+};
 
 export function useStaking() {
     const { address, isConnected, signer, walletProvider } = useWallet();
@@ -69,7 +95,7 @@ export function useStaking() {
             
             throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
-        return new Contract(CONTRACT_ADDRESS, ABI, readOnlyProvider);
+        return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
 
     const getUsdtContract = async (withSigner = false) => {
@@ -93,12 +119,11 @@ export function useStaking() {
 
             throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
-        return new Contract(USDT_ADDRESS, ERC20_ABI, readOnlyProvider);
+        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
 
     const stake = async (amount: string, customReferrer?: string) => {
         const staking = await getContract(true);
-        const stakingReadOnly = await getContract(false);
         const val = parseUnits(amount, 18);
 
         // Use provided referrer, or fallback to stored one, or zero address
@@ -106,7 +131,9 @@ export function useStaking() {
 
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
 
-        const fee = await stakingReadOnly.stakeFee();
+        const fee = await callReadOnly(async (contract) => {
+            return await contract.stakeFee();
+        });
         const tx = await staking.stake(val, refAddress, { value: fee });
 
         console.log("[Staking] Transaction Sent:", tx.hash);
@@ -117,8 +144,8 @@ export function useStaking() {
         const owner = address || (signer ? await signer.getAddress() : undefined);
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
 
-        const readOnlyUsdt = await getUsdtContract();
-        const currentAllowance = await readOnlyUsdt.allowance(owner, CONTRACT_ADDRESS);
+        const currentAllowanceStr = await getAllowance(owner);
+        const currentAllowance = parseUnits(currentAllowanceStr, 18);
         if (currentAllowance >= MIN_REQUIRED_ALLOWANCE) {
             console.log("[Staking] Existing approval found, skipping approval transaction.");
             return currentAllowance;
@@ -132,11 +159,17 @@ export function useStaking() {
     };
 
     const getAllowance = async (ownerAddress?: string) => {
-        const usdt = await getUsdtContract();
         const owner = ownerAddress || address;
-        if (!usdt || !owner) return "0";
-        const allowance = await usdt.allowance(owner, CONTRACT_ADDRESS);
-        return formatUnits(allowance, 18);
+        if (!owner) return "0";
+        try {
+            return await callReadOnly(async (contract) => {
+                const allowance = await contract.allowance(owner, CONTRACT_ADDRESS);
+                return formatUnits(allowance, 18);
+            }, true);
+        } catch (err) {
+            console.error("[useStaking] Allowance Error after retries:", err);
+            return "0";
+        }
     };
 
     const withdraw = async (index: any, _unused?: any) => {
@@ -147,74 +180,84 @@ export function useStaking() {
     };
 
     const getStakedInfo = async (userAddress?: string) => {
-        const contract = await getContract();
         const target = userAddress || address;
-        if (!contract || !target) return null;
+        if (!target) return null;
         try {
-            const info = await contract.getUserInfo(target);
-            return {
-                referrer: info.referrer,
-                totalStaked: info.totalStaked,
-                totalEarned: info.totalEarned,
-                referralRewards: info.referralRewards,
-                totalBonus: info.totalBonus,
-                totalReferralEarned: info.totalReferralEarned,
-                teamSize: Number(info.teamSize),
-                stakeCount: Number(info.stakeCount)
-            };
-        } catch (err) { return null; }
+            return await callReadOnly(async (contract) => {
+                const info = await contract.getUserInfo(target);
+                return {
+                    referrer: info.referrer,
+                    totalStaked: info.totalStaked,
+                    totalEarned: info.totalEarned,
+                    referralRewards: info.referralRewards,
+                    totalBonus: info.totalBonus,
+                    totalReferralEarned: info.totalReferralEarned,
+                    teamSize: Number(info.teamSize),
+                    stakeCount: Number(info.stakeCount)
+                };
+            });
+        } catch (err) {
+            console.error("[useStaking] Info Error after retries:", err);
+            return null;
+        }
     };
 
     const getStakeDetails = async (userAddress: string, index: number) => {
-        const contract = await getContract();
-        if (!contract || !userAddress) return null;
+        if (!userAddress) return null;
         try {
-            const stake = await contract.getUserStake(userAddress, index);
-            return {
-                amount: stake.amount,
-                startTime: Number(stake.startTime),
-                tier: Number(stake.tier),
-                withdrawn: stake.withdrawn
-            };
+            return await callReadOnly(async (contract) => {
+                const stake = await contract.getUserStake(userAddress, index);
+                return {
+                    amount: stake.amount,
+                    startTime: Number(stake.startTime),
+                    tier: Number(stake.tier),
+                    withdrawn: stake.withdrawn
+                };
+            });
         } catch (err) { 
-            console.error("[useStaking] Detail Error:", err);
+            console.error("[useStaking] Detail Error after retries:", err);
             return null; 
         }
     };
 
     const getWalletBalance = async (userAddress?: string) => {
-        const usdtContract = await getUsdtContract();
         const target = userAddress || address;
-        if (!usdtContract || !target) return null;
+        if (!target) return null;
         try {
-            const balance = await usdtContract.balanceOf(target);
-            return formatUnits(balance, 18);
+            return await callReadOnly(async (contract) => {
+                const balance = await contract.balanceOf(target);
+                return formatUnits(balance, 18);
+            }, true);
         } catch (err) { 
-            console.error("[useStaking] Balance Error:", err);
+            console.error("[useStaking] Balance Error after retries:", err);
             return null; 
         }
     };
 
     const getTeamTree = async (userAddress: string) => {
-        const contract = await getContract();
-        if (!contract) return {};
         const tree: Record<number, string[]> = {};
         const visited = new Set<string>();
         const scanLevel = async (referrers: string[], level: number) => {
             if (level > 10 || referrers.length === 0) return;
             const nextReferrers: string[] = [];
             for (const ref of referrers) {
-                const filter = contract.filters.ReferralPaid(ref);
-                const events = await contract.queryFilter(filter, -100000); 
-                events.forEach((event: any) => {
-                    const child = event.args.referee;
-                    if (!visited.has(child)) {
-                        visited.add(child);
-                        if (!tree[level]) tree[level] = [];
-                        tree[level].push(child);
-                        nextReferrers.push(child);
-                    }
-                });
+                try {
+                    const events = await callReadOnly(async (contract) => {
+                        const filter = contract.filters.ReferralPaid(ref);
+                        return await contract.queryFilter(filter, -100000); 
+                    });
+                    events.forEach((event: any) => {
+                        const child = event.args.referee;
+                        if (!visited.has(child)) {
+                            visited.add(child);
+                            if (!tree[level]) tree[level] = [];
+                            tree[level].push(child);
+                            nextReferrers.push(child);
+                        }
+                    });
+                } catch (err) {
+                    console.error(`[useStaking] queryFilter failed for level ${level}, ref ${ref}:`, err);
+                }
             }
             if (nextReferrers.length > 0) await scanLevel(nextReferrers, level + 1);
         };
