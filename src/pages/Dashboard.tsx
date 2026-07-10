@@ -196,20 +196,26 @@ const Dashboard: React.FC = () => {
                     if (isViolated) {
                         recordPermanentStakeFlush(address, i);
                     } else {
+                        const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
                         if (!finished) {
                             runningStakedSum += stakeAmount;
                             totalActiveStaked += stakeAmount;
                             activeStakedForPower += stakeAmount;
 
                             const stakeRate = getTierRate(stakeAmount);
-                            dailyProfitBtc += ((stakeAmount * stakeRate) / (37 * btcPrice));
+                            const profit = (stakeAmount * stakeRate) / (37 * safeBtcPrice);
+                            if (!isNaN(profit) && isFinite(profit)) {
+                                dailyProfitBtc += profit;
+                            }
                         }
 
                         const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
-                        const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
+                        const timePassed = Math.max(0, Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime));
                         const stakeRate = getTierRate(stakeAmount);
-                        const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / btcPrice;
-                        totalAccruedBtc += accrued;
+                        const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / safeBtcPrice;
+                        if (!isNaN(accrued) && isFinite(accrued)) {
+                            totalAccruedBtc += accrued;
+                        }
                     }
                 }
             }

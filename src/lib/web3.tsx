@@ -314,10 +314,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         // GLOBAL HIGH-FIDELITY TICKER: Animates the mining balance every second across ALL pages
         const ticker = setInterval(() => {
             setMiningStats((prev: any) => {
-                if (!prev.isLoaded || prev.rewardPerSecond <= 0) return prev;
+                if (!prev.isLoaded) return prev;
+                
+                const dailyProfit = parseFloat(prev.dailyProfit || '0');
+                if (isNaN(dailyProfit) || dailyProfit <= 0) return prev;
+                
+                const rewardPerSecond = dailyProfit / 86400;
+                const currentBalance = parseFloat(prev.balance || '0');
+                if (isNaN(currentBalance)) return prev;
+
                 return {
                     ...prev,
-                    balance: (parseFloat(prev.balance) + prev.rewardPerSecond).toFixed(14)
+                    balance: (currentBalance + rewardPerSecond).toFixed(14)
                 };
             });
         }, 1000);

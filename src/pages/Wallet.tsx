@@ -103,21 +103,27 @@ const Wallet: React.FC = () => {
                     if (isViolated) {
                         recordPermanentStakeFlush(address, i);
                     } else {
+                        const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
                         // Only active (non-finished) stakes require wallet balance and count towards active staked sum
                         if (!finished) {
                             runningStakedSum += stakeAmount;
                             totalActiveStaked += stakeAmount;
                             activeStakedForPower += stakeAmount;
                             const rate = getTierRate(stakeAmount);
-                            dailyProfitBtc += ((stakeAmount * rate) / (37 * btcPrice));
+                            const profit = (stakeAmount * rate) / (37 * safeBtcPrice);
+                            if (!isNaN(profit) && isFinite(profit)) {
+                                dailyProfitBtc += profit;
+                            }
                         }
 
                         // Rewards continue to accrue up to the maturity cap
                         const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
-                        const timePassed = Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime);
+                        const timePassed = Math.max(0, Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime));
                         const rate = getTierRate(stakeAmount);
-                        const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / btcPrice;
-                        totalAccruedBtc += accrued;
+                        const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / safeBtcPrice;
+                        if (!isNaN(accrued) && isFinite(accrued)) {
+                            totalAccruedBtc += accrued;
+                        }
 
                         const maturity = detail.startTime + (37 * 86400);
                         if (!finished && maturity < minMaturity) {
@@ -135,7 +141,8 @@ const Wallet: React.FC = () => {
 
             // Detailed Team Update
             const tree = await getTeamTree(address);
-            const teamStats = await getTeamMiningStats(tree, btcPrice);
+            const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
+            const teamStats = await getTeamMiningStats(tree, safeBtcPrice);
             const l1Count = tree[1]?.length || 0;
             
             const newStats = {
@@ -150,15 +157,16 @@ const Wallet: React.FC = () => {
 
             setStats(newStats);
             
-            // Update global context for other pages
-            setMiningStats({
+            // Update global context for other pages (Merging to prevent deleting fields like rewardPerSecond)
+            setMiningStats((prev: any) => ({
+                ...prev,
                 balance: newStats.totalEarned,
                 miningPower: (activeStakedForPower * 2.5).toFixed(1),
                 dailyProfit: dailyProfitBtc.toFixed(14),
                 totalStaked: newStats.totalStaked,
                 walletBalance: newStats.walletBalance,
                 isLoaded: true
-            });
+            }));
         }
     }, [address, getStakedInfo, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, getTeamTree, getTeamMiningStats, setMiningStats]);
 

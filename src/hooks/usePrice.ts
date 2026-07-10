@@ -3,10 +3,15 @@ import { useState, useEffect } from 'react';
 const BINANCE_BTC_USDT_API = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT';
 const DEFAULT_BTC_PRICE = 65000;
 
-export function usePrice() {
     const [btcPrice, setBtcPrice] = useState<number>(() => {
         const cached = localStorage.getItem('btc_price');
-        return cached ? parseFloat(cached) : DEFAULT_BTC_PRICE;
+        if (cached) {
+            const parsed = parseFloat(cached);
+            if (!isNaN(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
+        return DEFAULT_BTC_PRICE;
     });
 
     useEffect(() => {
