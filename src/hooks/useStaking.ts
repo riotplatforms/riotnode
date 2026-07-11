@@ -382,6 +382,12 @@ export function useStaking() {
         recordStakeViolation(address, index);
     };
 
+    const clearPermanentStakeFlush = (address: string | undefined, index: number) => {
+        if (!address) return;
+        const key = `stake_permanently_flushed_${address.toLowerCase()}_${index}`;
+        localStorage.removeItem(key);
+    };
+
     const isStakePermanentlyFlushed = (address: string | undefined, index: number) => {
         if (!address) return false;
         const key = `stake_permanently_flushed_${address.toLowerCase()}_${index}`;
@@ -489,7 +495,7 @@ export function useStaking() {
         calculateEffectiveEarned, recordViolation, recordStakeFlush, getViolationStakeCount, isViolationActive, clearViolation,
         recordReferralFlush, getIsReferralFlushed, clearReferralFlush, getPerLevelReferralIncome,
         getStakeLastFlushedTime, recordStakeViolation,
-        recordPermanentStakeFlush, isStakePermanentlyFlushed,
+        recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed,
         address, isConnected
     };
 }

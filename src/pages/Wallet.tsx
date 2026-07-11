@@ -11,7 +11,7 @@ const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { btcPrice } = usePrice();
     const { showAlert } = useTelegram();
 
@@ -94,9 +94,13 @@ const Wallet: React.FC = () => {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                     const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                     const wasFlushed = isStakePermanentlyFlushed(address, i);
+                    const isBalanceSufficient = finished || wBalanceNum >= runningStakedSum + stakeAmount;
+                    if (isBalanceSufficient && wasFlushed) {
+                        clearPermanentStakeFlush(address, i);
+                    }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
+                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
@@ -230,7 +234,11 @@ const Wallet: React.FC = () => {
                 const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                 const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                 const wasFlushed = isStakePermanentlyFlushed(address, i);
-                const isViolated = wasFlushed || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
+                const isBalanceSufficient = finished || wBalanceNum >= runningStakedSum + stakeAmount;
+                if (isBalanceSufficient && wasFlushed) {
+                    clearPermanentStakeFlush(address, i);
+                }
+                const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
 
                 if (!isViolated) {
                     if (!finished) {
@@ -375,7 +383,7 @@ const Wallet: React.FC = () => {
                         </div>
 
                         {/* Referral Rewards - Only show if user has 200+ USDT staked */}
-                        {parseFloat(stats.totalStaked) >= 200 && (
+                        {stats.isEligible && (
                             <div className="p-4 flex items-center justify-between hover:bg-white/5 transition-colors group">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500/20 transition-colors shadow-neon-soft">
@@ -396,7 +404,7 @@ const Wallet: React.FC = () => {
                 </div>
 
                 {/* Claim Section - Show if user has referral rewards */}
-                {parseFloat(stats.totalStaked) >= 200 && parseFloat(stats.referralRewards) > 0 && (
+                {stats.isEligible && parseFloat(stats.referralRewards) > 0 && (
                     <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-3xl p-6 border border-purple-500/20 shadow-glow">
                         <div className="flex items-center justify-between mb-4">
                             <div>

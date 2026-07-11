@@ -22,7 +22,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -103,7 +103,11 @@ const Dashboard: React.FC = () => {
                         const stakeAmountBigInt = detail.amount;
                         const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                         const wasFlushed = isStakePermanentlyFlushed(userAddress, i);
-                        const isViolated = wasFlushed || (!finished && wBalanceBigInt < runningStakedSumBigInt + stakeAmountBigInt);
+                        const isBalanceSufficient = finished || wBalanceBigInt >= runningStakedSumBigInt + stakeAmountBigInt;
+                        if (isBalanceSufficient && wasFlushed) {
+                            clearPermanentStakeFlush(userAddress, i);
+                        }
+                        const isViolated = isStakePermanentlyFlushed(userAddress, i) || (!finished && wBalanceBigInt < runningStakedSumBigInt + stakeAmountBigInt);
                         if (!isViolated && !finished) {
                             activeStakedBigInt += stakeAmountBigInt;
                             runningStakedSumBigInt += stakeAmountBigInt;
@@ -187,9 +191,13 @@ const Dashboard: React.FC = () => {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                     const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                     const wasFlushed = isStakePermanentlyFlushed(address, i);
+                    const isBalanceSufficient = finished || liveWalletUsdt >= runningStakedSum + stakeAmount;
+                    if (isBalanceSufficient && wasFlushed) {
+                        clearPermanentStakeFlush(address, i);
+                    }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = wasFlushed || (!finished && liveWalletUsdt < runningStakedSum + stakeAmount);
+                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && liveWalletUsdt < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
