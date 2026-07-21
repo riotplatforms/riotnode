@@ -147,14 +147,14 @@ const Wallet: React.FC = () => {
             const tree = await getTeamTree(address);
             const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
             const teamStats = await getTeamMiningStats(tree, safeBtcPrice);
-            const l1Count = tree[1]?.length || 0;
+            const directCount = Math.floor(parseFloat(formatUnits(info.totalBonus, 18)) / 20);
             
             const newStats = {
                 referralRewards: formatUnits(info.referralRewards, 18),
                 totalEarned: currentTotalBtc.toFixed(14),
                 totalStaked: totalActiveStaked.toFixed(2),
                 walletBalance: wBalanceNum.toFixed(2),
-                invitationBonus: isEligible ? (l1Count * 20).toString() : '0',
+                invitationBonus: isEligible ? (directCount * 20).toString() : '0',
                 teamDividend: teamStats.totalDailyDividend.toFixed(14),
                 isEligible
             };

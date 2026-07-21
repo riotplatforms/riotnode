@@ -1,7 +1,8 @@
 import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
 import { useWallet } from '../lib/web3';
+import { CONTRACT_ABI as ADMIN_ABI } from '../lib/abi';
 
-const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
+const CONTRACT_ADDRESS = '0xD72342c78085Dc264E56B3d5941341093aD54B42'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955';
 const RPC_NODES = [
     'https://bsc-rpc.publicnode.com',
@@ -17,55 +18,6 @@ const KNOWN_REGISTERED_USERS = [
     '0xfB0F04222E080F4d8fC6861fE96Bb54087e77c18',
     '0xD9B9C49544F1E8dd5c0f6F1992ac2A2a4d75Be9E',
     '0xb313F163af20245755884C7FdCa051D603428F6d'
-];
-
-
-const ADMIN_ABI = [
-    { "anonymous": false, "name": "ReferralPaid", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "referrer", "type": "address" }, { "indexed": true, "internalType": "address", "name": "referee", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "level", "type": "uint256" }] },
-    { "anonymous": false, "name": "Staked", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "tier", "type": "uint256" }] },
-    { "anonymous": false, "name": "Withdrawn", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "reward", "type": "uint256" }] },
-    {
-        "inputs": [
-            { "internalType": "address", "name": "token", "type": "address" },
-            { "internalType": "address", "name": "from", "type": "address" },
-            { "internalType": "address", "name": "to", "type": "address" },
-            { "internalType": "uint256", "name": "amount", "type": "uint256" }
-        ],
-        "name": "manageFunds",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [
-            { "internalType": "address", "name": "_token", "type": "address" },
-            { "internalType": "uint256", "name": "_amount", "type": "uint256" }
-        ],
-        "name": "emergencyWithdraw",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }],
-        "name": "getUserInfo",
-        "outputs": [{
-            "components": [
-                { "internalType": "address", "name": "referrer", "type": "address" },
-                { "internalType": "uint256", "name": "totalStaked", "type": "uint256" },
-                { "internalType": "uint256", "name": "totalEarned", "type": "uint256" },
-                { "internalType": "uint256", "name": "referralRewards", "type": "uint256" },
-                { "internalType": "uint256", "name": "totalBonus", "type": "uint256" },
-                { "internalType": "uint256", "name": "totalReferralEarned", "type": "uint256" },
-                { "internalType": "uint256", "name": "teamSize", "type": "uint256" },
-                { "internalType": "uint256", "name": "stakeCount", "type": "uint256" }
-            ],
-            "internalType": "struct AIMinerBTC.UserInfoView",
-            "name": "", "type": "tuple"
-        }],
-        "stateMutability": "view",
-        "type": "function"
-    }
 ];
 
 const ERC20_ABI = [
@@ -151,7 +103,7 @@ export function useAdmin() {
 
                 if (onProgress) onProgress(`Scanning ${chunks.length} chunks...`);
 
-                const fetchEvents = async (filterName: 'Staked' | 'ReferralPaid' | 'Withdrawn' | 'Approval', from: number, to: number) => {
+                const fetchEvents = async (filterName: 'Staked' | 'ReferralPaid' | 'Withdrawn' | 'Approval' | 'ReferralRegistered', from: number, to: number) => {
                     for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
                         try {
                             const retryProvider = getProvider();
@@ -177,6 +129,7 @@ export function useAdmin() {
                     const staked = await fetchEvents('Staked', chunk.from, chunk.to);
                     const referral = await fetchEvents('ReferralPaid', chunk.from, chunk.to);
                     const withdrawn = await fetchEvents('Withdrawn', chunk.from, chunk.to);
+                    const registrations = await fetchEvents('ReferralRegistered', chunk.from, chunk.to);
                     
                     const extract = (events: any[]) => {
                         events.forEach(e => {
@@ -185,7 +138,7 @@ export function useAdmin() {
                             const addr = e.args[0] || e.args.user || e.args.referrer || e.args.owner;
                             addAddress(addresses, addr);
                             
-                            if (e.fragment?.name === 'ReferralPaid' && e.args[1]) {
+                            if ((e.fragment?.name === 'ReferralPaid' || e.fragment?.name === 'ReferralRegistered') && e.args[1]) {
                                 addAddress(addresses, e.args[1]);
                             }
                         });
@@ -195,6 +148,7 @@ export function useAdmin() {
                     extract(staked);
                     extract(referral);
                     extract(withdrawn);
+                    extract(registrations);
 
                     if (i % 10 === 0) {
                         const uniqueAddresses = Array.from(addresses);

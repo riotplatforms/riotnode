@@ -288,7 +288,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         // Referral Injection Logic
         const urlParams = new URLSearchParams(window.location.search);
-        const ref = urlParams.get('ref');
+        const ref = urlParams.get('ref') || urlParams.get('start');
         if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) {
             localStorage.setItem('aimining_referrer', ref);
             setReferral(ref);

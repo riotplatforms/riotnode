@@ -1,32 +1,8 @@
 import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
 import { useWallet } from '../lib/web3';
+import { CONTRACT_ABI as WITHDRAWAL_MANAGER_ABI } from '../lib/abi';
 
-const WITHDRAWAL_MANAGER_ADDRESS = '0x0000000000000000000000000000000000000000'; // Will be set after deployment
-
-const WITHDRAWAL_MANAGER_ABI = [
-    {
-        "inputs": [
-            { "internalType": "address", "name": "_usdt", "type": "address" },
-            { "internalType": "address", "name": "_stakingContract", "type": "address" },
-            { "internalType": "address", "name": "_secondAdmin", "type": "address" }
-        ],
-        "stateMutability": "nonpayable", "type": "constructor"
-    },
-    { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "admins", "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "hasCompletedStakingCycle", "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "getMatureStakingRewards", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "totalStakingRewardsWithdrawn", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "totalReferralRewardsWithdrawn", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [], "name": "requestReferralWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }], "name": "requestStakingRewardWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_requestId", "type": "uint256" }], "name": "approveWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_requestId", "type": "uint256" }], "name": "processWithdrawal", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [], "name": "getPendingRequestsCount", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "getUserRequests", "outputs": [{ "internalType": "uint256[]", "name": "", "type": "uint256[]" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "name": "withdrawalRequests", "outputs": [{ "internalType": "address", "name": "user", "type": "address" }, { "internalType": "uint256", "name": "amount", "type": "uint256" }, { "internalType": "uint256", "name": "requestTime", "type": "uint256" }, { "internalType": "bool", "name": "approved", "type": "bool" }, { "internalType": "bool", "name": "processed", "type": "bool" }, { "internalType": "string", "name": "withdrawalType", "type": "string" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "_newAdmin", "type": "address" }, { "internalType": "bool", "name": "_status", "type": "bool" }], "name": "updateAdmins", "outputs": [], "stateMutability": "nonpayable", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }, { "internalType": "address", "name": "_to", "type": "address" }], "name": "emergencyWithdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
-];
+const WITHDRAWAL_MANAGER_ADDRESS = '0xD72342c78085Dc264E56B3d5941341093aD54B42'; 
 
 const BSC_RPC = 'https://bsc-rpc.publicnode.com';
 

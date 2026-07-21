@@ -1,27 +1,9 @@
 import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
 import { useWallet, launchExternalLink } from '../lib/web3';
+import { CONTRACT_ABI as ABI } from '../lib/abi';
 
-const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
+const CONTRACT_ADDRESS = '0xD72342c78085Dc264E56B3d5941341093aD54B42'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
-
-const ABI = [
-    {
-        "inputs": [
-            { "internalType": "address", "name": "_usdt", "type": "address" },
-            { "internalType": "address", "name": "_secondAdmin", "type": "address" }
-        ],
-        "stateMutability": "nonpayable", "type": "constructor"
-    },
-    { "anonymous": false, "name": "ReferralPaid", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "referrer", "type": "address" }, { "indexed": true, "internalType": "address", "name": "referee", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "level", "type": "uint256" }] },
-    { "anonymous": false, "name": "Staked", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "tier", "type": "uint256" }] },
-    { "anonymous": false, "name": "Withdrawn", "type": "event", "inputs": [{ "indexed": true, "internalType": "address", "name": "user", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "reward", "type": "uint256" }] },
-    { "inputs": [], "name": "MIN_STAKE", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }], "name": "getUserInfo", "outputs": [{ "components": [{ "internalType": "address", "name": "referrer", "type": "address" }, { "internalType": "uint256", "name": "totalStaked", "type": "uint256" }, { "internalType": "uint256", "name": "totalEarned", "type": "uint256" }, { "internalType": "uint256", "name": "referralRewards", "type": "uint256" }, { "internalType": "uint256", "name": "totalBonus", "type": "uint256" }, { "internalType": "uint256", "name": "totalReferralEarned", "type": "uint256" }, { "internalType": "uint256", "name": "teamSize", "type": "uint256" }, { "internalType": "uint256", "name": "stakeCount", "type": "uint256" }], "internalType": "struct AIMinerBTC.UserInfoView", "name": "", "type": "tuple" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "address", "name": "_user", "type": "address" }, { "internalType": "uint256", "name": "_index", "type": "uint256" }], "name": "getUserStake", "outputs": [{ "internalType": "uint256", "name": "amount", "type": "uint256" }, { "internalType": "uint256", "name": "startTime", "type": "uint256" }, { "internalType": "uint256", "name": "tier", "type": "uint256" }, { "internalType": "bool", "name": "withdrawn", "type": "bool" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [], "name": "stakeFee", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_amount", "type": "uint256" }, { "internalType": "address", "name": "_referrer", "type": "address" }], "name": "stake", "outputs": [], "stateMutability": "payable", "type": "function" },
-    { "inputs": [{ "internalType": "uint256", "name": "_stakeIndex", "type": "uint256" }], "name": "withdraw", "outputs": [], "stateMutability": "nonpayable", "type": "function" }
-];
 
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -267,32 +249,126 @@ export function useStaking() {
 
     const getTeamTree = async (userAddress: string) => {
         const tree: Record<number, string[]> = {};
-        const visited = new Set<string>();
-        const scanLevel = async (referrers: string[], level: number) => {
-            if (level > 10 || referrers.length === 0) return;
-            const nextReferrers: string[] = [];
-            for (const ref of referrers) {
-                try {
-                    const events = await callReadOnly(async (contract) => {
-                        const filter = contract.filters.ReferralPaid(ref);
-                        return await contract.queryFilter(filter, -100000); 
+        if (!userAddress) return tree;
+
+        try {
+            // 1. Gather all potential user addresses from various sources
+            const addresses = new Set<string>();
+
+            // Source A: Hardcoded known users
+            const KNOWN_USERS = [
+                '0x3FbFF9Dd24e736FeF4A3a4435DF72b7Ea5978eFD',
+                '0xfB0F04222E080F4d8fC6861fE96Bb54087e77c18',
+                '0xD9B9C49544F1E8dd5c0f6F1992ac2A2a4d75Be9E',
+                '0xb313F163af20245755884C7FdCa051D603428F6d'
+            ];
+            KNOWN_USERS.forEach(a => addresses.add(a.toLowerCase()));
+
+            // Source B: Local storage cached users (from admin or user sessions)
+            try {
+                const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
+                const cached = JSON.parse(localStorage.getItem(cacheKey) || "[]");
+                if (Array.isArray(cached)) {
+                    cached.forEach(a => {
+                        if (typeof a === 'string') addresses.add(a.toLowerCase());
                     });
-                    events.forEach((event: any) => {
-                        const child = event.args.referee;
-                        if (!visited.has(child)) {
-                            visited.add(child);
-                            if (!tree[level]) tree[level] = [];
-                            tree[level].push(child);
-                            nextReferrers.push(child);
+                }
+            } catch (e) {}
+
+            // Source C: Wallet connections cache
+            try {
+                const walletConns = JSON.parse(localStorage.getItem('wallet_connections_map') || "[]");
+                if (Array.isArray(walletConns)) {
+                    walletConns.forEach(c => {
+                        if (c?.walletAddress) addresses.add(c.walletAddress.toLowerCase());
+                    });
+                }
+            } catch (e) {}
+
+            // Source D: Telegram connections cache
+            try {
+                const tgConns = JSON.parse(localStorage.getItem('telegram_connections_map') || "[]");
+                if (Array.isArray(tgConns)) {
+                    tgConns.forEach(c => {
+                        if (c?.walletAddress) addresses.add(c.walletAddress.toLowerCase());
+                    });
+                }
+            } catch (e) {}
+
+            // Source E: Fetch recent Staked events using the active wallet provider (bypasses public RPC limits)
+            try {
+                let activeProvider: any = null;
+                if (walletProvider) {
+                    activeProvider = new BrowserProvider(walletProvider as any);
+                } else if ((window as any).ethereum) {
+                    activeProvider = new BrowserProvider((window as any).ethereum);
+                } else {
+                    activeProvider = new JsonRpcProvider(RPC_NODES[currentRpcIdx]);
+                }
+                const contractWithProvider = new Contract(CONTRACT_ADDRESS, ABI, activeProvider);
+                const filter = contractWithProvider.filters.Staked();
+                const recentEvents = await contractWithProvider.queryFilter(filter, 110320760);
+                recentEvents.forEach((e: any) => {
+                    if (e.args && e.args[0]) {
+                        addresses.add(e.args[0].toLowerCase());
+                    } else if (e.args && e.args.user) {
+                        addresses.add(e.args.user.toLowerCase());
+                    }
+                });
+            } catch (err) {
+                console.warn("[useStaking] Recent Staked events fetch failed:", err);
+            }
+
+            // Remove the user themselves to avoid self-referral loops
+            addresses.delete(userAddress.toLowerCase());
+
+            const uniqueAddresses = Array.from(addresses);
+            
+            // 2. Fetch referrer for each staker address using multi-call or parallel getUserInfo calls
+            const referrersMap = new Map<string, string>();
+            
+            // Query in parallel batches of 5 to avoid RPC rate limiting
+            const batchSize = 5;
+            for (let i = 0; i < uniqueAddresses.length; i += batchSize) {
+                const batch = uniqueAddresses.slice(i, i + batchSize);
+                await Promise.all(batch.map(async (addr) => {
+                    try {
+                        const info = await getStakedInfo(addr);
+                        if (info && info.referrer && info.referrer !== '0x0000000000000000000000000000000000000000') {
+                            referrersMap.set(addr, info.referrer.toLowerCase());
+                        }
+                    } catch (e) {
+                        console.warn(`[useStaking] Failed to get referrer for ${addr}:`, e);
+                    }
+                }));
+            }
+
+            // 3. Build tree recursively starting from userAddress
+            const buildTreeLevel = (parents: string[], currentLevel: number) => {
+                if (currentLevel > 10 || parents.length === 0) return;
+                const nextParents: string[] = [];
+                parents.forEach(parent => {
+                    referrersMap.forEach((referrer, child) => {
+                        if (referrer === parent.toLowerCase()) {
+                            if (!tree[currentLevel]) tree[currentLevel] = [];
+                            if (!tree[currentLevel].includes(child)) {
+                                tree[currentLevel].push(child);
+                                nextParents.push(child);
+                            }
                         }
                     });
-                } catch (err) {
-                    console.error(`[useStaking] queryFilter failed for level ${level}, ref ${ref}:`, err);
+                });
+                if (nextParents.length > 0) {
+                    buildTreeLevel(nextParents, currentLevel + 1);
                 }
-            }
-            if (nextReferrers.length > 0) await scanLevel(nextReferrers, level + 1);
-        };
-        await scanLevel([userAddress], 1);
+            };
+
+            buildTreeLevel([userAddress], 1);
+
+        } catch (e) {
+            console.error("[useStaking] getTeamTree error:", e);
+        }
+
         return tree;
     };
 

@@ -128,9 +128,9 @@ const Team: React.FC = () => {
             const isFlushed = getIsReferralFlushed(address);
             setIsReferralFlushed(isFlushed);
 
-            const directCount = tree[1]?.length || 0;
+            const directCount = Math.floor(parseFloat(formatUnits(info.totalBonus, 18)) / 20);
             const directEarnings = isEligible ? directCount * 20 : 0;
-            const totalCount = allMembers.length;
+            const totalCount = Number(info.teamSize);
 
             const baseRewards = isFlushed ? 0 : parseFloat(formatUnits(info.referralRewards, 18));
             setBaseReferralBalance(baseRewards);
@@ -202,8 +202,11 @@ const Team: React.FC = () => {
                     <span className="material-icons-round text-primary text-xl font-black">hub</span>
                     <h1 className="font-display font-black text-xl text-white tracking-[0.1em] uppercase">Team Engine</h1>
                 </div>
-                <div className="bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
-                    <span className="text-[10px] font-black text-primary uppercase">Lv.{stats.unlockedLevels} UNLOCKED</span>
+                <div className={`${stats.isEligible ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-red-500/10 border-red-500/20 text-red-500'} px-3 py-1 rounded-full border`}>
+                    <span className="text-[10px] font-black uppercase flex items-center gap-1">
+                        {!stats.isEligible && <span className="material-icons-round text-[10px] font-black">lock</span>}
+                        {stats.isEligible ? `Lv.${stats.unlockedLevels} UNLOCKED` : 'REFERRAL LOCKED'}
+                    </span>
                 </div>
             </header>
 
@@ -286,11 +289,17 @@ const Team: React.FC = () => {
                         </h2>
                         <div className="text-right">
                             <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Total Referrals</p>
-                            <p className="text-lg font-black text-primary">{referralDetails.length}</p>
+                            <p className="text-lg font-black text-primary">{stats.isEligible ? referralDetails.length : 0}</p>
                         </div>
                     </div>
 
-                    {referralDetails.length === 0 ? (
+                    {!stats.isEligible ? (
+                        <div className="text-center py-12">
+                            <span className="material-icons-round text-4xl text-gray-600 mb-4 block">lock</span>
+                            <p className="text-gray-500 text-sm font-medium">Referral Details Locked</p>
+                            <p className="text-gray-600 text-xs mt-1">Requires at least $200 USDT own stake to view downline network structure</p>
+                        </div>
+                    ) : referralDetails.length === 0 ? (
                         <div className="text-center py-12">
                             <span className="material-icons-round text-4xl text-gray-600 mb-4 block">people_outline</span>
                             <p className="text-gray-500 text-sm font-medium">No referrals yet</p>
@@ -343,7 +352,14 @@ const Team: React.FC = () => {
                         )}
                     </div>
 
-                    {Object.keys(perLevelIncome).length === 0 ? (
+                    {!stats.isEligible ? (
+                        <div className="text-center py-10">
+                            <p className="text-sm font-black text-white">Breakdown Locked.</p>
+                            <p className="text-[10px] text-gray-500 mt-2">
+                                Stake minimum $200 USDT to activate the referral income breakdown.
+                            </p>
+                        </div>
+                    ) : Object.keys(perLevelIncome).length === 0 ? (
                         <div className="text-center py-10">
                             <p className="text-sm font-black text-white">No active referral income found.</p>
                             <p className="text-[10px] text-gray-500 mt-2">
@@ -373,25 +389,35 @@ const Team: React.FC = () => {
                 </div>
 
                 {/* Referral Link */}
-                <div className="bg-[#0c0c0c] rounded-3xl p-6 border border-white/5">
+                <div className="bg-[#0c0c0c] rounded-3xl p-6 border border-white/5 relative overflow-hidden">
                     <div className="flex items-center gap-3 mb-5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                             <span className="material-icons-round text-primary text-sm font-black">share</span>
                         </div>
                         <h3 className="text-xs font-black text-white uppercase tracking-widest">Global Invite Link</h3>
                     </div>
-                    <div className="flex flex-col gap-3">
-                        <div className="bg-black/80 p-4 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all lowercase leading-relaxed">
-                            https://t.me/AiMiningBTC_bot?start={address}
+                    {!stats.isEligible ? (
+                        <div className="flex flex-col items-center justify-center py-6 text-center">
+                            <span className="material-icons-round text-red-500 text-3xl mb-2">lock</span>
+                            <p className="text-sm font-black uppercase text-gray-300">Invite Link Locked</p>
+                            <p className="text-[10px] text-gray-500 mt-1 max-w-xs px-4">
+                                You must have at least $200 USDT staked in the contract to unlock your invitation link and earn commission.
+                            </p>
                         </div>
-                        <button
-                            onClick={handleCopyLink}
-                            className="w-full bg-[#111] hover:bg-primary hover:text-black border border-primary/20 text-primary py-4 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-neon"
-                        >
-                            <span className="material-icons-round text-sm font-black">content_copy</span>
-                            Copy Network Link
-                        </button>
-                    </div>
+                    ) : (
+                        <div className="flex flex-col gap-3">
+                            <div className="bg-black/80 p-4 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all lowercase leading-relaxed">
+                                https://t.me/AiMiningBTC_bot?start={address}
+                            </div>
+                            <button
+                                onClick={handleCopyLink}
+                                className="w-full bg-[#111] hover:bg-primary hover:text-black border border-primary/20 text-primary py-4 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-neon"
+                            >
+                                <span className="material-icons-round text-sm font-black">content_copy</span>
+                                Copy Network Link
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Network Levels Hierarchy */}

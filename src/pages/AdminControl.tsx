@@ -121,7 +121,7 @@ const AdminControl: React.FC = () => {
     const handleTrackUser = (userAddr: string) => {
         setTargetUser(userAddr);
         // Add to discovery cache manually if it's not there
-        const cacheKey = `discovered_users_${'0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'.toLowerCase()}`;
+        const cacheKey = `discovered_users_${'0xD72342c78085Dc264E56B3d5941341093aD54B42'.toLowerCase()}`;
         let cached: string[] = [];
         try {
             const parsed = JSON.parse(localStorage.getItem(cacheKey) || "[]");
