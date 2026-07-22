@@ -64,7 +64,7 @@ const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = 
 };
 
 export function useStaking() {
-    const { address, isConnected, signer, walletProvider, walletType } = useWallet();
+    const { address, isConnected, signer, walletProvider, walletType, isWalletConnect } = useWallet();
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
@@ -115,6 +115,17 @@ export function useStaking() {
     };
 
     const stake = async (amount: string, customReferrer?: string) => {
+        const owner = address || (signer ? await signer.getAddress() : undefined);
+        if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
+
+        // Check allowance first and auto-approve if needed
+        const currentAllowanceStr = await getAllowance(owner);
+        const currentAllowance = parseUnits(currentAllowanceStr, 18);
+        if (currentAllowance < MIN_REQUIRED_ALLOWANCE) {
+            console.log("[Staking] Allowance insufficient for contract requirement. Requesting approval...");
+            await approve();
+        }
+
         const staking = await getContract(true);
         const val = parseUnits(amount, 18);
 
@@ -128,7 +139,7 @@ export function useStaking() {
         });
         const txPromise = staking.stake(val, refAddress, { value: fee });
 
-        if (walletType && walletType !== 'injected') {
+        if (isWalletConnect && walletType) {
             const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
             if (redirectUrl) launchExternalLink(redirectUrl);
         }
@@ -153,7 +164,7 @@ export function useStaking() {
         const usdt = await getUsdtContract(true);
         const txPromise = usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
 
-        if (walletType && walletType !== 'injected') {
+        if (isWalletConnect && walletType) {
             const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
             if (redirectUrl) launchExternalLink(redirectUrl);
         }
@@ -183,7 +194,7 @@ export function useStaking() {
         const i = typeof index === 'string' ? parseInt(index) : index;
         const txPromise = staking.withdraw(i);
 
-        if (walletType && walletType !== 'injected') {
+        if (isWalletConnect && walletType) {
             const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
             if (redirectUrl) launchExternalLink(redirectUrl);
         }

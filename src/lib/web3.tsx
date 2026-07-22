@@ -164,6 +164,7 @@ interface WalletContextType {
     walletType: string | null;
     walletProvider: any;
     referral: string | null;
+    isWalletConnect: boolean;
     // Compatibility properties
     forceSync: () => Promise<void>;
     hardReset: () => void;
@@ -194,6 +195,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [manualWalletProvider, setManualWalletProvider] = useState<any>(null);
     const [walletType, setWalletType] = useState<string | null>(localStorage.getItem('aimining_wallet_type'));
     const [referral, setReferral] = useState<string | null>(null);
+    const [isWalletConnect, setIsWalletConnect] = useState<boolean>(() => {
+        return localStorage.getItem('aimining_is_walletconnect') === 'true';
+    });
     const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
     const [tpLoading, setTpLoading] = useState(false);
@@ -389,6 +393,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setSigner(injectedSigner);
             setWalletType(wt);
             localStorage.setItem('aimining_wallet_type', wt);
+            setIsWalletConnect(false);
+            localStorage.setItem('aimining_is_walletconnect', 'false');
             setHasSynced(true);
             setFinalAddress(connectedAddress);
             setFinalIsConnected(true);
@@ -480,6 +486,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setManualWalletProvider(provider);
         setWalletType(wallet);
         localStorage.setItem('aimining_wallet_type', wallet);
+        setIsWalletConnect(true);
+        localStorage.setItem('aimining_is_walletconnect', 'true');
         setHasSynced(true);
         setFinalAddress(connectedAddress);
         setFinalIsConnected(true);
@@ -605,6 +613,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setFinalIsConnected(true);
                         localStorage.setItem('aimining_manual_address', connectedAddress);
                         localStorage.setItem('aimining_address', connectedAddress);
+                        setIsWalletConnect(true);
+                        localStorage.setItem('aimining_is_walletconnect', 'true');
                         return;
                     }
                 }
@@ -665,6 +675,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 key === 'aimining_address' ||
                 key === 'aimining_manual_address' ||
                 key === 'aimining_wallet_type' ||
+                key === 'aimining_is_walletconnect' ||
                 key.includes('walletconnect') ||
                 key.includes('appkit') ||
                 key.includes('wcm@2')
@@ -680,6 +691,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setHasSynced(false);
             setFinalAddress(undefined);
             setFinalIsConnected(false);
+            setIsWalletConnect(false);
 
             console.log("Disconnect successful, reloading...");
 
@@ -717,6 +729,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             walletType,
             walletProvider: walletProvider || manualWalletProvider,
             referral,
+            isWalletConnect,
             forceSync,
             hardReset,
             setIsDisconnectModalOpen,
