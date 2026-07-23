@@ -105,27 +105,16 @@ export const launchExternalLink = (url: string) => {
         return;
     }
 
-    if (!isHttpLink && tg) {
-        console.warn("[Web3] Telegram blocked custom wallet URL scheme:", url.split('?')[0]);
-        return;
-    }
-
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.rel = 'noreferrer';
-    anchor.style.display = 'none';
-    document.body.appendChild(anchor);
-    anchor.click();
-
-    if (!isHttpLink) {
-        setTimeout(() => anchor.remove(), 150);
-        return;
-    }
-
-    setTimeout(() => {
+    // Direct window location trigger for wallet deep links
+    try {
         window.location.href = url;
-        anchor.remove();
-    }, 150);
+    } catch (e) {
+        console.warn("[Web3] Link launch fallback:", e);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.rel = 'noreferrer';
+        anchor.click();
+    }
 };
 
 // Initialize AppKit with Instance Guard
@@ -456,17 +445,22 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const universalLink = links[wallet];
 
             if (tg) {
-                // Inside Telegram Mini App: launch direct scheme first via window.location / anchor to trigger native app popup
-                if (directLink) {
-                    launchExternalLink(directLink);
-                } else if (universalLink) {
+                // Inside Telegram Mini App: launch universal link via tg.openLink if available or direct link
+                const universalLink = links[wallet];
+                const directLink = directSchemes[wallet];
+                if (universalLink) {
                     launchExternalLink(universalLink);
+                } else if (directLink) {
+                    launchExternalLink(directLink);
                 }
             } else {
-                if (directLink) {
-                    launchExternalLink(directLink);
-                } else if (universalLink) {
+                // Outside Telegram (Normal browser / mobile Chrome / Safari): Use Universal Deeplink
+                const universalLink = links[wallet];
+                const directLink = directSchemes[wallet];
+                if (universalLink) {
                     launchExternalLink(universalLink);
+                } else if (directLink) {
+                    launchExternalLink(directLink);
                 }
             }
         });
