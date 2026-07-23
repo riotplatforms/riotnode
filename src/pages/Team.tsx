@@ -171,11 +171,25 @@ const Team: React.FC = () => {
         setLiveReferralBalance(baseReferralBalance.toFixed(8));
     }, [baseReferralBalance]);
 
-    const handleCopyLink = () => {
+    const currentOrigin = typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null' && window.location.origin !== 'about:blank'
+        ? window.location.origin
+        : (typeof window !== 'undefined' && window.location.protocol && window.location.host ? `${window.location.protocol}//${window.location.host}` : 'https://riotmining.com');
+
+    const telegramLink = address ? `https://t.me/AiMiningBTC_bot?start=${address}` : '';
+    const dappLink = address ? `${currentOrigin}/?ref=${address}` : '';
+
+    const handleCopyTelegramLink = () => {
         if (!address) return;
-        const link = `🤑 Earn USDT for free! 🚀\nJoin Riot Mining Platform now and start your node: https://t.me/AiMiningBTC_bot?start=${address}`;
-        copyToClipboard(link);
-        showAlert("Referral link with invite copied!");
+        const text = `🤑 Earn USDT for free! 🚀\nJoin Riot Mining Platform on Telegram:\n${telegramLink}`;
+        copyToClipboard(text);
+        showAlert("Telegram Referral Link copied!");
+    };
+
+    const handleCopyDappLink = () => {
+        if (!address) return;
+        const text = `🤑 Earn USDT for free! 🚀\nOpen in Trust Wallet / Wallet DApp Browser:\n${dappLink}`;
+        copyToClipboard(text);
+        showAlert("DApp Browser Referral Link copied!");
     };
 
     if (!isConnected) {
@@ -388,36 +402,73 @@ const Team: React.FC = () => {
                     )}
                 </div>
 
-                {/* Referral Link */}
+                {/* Referral Links */}
                 <div className="bg-[#0c0c0c] rounded-3xl p-6 border border-white/5 relative overflow-hidden">
-                    <div className="flex items-center gap-3 mb-5">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="material-icons-round text-primary text-sm font-black">share</span>
+                    <div className="flex items-center justify-between mb-5">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <span className="material-icons-round text-primary text-sm font-black">share</span>
+                            </div>
+                            <h3 className="text-xs font-black text-white uppercase tracking-widest">Global Invite Links</h3>
                         </div>
-                        <h3 className="text-xs font-black text-white uppercase tracking-widest">Global Invite Link</h3>
+                        <div className={`${stats.isEligible ? 'bg-green-500/10 text-green-400 border-green-500/30' : 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'} px-2.5 py-1 rounded-full border text-[9px] font-black uppercase flex items-center gap-1`}>
+                            <span className="material-icons-round text-[10px]">{stats.isEligible ? 'check_circle' : 'lock'}</span>
+                            {stats.isEligible ? 'Commission Active' : 'Requires $50 Stake'}
+                        </div>
                     </div>
-                    {!stats.isEligible ? (
-                        <div className="flex flex-col items-center justify-center py-6 text-center">
-                            <span className="material-icons-round text-red-500 text-3xl mb-2">lock</span>
-                            <p className="text-sm font-black uppercase text-gray-300">Invite Link Locked</p>
-                            <p className="text-[10px] text-gray-500 mt-1 max-w-xs px-4">
-                                You must have at least $50 USDT staked in the contract to unlock your invitation link and earn commission.
+
+                    {!stats.isEligible && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-2xl p-3.5 mb-4 flex items-center gap-3">
+                            <span className="material-icons-round text-yellow-400 text-lg">info</span>
+                            <p className="text-[10px] text-gray-300 font-medium leading-relaxed">
+                                Your invite links are ready! Stake at least <strong>$50 USDT</strong> to activate level commissions from your team.
                             </p>
                         </div>
-                    ) : (
-                        <div className="flex flex-col gap-3">
-                            <div className="bg-black/80 p-4 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all lowercase leading-relaxed">
-                                https://t.me/AiMiningBTC_bot?start={address}
+                    )}
+
+                    <div className="flex flex-col gap-4">
+                        {/* 1. Telegram App Referral Link */}
+                        <div className="bg-[#111] p-4 rounded-2xl border border-white/5">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="material-icons-round text-blue-400 text-sm">send</span>
+                                    <span className="text-[11px] font-black uppercase text-gray-200">1. Telegram Bot Referral Link</span>
+                                </div>
+                                <span className="text-[9px] bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded font-black uppercase">Telegram App</span>
+                            </div>
+                            <div className="bg-black/80 p-3 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all leading-relaxed mb-3">
+                                {telegramLink || 'Connect wallet to view link'}
                             </div>
                             <button
-                                onClick={handleCopyLink}
-                                className="w-full bg-[#111] hover:bg-primary hover:text-black border border-primary/20 text-primary py-4 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-neon"
+                                onClick={handleCopyTelegramLink}
+                                className="w-full bg-blue-600/20 hover:bg-blue-600 text-blue-400 hover:text-white border border-blue-500/30 py-3 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
                             >
                                 <span className="material-icons-round text-sm font-black">content_copy</span>
-                                Copy Network Link
+                                Copy Telegram Bot Link
                             </button>
                         </div>
-                    )}
+
+                        {/* 2. DApp Browser / Trust Wallet Referral Link */}
+                        <div className="bg-[#111] p-4 rounded-2xl border border-white/5">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="material-icons-round text-yellow-400 text-sm">language</span>
+                                    <span className="text-[11px] font-black uppercase text-gray-200">2. DApp Browser / Web Referral Link</span>
+                                </div>
+                                <span className="text-[9px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded font-black uppercase">Trust Wallet / Web</span>
+                            </div>
+                            <div className="bg-black/80 p-3 rounded-xl border border-white/5 font-mono text-[10px] text-primary break-all overflow-hidden select-all leading-relaxed mb-3">
+                                {dappLink || 'Connect wallet to view link'}
+                            </div>
+                            <button
+                                onClick={handleCopyDappLink}
+                                className="w-full bg-primary/20 hover:bg-primary text-primary hover:text-black border border-primary/30 py-3 rounded-xl font-black uppercase text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-neon"
+                            >
+                                <span className="material-icons-round text-sm font-black">content_copy</span>
+                                Copy DApp Browser Link
+                            </button>
+                        </div>
+                    </div>
                 </div>
 
                 {/* Network Levels Hierarchy */}
