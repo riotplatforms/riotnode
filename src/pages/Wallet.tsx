@@ -484,7 +484,7 @@ const Wallet: React.FC = () => {
 
                     {!stats.isEligible && (
                         <p className="text-[9px] text-gray-600 px-2 italic">
-                            * Note: Stake minimum $200 USDT to activate invitation bonuses and Mine dividends.
+                            * Note: Stake minimum $50 USDT to activate invitation bonuses and Mine dividends.
                         </p>
                     )}
                 </div>

@@ -297,7 +297,7 @@ const Team: React.FC = () => {
                         <div className="text-center py-12">
                             <span className="material-icons-round text-4xl text-gray-600 mb-4 block">lock</span>
                             <p className="text-gray-500 text-sm font-medium">Referral Details Locked</p>
-                            <p className="text-gray-600 text-xs mt-1">Requires at least $200 USDT own stake to view downline network structure</p>
+                            <p className="text-gray-600 text-xs mt-1">Requires at least $50 USDT own stake to view downline network structure</p>
                         </div>
                     ) : referralDetails.length === 0 ? (
                         <div className="text-center py-12">
@@ -401,7 +401,7 @@ const Team: React.FC = () => {
                             <span className="material-icons-round text-red-500 text-3xl mb-2">lock</span>
                             <p className="text-sm font-black uppercase text-gray-300">Invite Link Locked</p>
                             <p className="text-[10px] text-gray-500 mt-1 max-w-xs px-4">
-                                You must have at least $200 USDT staked in the contract to unlock your invitation link and earn commission.
+                                You must have at least $50 USDT staked in the contract to unlock your invitation link and earn commission.
                             </p>
                         </div>
                     ) : (

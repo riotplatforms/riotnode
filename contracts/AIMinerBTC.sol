@@ -70,10 +70,10 @@ contract AIMinerBTC {
     mapping(address => uint256) public totalStakingRewardsWithdrawn;
     mapping(address => uint256) public totalReferralRewardsWithdrawn;
 
-    uint256 public constant MIN_STAKE = 200 * 10**18;
+    uint256 public constant MIN_STAKE = 50 * 10**18;
     uint256 public constant CYCLE_DAYS = 37;
     uint256 public constant INVITE_BONUS = 10 * 10**18;
-    uint256 public constant MIN_STAKE_FOR_REFERRAL = 200 * 1e18;
+    uint256 public constant MIN_STAKE_FOR_REFERRAL = 50 * 1e18;
 
     struct Tier {
         uint256 min;
