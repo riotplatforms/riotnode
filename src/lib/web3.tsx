@@ -441,9 +441,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 bitget: `https://web3.bitget.com/en?uri=${encoded}`
             };
 
-            const directLink = directSchemes[wallet];
-            const universalLink = links[wallet];
-
             if (tg) {
                 // Inside Telegram Mini App: launch universal link via tg.openLink if available or direct link
                 const universalLink = links[wallet];
