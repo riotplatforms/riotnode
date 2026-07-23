@@ -2,7 +2,7 @@ import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } f
 import { useWallet, launchExternalLink } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 
-const CONTRACT_ADDRESS = '0xD72342c78085Dc264E56B3d5941341093aD54B42'; 
+const CONTRACT_ADDRESS = '0x504E877770923E8EbF8C02c2266D4D6f7ad45429'; 
 const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
 
 const ERC20_ABI = [
