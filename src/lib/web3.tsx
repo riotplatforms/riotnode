@@ -431,23 +431,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             const tg = (window as any).Telegram?.WebApp;
             const encoded = encodeURIComponent(uri);
 
-            // If not inside Telegram WebApp, launch the direct custom scheme for instant app redirection
-            if (!tg) {
-                const directSchemes: Record<string, string> = {
-                    metamask: `metamask://wc?uri=${encoded}`,
-                    safepal: `safepalwallet://wc?uri=${encoded}`,
-                    trust: `trust://wc?uri=${encoded}`,
-                    binance: `binance://wc?uri=${encoded}`,
-                    tokenpocket: `tokenpocket://wc?uri=${encoded}`,
-                    okx: `okx://wc?uri=${encoded}`,
-                    bitget: `bitkeep://wc?uri=${encoded}`
-                };
-                const directLink = directSchemes[wallet];
-                if (directLink) {
-                    launchExternalLink(directLink);
-                    return;
-                }
-            }
+            // Direct custom scheme links force MetaMask/Trust/etc. to trigger the connection dialog/popup immediately
+            const directSchemes: Record<string, string> = {
+                metamask: `metamask://wc?uri=${encoded}`,
+                safepal: `safepalwallet://wc?uri=${encoded}`,
+                trust: `trust://wc?uri=${encoded}`,
+                binance: `binance://wc?uri=${encoded}`,
+                tokenpocket: `tokenpocket://wc?uri=${encoded}`,
+                okx: `okx://wc?uri=${encoded}`,
+                bitget: `bitkeep://wc?uri=${encoded}`
+            };
 
             const links: Record<string, string> = {
                 metamask: `https://metamask.app.link/wc?uri=${encoded}`,
@@ -459,8 +452,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 bitget: `https://web3.bitget.com/en?uri=${encoded}`
             };
 
-            const link = links[wallet];
-            if (link) launchExternalLink(link);
+            const directLink = directSchemes[wallet];
+            const universalLink = links[wallet];
+
+            if (tg) {
+                // Inside Telegram Mini App: launch direct scheme first via window.location / anchor to trigger native app popup
+                if (directLink) {
+                    launchExternalLink(directLink);
+                } else if (universalLink) {
+                    launchExternalLink(universalLink);
+                }
+            } else {
+                if (directLink) {
+                    launchExternalLink(directLink);
+                } else if (universalLink) {
+                    launchExternalLink(universalLink);
+                }
+            }
         });
 
         await provider.connect();
