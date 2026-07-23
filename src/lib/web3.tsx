@@ -441,24 +441,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 bitget: `https://web3.bitget.com/en?uri=${encoded}`
             };
 
-            if (tg) {
-                // Inside Telegram Mini App: Prefer native direct scheme (metamask://wc?uri= or safepalwallet://wc?uri=) so app triggers instantly
-                const directLink = directSchemes[wallet];
-                const universalLink = links[wallet];
-                if (directLink) {
-                    launchExternalLink(directLink);
-                } else if (universalLink) {
-                    launchExternalLink(universalLink);
-                }
-            } else {
-                // Outside Telegram: Try direct custom scheme first for instant app launch without universal link delay
-                const directLink = directSchemes[wallet];
-                const universalLink = links[wallet];
-                if (directLink) {
-                    launchExternalLink(directLink);
-                } else if (universalLink) {
-                    launchExternalLink(universalLink);
-                }
+            const link = links[wallet];
+            if (link) {
+                launchExternalLink(link);
             }
         });
 
