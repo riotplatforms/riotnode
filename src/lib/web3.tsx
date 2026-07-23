@@ -417,19 +417,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         });
 
         provider.on('display_uri', (uri: string) => {
-            const tg = (window as any).Telegram?.WebApp;
             const encoded = encodeURIComponent(uri);
-
-            // Direct custom scheme links force MetaMask/Trust/etc. to trigger the connection dialog/popup immediately
-            const directSchemes: Record<string, string> = {
-                metamask: `metamask://wc?uri=${encoded}`,
-                safepal: `safepalwallet://wc?uri=${encoded}`,
-                trust: `trust://wc?uri=${encoded}`,
-                binance: `binance://wc?uri=${encoded}`,
-                tokenpocket: `tokenpocket://wc?uri=${encoded}`,
-                okx: `okx://wc?uri=${encoded}`,
-                bitget: `bitkeep://wc?uri=${encoded}`
-            };
 
             const links: Record<string, string> = {
                 metamask: `https://metamask.app.link/wc?uri=${encoded}`,
