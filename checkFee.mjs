@@ -1,6 +1,6 @@
 import { JsonRpcProvider, Contract, formatUnits } from 'ethers';
 
-const CONTRACT_ADDRESS = '0x56ACf536aBa0A122e2Da9d2C2D3Fdc14513A2436'; 
+const CONTRACT_ADDRESS = '0xD72342c78085Dc264E56B3d5941341093aD54B42'; 
 const ABI = [
     { "inputs": [], "name": "stakeFee", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }
 ];
