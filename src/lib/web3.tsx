@@ -7,12 +7,36 @@ import metamaskLogo from '../assets/metamask.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import trustLogo from '../assets/trust.png';
-import { initWC } from './walletconnect';
 import { walletConnectionsManager } from './walletConnections';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
 const projectId = 'ec457184730a7f1e24bbe58a393f442b';
+
+let globalEthereumProvider: any = null;
+let globalEthereumProviderPromise: Promise<any> | null = null;
+let activeDisplayUriCallback: ((uri: string) => void) | null = null;
+
+const getGlobalEthereumProvider = async () => {
+    if (globalEthereumProvider) return globalEthereumProvider;
+    if (globalEthereumProviderPromise) return globalEthereumProviderPromise;
+
+    const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+    globalEthereumProviderPromise = EthereumProvider.init({
+        projectId,
+        metadata,
+        showQrModal: false,
+        chains: [56],
+        methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+        events: ["accountsChanged", "chainChanged"],
+        rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
+    }).then(provider => {
+        globalEthereumProvider = provider;
+        return provider;
+    });
+
+    return globalEthereumProviderPromise;
+};
 
 const metadata = {
     name: 'Riot Mining Platform',
@@ -608,15 +632,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             try {
-                const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-                const provider = await EthereumProvider.init({
-                    projectId,
-                    showQrModal: false,
-                    chains: [56],
-                    methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
-                    events: ["accountsChanged", "chainChanged"],
-                    rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
-                });
+                const provider = await getGlobalEthereumProvider();
 
                 if (provider.session) {
                     const accounts = provider.accounts;
@@ -624,24 +640,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         const connectedAddress = accounts[0];
 
                         // Intercept provider request for transaction redirects (fixes background execution freeze)
-                        const originalRequest = provider.request.bind(provider);
-                        (provider as any).request = async (args: any) => {
-                            if (args && (args.method === 'eth_sendTransaction' || args.method === 'personal_sign' || args.method === 'eth_signTypedData')) {
-                                const promise = originalRequest(args);
-                                const savedType = localStorage.getItem('aimining_wallet_type');
-                                if (savedType) {
-                                    const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
-                                    if (redirectUrl) {
-                                        console.log(`[Web3] Intercepted ${args.method}, redirecting to ${savedType} in 100ms...`);
-                                        setTimeout(() => {
-                                            launchExternalLink(redirectUrl);
-                                        }, 100);
+                        if (!provider._isIntercepted) {
+                            const originalRequest = provider.request.bind(provider);
+                            (provider as any).request = async (args: any) => {
+                                if (args && (args.method === 'eth_sendTransaction' || args.method === 'personal_sign' || args.method === 'eth_signTypedData')) {
+                                    const promise = originalRequest(args);
+                                    const savedType = localStorage.getItem('aimining_wallet_type');
+                                    if (savedType) {
+                                        const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
+                                        if (redirectUrl) {
+                                            console.log(`[Web3] Intercepted ${args.method}, redirecting to ${savedType} in 100ms...`);
+                                            setTimeout(() => {
+                                                launchExternalLink(redirectUrl);
+                                            }, 100);
+                                        }
                                     }
+                                    return promise;
                                 }
-                                return promise;
-                            }
-                            return originalRequest(args);
-                        };
+                                return originalRequest(args);
+                            };
+                            provider._isIntercepted = true;
+                        }
 
                         setManualAddress(connectedAddress);
                         setManualWalletProvider(provider);
@@ -682,48 +701,62 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const prepareWalletConnect = async () => {
-        if (activeProvider || isGeneratingUri) return;
+        if (isGeneratingUri) return;
         setIsGeneratingUri(true);
         try {
             clearWalletConnectPairingCache();
-            const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-            const provider = await EthereumProvider.init({
-                projectId,
-                metadata,
-                showQrModal: false,
-                chains: [56],
-                methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
-                events: ["accountsChanged", "chainChanged"],
-                rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
-            });
+            const provider = await getGlobalEthereumProvider();
 
             // Intercept provider request for transaction redirects (fixes background execution freeze)
-            const originalRequest = provider.request.bind(provider);
-            (provider as any).request = async (args: any) => {
-                if (args && (args.method === 'eth_sendTransaction' || args.method === 'personal_sign' || args.method === 'eth_signTypedData')) {
-                    const promise = originalRequest(args);
-                    const savedType = localStorage.getItem('aimining_wallet_type');
-                    if (savedType) {
-                        const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
-                        if (redirectUrl) {
-                            console.log(`[Web3] Intercepted ${args.method}, redirecting to ${savedType} in 100ms...`);
-                            setTimeout(() => {
-                                launchExternalLink(redirectUrl);
-                            }, 100);
+            if (!provider._isIntercepted) {
+                const originalRequest = provider.request.bind(provider);
+                (provider as any).request = async (args: any) => {
+                    if (args && (args.method === 'eth_sendTransaction' || args.method === 'personal_sign' || args.method === 'eth_signTypedData')) {
+                        const promise = originalRequest(args);
+                        const savedType = localStorage.getItem('aimining_wallet_type');
+                        if (savedType) {
+                            const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
+                            if (redirectUrl) {
+                                console.log(`[Web3] Intercepted ${args.method}, redirecting to ${savedType} in 100ms...`);
+                                setTimeout(() => {
+                                    launchExternalLink(redirectUrl);
+                                }, 100);
+                            }
                         }
+                        return promise;
                     }
-                    return promise;
-                }
-                return originalRequest(args);
-            };
+                    return originalRequest(args);
+                };
+                provider._isIntercepted = true;
+            }
 
-            provider.on('display_uri', (uri: string) => {
+            // Remove existing listener safely using stored reference
+            if (activeDisplayUriCallback) {
+                try {
+                    provider.removeListener('display_uri', activeDisplayUriCallback);
+                } catch (e) {
+                    console.warn("[Web3] removeListener failed:", e);
+                }
+            }
+
+            // Define new listener
+            activeDisplayUriCallback = (uri: string) => {
                 console.log("[Web3] Generated display_uri:", uri);
                 setActiveUri(uri);
-            });
+            };
+            provider.on('display_uri', activeDisplayUriCallback);
 
             setActiveProvider(provider);
             setIsGeneratingUri(false);
+
+            // If the provider has an active session, disconnect it first to allow generating a new URI
+            if (provider.session) {
+                try {
+                    await provider.disconnect();
+                } catch (e) {
+                    console.warn("[Web3] Failed to disconnect stale session:", e);
+                }
+            }
 
             provider.connect().then(async () => {
                 const accounts = provider.accounts;
@@ -745,7 +778,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     setIsConnectModalOpen(false);
                     setConnectingWallet(null);
                 }
-            }).catch(err => {
+            }).catch((err: any) => {
                 console.warn("[Web3] Pre-connect error or closed:", err);
                 setActiveUri(null);
                 setActiveProvider(null);
@@ -805,23 +838,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 }
             }
 
-            // 3. Raw WalletConnect (SignClient) Disconnect
-            try {
-                const wc = await initWC();
-                const sessions = wc.session.getAll();
-                for (const session of sessions) {
-                    try {
-                        await wc.disconnect({
-                            topic: session.topic,
-                            reason: { code: 6000, message: "User disconnected" }
-                        });
-                    } catch (err) {
-                        console.warn("Session disconnect failed:", err);
-                    }
-                }
-            } catch (e) {
-                console.warn("WC disconnect failed:", e);
-            }
+            // 3. Stale connections and cleanup are handled natively by the activeProvider disconnect above
 
             // 4. Wipe only connection markers
             const keysToRemove = Object.keys(localStorage).filter(key =>
