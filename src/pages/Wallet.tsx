@@ -396,49 +396,12 @@ const Wallet: React.FC = () => {
                                 </div>
                                 <div className="text-right">
                                     <p className="font-bold text-sm text-purple-500">{stats.referralRewards} USDT</p>
-                                    <p className="text-[10px] text-purple-500 font-black uppercase">Claimable</p>
+                                    <p className="text-[10px] text-green-500 font-black uppercase">Added to Wallet</p>
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
-
-                {/* Claim Section - Show if user has referral rewards */}
-                {stats.isEligible && parseFloat(stats.referralRewards) > 0 && (
-                    <div className="bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-3xl p-6 border border-purple-500/20 shadow-glow">
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <h3 className="text-lg font-black text-white uppercase tracking-tight">Claim Referral Rewards</h3>
-                                <p className="text-sm text-gray-400">Paid automatically with your completed mining cycle withdrawal</p>
-                            </div>
-                            <span className="material-icons-round text-purple-500 text-3xl font-black">stars</span>
-                        </div>
-
-                        <div className="flex items-center justify-between mb-4">
-                            <div>
-                                <p className="text-sm text-gray-300">Available to Claim</p>
-                                <p className="text-2xl font-black text-purple-500">{stats.referralRewards} USDT</p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xs text-gray-500">Status</p>
-                                <p className="text-sm font-bold text-green-500 uppercase">Ready to Claim</p>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={handleWithdraw}
-                            disabled={loading}
-                            className="w-full bg-gradient-to-r from-purple-500 to-blue-500 text-white py-4 rounded-xl font-black text-sm uppercase tracking-wider shadow-neon hover:scale-105 transition-all flex items-center justify-center gap-2 border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            <span className="material-icons-round text-lg font-black">send</span>
-                            {loading ? 'Processing...' : 'Claim with Completed Cycle'}
-                        </button>
-
-                        <p className="text-[10px] text-gray-500 text-center mt-3">
-                            * Claim unlocks after at least one 37-day staking cycle is completed
-                        </p>
-                    </div>
-                )}
 
                 {/* Network Earnings Logic */}
                 <div className="space-y-4 pb-20">

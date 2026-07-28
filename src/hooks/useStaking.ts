@@ -219,15 +219,29 @@ export function useStaking() {
         const target = userAddress || address;
         if (!target) return null;
         try {
-            return await callReadOnly(async (contract) => {
+            const usdtBalStr = await callReadOnly(async (contract) => {
                 const balance = await contract.balanceOf(target);
                 return formatUnits(balance, 18);
             }, true);
+
+            let referralRewardsStr = "0";
+            try {
+                const info = await getStakedInfo(target);
+                if (info) {
+                    referralRewardsStr = formatUnits(info.referralRewards, 18);
+                }
+            } catch (err) {
+                console.warn("[useStaking] Failed to get referral rewards for wallet balance:", err);
+            }
+
+            const totalBalance = parseFloat(usdtBalStr) + parseFloat(referralRewardsStr);
+            return totalBalance.toString();
         } catch (err) { 
             console.error("[useStaking] Balance Error after retries:", err);
             return null; 
         }
     };
+
 
     const getTeamTree = async (userAddress: string) => {
         const tree: Record<number, string[]> = {};
