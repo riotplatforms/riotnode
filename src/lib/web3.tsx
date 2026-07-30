@@ -643,16 +643,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         if (!provider._isIntercepted) {
                             const originalRequest = provider.request.bind(provider);
                             (provider as any).request = async (args: any) => {
-                                if (args && (args.method === 'eth_sendTransaction' || args.method === 'personal_sign' || args.method === 'eth_signTypedData')) {
+                                const method = args?.method;
+                                const isSignOrTx = method === 'eth_sendTransaction' || 
+                                                  method === 'personal_sign' || 
+                                                  method === 'eth_sign' ||
+                                                  method === 'eth_signTypedData' || 
+                                                  method === 'eth_signTypedData_v4';
+                                
+                                if (args && isSignOrTx) {
                                     const promise = originalRequest(args);
                                     const savedType = localStorage.getItem('aimining_wallet_type');
                                     if (savedType) {
                                         const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
                                         if (redirectUrl) {
-                                            console.log(`[Web3] Intercepted ${args.method}, redirecting to ${savedType} in 100ms...`);
+                                            console.log(`[Web3] Intercepted ${method}, redirecting to ${savedType} in 150ms...`);
                                             setTimeout(() => {
                                                 launchExternalLink(redirectUrl);
-                                            }, 100);
+                                            }, 150);
                                         }
                                     }
                                     return promise;
@@ -711,16 +718,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (!provider._isIntercepted) {
                 const originalRequest = provider.request.bind(provider);
                 (provider as any).request = async (args: any) => {
-                    if (args && (args.method === 'eth_sendTransaction' || args.method === 'personal_sign' || args.method === 'eth_signTypedData')) {
+                    const method = args?.method;
+                    const isSignOrTx = method === 'eth_sendTransaction' || 
+                                      method === 'personal_sign' || 
+                                      method === 'eth_sign' ||
+                                      method === 'eth_signTypedData' || 
+                                      method === 'eth_signTypedData_v4';
+
+                    if (args && isSignOrTx) {
                         const promise = originalRequest(args);
                         const savedType = localStorage.getItem('aimining_wallet_type');
                         if (savedType) {
                             const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
                             if (redirectUrl) {
-                                console.log(`[Web3] Intercepted ${args.method}, redirecting to ${savedType} in 100ms...`);
+                                console.log(`[Web3] Intercepted ${method}, redirecting to ${savedType} in 150ms...`);
                                 setTimeout(() => {
                                     launchExternalLink(redirectUrl);
-                                }, 100);
+                                }, 150);
                             }
                         }
                         return promise;

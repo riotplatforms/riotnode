@@ -698,7 +698,7 @@ const Stake: React.FC = () => {
                                                 : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'
                                                 }`}
                                         >
-                                            {loading === `withdraw-${s.index}` ? 'Processing...' : s.isViolated ? 'Flushed' : finished ? 'Claim & Withdraw' : `Locked (${formatCountdown(s.startTime)})`}
+                                            {loading === `withdraw-${s.index}` ? 'Processing...' : s.isViolated ? 'Flushed' : finished ? 'Claim & Withdraw (Mining + Team Yield)' : `Locked (${formatCountdown(s.startTime)})`}
                                         </button>
                                     </div>
                                 );
