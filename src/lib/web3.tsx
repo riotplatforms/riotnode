@@ -48,11 +48,11 @@ const metadata = {
 const BSC_CHAIN_ID_HEX = '0x38';
 
 const WALLET_REDIRECT_LINKS: Record<string, string> = {
-    metamask: 'https://metamask.app.link/',
-    trust: 'https://link.trustwallet.com/',
-    safepal: 'https://link.safepal.io/',
+    metamask: 'https://metamask.app.link/wc',
+    trust: 'https://link.trustwallet.com/wc',
+    safepal: 'https://link.safepal.io/wc',
     tokenpocket: 'https://tokenpocket.github.io/deeplink',
-    binance: 'https://app.binance.com/cedefi/',
+    binance: 'https://app.binance.com/cedefi/wc',
     okx: 'https://www.okx.com/download',
     bitget: 'https://web3.bitget.com/en'
 };
