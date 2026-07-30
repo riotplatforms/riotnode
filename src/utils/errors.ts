@@ -85,9 +85,15 @@ export function parseEthersError(err: any): string {
         if (nestedError.reason) return nestedError.reason;
     }
 
-    // Check raw error data / message
-    if (err.data && typeof err.data === 'string') {
-        return `Execution reverted. Raw details: ${err.data}`;
+    // 5. Missing revert data error (Ethers BAD_DATA / call exception when RPC returns empty 0x or network fail)
+    if (
+        err.code === 'BAD_DATA' ||
+        err.code === 'CALL_EXCEPTION' ||
+        err.message?.includes('missing revert data') ||
+        err.message?.includes('call exception') ||
+        err.message?.includes('could not decode result')
+    ) {
+        return 'Network/RPC call failed or returned invalid data. Please check your network connection or try switching your RPC / wallet network.';
     }
 
     return err.message || 'Transaction failed. Please try again.';
