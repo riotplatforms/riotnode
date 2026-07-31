@@ -372,6 +372,9 @@ const Stake: React.FC = () => {
                 }
                 priceBigInt = balanceBigInt - activeStakedBigInt;
                 if (priceBigInt < 0n) priceBigInt = 0n;
+                // Round down to 2 decimals (10^16 units) to prevent gas estimation errors on full balance
+                const remainder = priceBigInt % 10000000000000000n; // 10^16
+                priceBigInt = priceBigInt - remainder;
             } else {
                 const cleanedPriceStr = priceStr.replace(/[^0-9.]/g, '');
                 priceBigInt = parseUnits(cleanedPriceStr, 18);

@@ -121,6 +121,10 @@ const Dashboard: React.FC = () => {
                 stakeableBalanceBigInt = 0n;
             }
 
+            // Round down to 2 decimals (10^16 units) to avoid float mismatch or wallet gas estimation failures
+            const remainder = stakeableBalanceBigInt % 10000000000000000n; // 10^16
+            stakeableBalanceBigInt = stakeableBalanceBigInt - remainder;
+
             if (stakeableBalanceBigInt < minStakeBigInt) {
                 showAlert("You have less than 50 USDT. You need minimum 50 USDT for mining.");
                 setLoading(false);
