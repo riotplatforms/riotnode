@@ -57,6 +57,19 @@ const WALLET_REDIRECT_LINKS: Record<string, string> = {
     bitget: 'bitget://'
 };
 
+const getWalletConnectionLink = (walletName: string, encodedUri: string): string => {
+    switch (walletName.toLowerCase()) {
+        case 'metamask': return `metamask://wc?uri=${encodedUri}`;
+        case 'trust': return `trust://wc?uri=${encodedUri}`;
+        case 'safepal': return `safepal://wc?uri=${encodedUri}`;
+        case 'tokenpocket': return `tokenpocket://wc?uri=${encodedUri}`;
+        case 'binance': return `bnc://wc?uri=${encodedUri}`;
+        case 'okx': return `okx://wc?uri=${encodedUri}`;
+        case 'bitget': return `bitget://wc?uri=${encodedUri}`;
+        default: return `metamask://wc?uri=${encodedUri}`;
+    }
+};
+
 const TOKENPOCKET_ANDROID_PACKAGE = 'vip.mytokenpocket';
 const TOKENPOCKET_DOWNLOAD_URL = 'https://www.tokenpocket.pro/download/app';
 
@@ -556,16 +569,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                     if (activeUri) {
                         const encoded = encodeURIComponent(activeUri);
-                        const links: Record<string, string> = {
-                            metamask: `https://metamask.app.link/wc?uri=${encoded}`,
-                            safepal: `https://link.safepal.io/wc?uri=${encoded}`,
-                            trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                            binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                            tokenpocket: `https://tokenpocket.github.io/deeplink?uri=${encoded}`,
-                            okx: `https://www.okx.com/download?uri=${encoded}`,
-                            bitget: `https://web3.bitget.com/en?uri=${encoded}`
-                        };
-                        const link = links[wallet.toLowerCase()];
+                        const link = getWalletConnectionLink(wallet, encoded);
                         if (link) {
                             launchExternalLink(link);
                         }
@@ -815,16 +819,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         if (activeUri && connectingWallet) {
             const encoded = encodeURIComponent(activeUri);
-            const links: Record<string, string> = {
-                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
-                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
-                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                tokenpocket: `https://tokenpocket.github.io/deeplink?uri=${encoded}`,
-                okx: `https://www.okx.com/download?uri=${encoded}`,
-                bitget: `https://web3.bitget.com/en?uri=${encoded}`
-            };
-            const link = links[connectingWallet.toLowerCase()];
+            const link = getWalletConnectionLink(connectingWallet, encoded);
             if (link) {
                 launchExternalLink(link);
             }
@@ -1006,20 +1001,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 {activeUri ? (
                                     <button
                                         onClick={() => {
-                                            const encoded = encodeURIComponent(activeUri);
-                                            const links: Record<string, string> = {
-                                                metamask: `https://metamask.app.link/wc?uri=${encoded}`,
-                                                safepal: `https://link.safepal.io/wc?uri=${encoded}`,
-                                                trust: `https://link.trustwallet.com/wc?uri=${encoded}`,
-                                                binance: `https://app.binance.com/cedefi/wc?uri=${encoded}`,
-                                                tokenpocket: `https://tokenpocket.github.io/deeplink?uri=${encoded}`,
-                                                okx: `https://www.okx.com/download?uri=${encoded}`,
-                                                bitget: `https://web3.bitget.com/en?uri=${encoded}`
-                                            };
-                                            const link = links[connectingWallet.toLowerCase()];
-                                            if (link) {
-                                                launchExternalLink(link);
-                                            }
+                                             const encoded = encodeURIComponent(activeUri);
+                                             const link = getWalletConnectionLink(connectingWallet, encoded);
+                                             if (link) {
+                                                 launchExternalLink(link);
+                                             }
                                         }}
                                         className="mt-2 bg-[#FFD700] text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon cursor-pointer"
                                     >
