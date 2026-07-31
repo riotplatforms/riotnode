@@ -57,7 +57,10 @@ const WALLET_REDIRECT_LINKS: Record<string, string> = {
     bitget: 'bitget://'
 };
 
-const getWalletConnectionLink = (walletName: string, encodedUri: string): string => {
+const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {
+    if (!walletName || typeof walletName !== 'string') {
+        return `metamask://wc?uri=${encodedUri}`;
+    }
     switch (walletName.toLowerCase()) {
         case 'metamask': return `metamask://wc?uri=${encodedUri}`;
         case 'trust': return `trust://wc?uri=${encodedUri}`;
