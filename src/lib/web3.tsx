@@ -157,14 +157,24 @@ export const launchExternalLink = (url: string) => {
     }
 
     // Direct window location trigger for wallet deep links
+    // BUT we must avoid modifying window.location.href directly for custom schemes inside Telegram
+    // to prevent net::ERR_UNKNOWN_URL_SCHEME crashes.
     try {
-        window.location.href = url;
-    } catch (e) {
-        console.warn("[Web3] Link launch fallback:", e);
         const anchor = document.createElement('a');
         anchor.href = url;
-        anchor.rel = 'noreferrer';
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        document.body.appendChild(anchor);
         anchor.click();
+        document.body.removeChild(anchor);
+    } catch (e) {
+        console.warn("[Web3] Link launch fallback:", e);
+        try {
+            window.open(url, '_blank');
+        } catch (err2) {
+            // Last resort
+            window.location.href = url;
+        }
     }
 };
 
