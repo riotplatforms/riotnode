@@ -50,7 +50,7 @@ const BSC_CHAIN_ID_HEX = '0x38';
 const WALLET_REDIRECT_LINKS: Record<string, string> = {
     metamask: 'metamask://',
     trust: 'trust://',
-    safepal: 'safepal://',
+    safepal: 'safepalwallet://',
     tokenpocket: 'tpdapp://',
     binance: 'bnc://',
     okx: 'okx://',
@@ -64,7 +64,7 @@ const getWalletConnectionLink = (walletName: string | null | undefined, encodedU
     switch (walletName.toLowerCase()) {
         case 'metamask': return `metamask://wc?uri=${encodedUri}`;
         case 'trust': return `trust://wc?uri=${encodedUri}`;
-        case 'safepal': return `safepal://wc?uri=${encodedUri}`;
+        case 'safepal': return `safepalwallet://wc?uri=${encodedUri}`;
         case 'tokenpocket': return `tokenpocket://wc?uri=${encodedUri}`;
         case 'binance': return `bnc://wc?uri=${encodedUri}`;
         case 'okx': return `okx://wc?uri=${encodedUri}`;
