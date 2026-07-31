@@ -94,13 +94,13 @@ const Wallet: React.FC = () => {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                     const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                     const wasFlushed = isStakePermanentlyFlushed(address, i);
-                    const isBalanceSufficient = finished || wBalanceNum >= runningStakedSum + stakeAmount;
+                    const isBalanceSufficient = finished || (wBalanceNum + 0.1) >= runningStakedSum + stakeAmount;
                     if (isBalanceSufficient && wasFlushed) {
                         clearPermanentStakeFlush(address, i);
                     }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
+                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
@@ -234,11 +234,11 @@ const Wallet: React.FC = () => {
                 const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                 const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                 const wasFlushed = isStakePermanentlyFlushed(address, i);
-                const isBalanceSufficient = finished || wBalanceNum >= runningStakedSum + stakeAmount;
+                const isBalanceSufficient = finished || (wBalanceNum + 0.1) >= runningStakedSum + stakeAmount;
                 if (isBalanceSufficient && wasFlushed) {
                     clearPermanentStakeFlush(address, i);
                 }
-                const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && wBalanceNum < runningStakedSum + stakeAmount);
+                const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
 
                 if (!isViolated) {
                     if (!finished) {

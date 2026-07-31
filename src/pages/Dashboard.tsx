@@ -191,13 +191,13 @@ const Dashboard: React.FC = () => {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                     const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
                     const wasFlushed = isStakePermanentlyFlushed(address, i);
-                    const isBalanceSufficient = finished || liveWalletUsdt >= runningStakedSum + stakeAmount;
+                    const isBalanceSufficient = finished || (liveWalletUsdt + 0.1) >= runningStakedSum + stakeAmount;
                     if (isBalanceSufficient && wasFlushed) {
                         clearPermanentStakeFlush(address, i);
                     }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && liveWalletUsdt < runningStakedSum + stakeAmount);
+                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (liveWalletUsdt + 0.1) < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
