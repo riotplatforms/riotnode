@@ -73,34 +73,6 @@ function AppContent() {
     checkRedirect();
   }, [isConnected, address, location.pathname, navigate]);
 
-  // --- New Wallet Tracking Logic ---
-  useEffect(() => {
-    if (isConnected && address) {
-      // Track session so it doesn't spam on every re-render
-      const trackKey = `wallet_tracked_${address}`;
-      if (!sessionStorage.getItem(trackKey)) {
-        sessionStorage.setItem(trackKey, 'true');
-        
-        // --- Telegram Bot Credentials ---
-        // 1. Create a bot via @BotFather on Telegram & copy HTTP API Token
-        const BOT_TOKEN = '8327357542:AAFpPda1xgdvwqhgVVmHCPfMMTZ8EW9vFwU'; 
-        // 2. Get your Chat ID from @userinfobot or your admin group ID
-        const CHAT_ID = '8380461357'; 
-        
-        const text = `🔌 *New Wallet Connected!*\n\n*Address:* \`${address}\``;
-        
-        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: CHAT_ID,
-            text: text,
-            parse_mode: 'Markdown',
-          }),
-        }).catch(err => console.error("Telemetry error", err));
-      }
-    }
-  }, [isConnected, address]);
 
   const isUserAdmin = !!(isConnected && address && isAdmin(address));
 

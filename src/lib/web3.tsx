@@ -57,6 +57,27 @@ const WALLET_REDIRECT_LINKS: Record<string, string> = {
     bitget: 'bitget://'
 };
 
+const getRedirectLinkForProvider = (provider: any): string | null => {
+    let walletType = localStorage.getItem('aimining_wallet_type');
+    
+    if ((!walletType || walletType === 'walletconnect') && provider?.session?.peer?.metadata?.name) {
+        const peerName = provider.session.peer.metadata.name.toLowerCase();
+        if (peerName.includes('metamask')) walletType = 'metamask';
+        else if (peerName.includes('trust')) walletType = 'trust';
+        else if (peerName.includes('safepal')) walletType = 'safepal';
+        else if (peerName.includes('tokenpocket')) walletType = 'tokenpocket';
+        else if (peerName.includes('binance')) walletType = 'binance';
+        else if (peerName.includes('okx')) walletType = 'okx';
+        else if (peerName.includes('bitget')) walletType = 'bitget';
+    }
+
+    if (walletType) {
+        localStorage.setItem('aimining_wallet_type', walletType);
+        return WALLET_REDIRECT_LINKS[walletType.toLowerCase()] || null;
+    }
+    return null;
+};
+
 const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {
     if (!walletName || typeof walletName !== 'string') {
         return `metamask://wc?uri=${encodedUri}`;
@@ -669,15 +690,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 
                                 if (args && isSignOrTx) {
                                     const promise = originalRequest(args);
-                                    const savedType = localStorage.getItem('aimining_wallet_type');
-                                    if (savedType) {
-                                        const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
-                                        if (redirectUrl) {
-                                            console.log(`[Web3] Intercepted ${method}, redirecting to ${savedType} in 150ms...`);
-                                            setTimeout(() => {
-                                                launchExternalLink(redirectUrl);
-                                            }, 150);
-                                        }
+                                    const redirectUrl = getRedirectLinkForProvider(provider);
+                                    if (redirectUrl) {
+                                        console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
+                                        setTimeout(() => {
+                                            launchExternalLink(redirectUrl);
+                                        }, 150);
                                     }
                                     return promise;
                                 }
@@ -744,15 +762,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                     if (args && isSignOrTx) {
                         const promise = originalRequest(args);
-                        const savedType = localStorage.getItem('aimining_wallet_type');
-                        if (savedType) {
-                            const redirectUrl = WALLET_REDIRECT_LINKS[savedType.toLowerCase()];
-                            if (redirectUrl) {
-                                console.log(`[Web3] Intercepted ${method}, redirecting to ${savedType} in 150ms...`);
-                                setTimeout(() => {
-                                    launchExternalLink(redirectUrl);
-                                }, 150);
-                            }
+                        const redirectUrl = getRedirectLinkForProvider(provider);
+                        if (redirectUrl) {
+                            console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
+                            setTimeout(() => {
+                                launchExternalLink(redirectUrl);
+                            }, 150);
                         }
                         return promise;
                     }
