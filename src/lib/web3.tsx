@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
-import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect } from '@reown/appkit/react';
+import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect, useWalletInfo } from '@reown/appkit/react';
 import { EthersAdapter } from '@reown/appkit-adapter-ethers';
 import { bsc } from '@reown/appkit/networks';
 import metamaskLogo from '../assets/metamask.png';
@@ -48,20 +48,34 @@ const metadata = {
 const BSC_CHAIN_ID_HEX = '0x38';
 
 const WALLET_REDIRECT_LINKS: Record<string, string> = {
-    metamask: 'metamask://',
-    trust: 'trust://',
-    safepal: 'safepalwallet://',
-    tokenpocket: 'tpdapp://',
-    binance: 'bnc://',
-    okx: 'okx://',
-    bitget: 'bitget://'
+    metamask: 'https://metamask.app.link/',
+    trust: 'https://link.trustwallet.com/',
+    safepal: 'https://link.safepal.io/',
+    tokenpocket: 'https://tpsa.app/',
+    binance: 'https://app.binance.com/',
+    okx: 'https://www.okx.com/',
+    bitget: 'https://share.bwb.site/'
+};
+
+const checkIsWalletConnect = (provider: any): boolean => {
+    if (!provider) return false;
+    if (localStorage.getItem('aimining_is_walletconnect') === 'true') return true;
+    if (provider.session || provider.provider?.session || provider.connector || provider.provider?.connector) {
+        return true;
+    }
+    const name = provider.constructor?.name || '';
+    if (name.includes('WalletConnect') || name.includes('EthereumProvider')) {
+        return true;
+    }
+    return false;
 };
 
 const getRedirectLinkForProvider = (provider: any): string | null => {
     let walletType = localStorage.getItem('aimining_wallet_type');
     
-    if ((!walletType || walletType === 'walletconnect') && provider?.session?.peer?.metadata?.name) {
-        const peerName = provider.session.peer.metadata.name.toLowerCase();
+    const session = provider?.session || provider?.provider?.session;
+    if ((!walletType || walletType === 'walletconnect') && session?.peer?.metadata?.name) {
+        const peerName = session.peer.metadata.name.toLowerCase();
         if (peerName.includes('metamask')) walletType = 'metamask';
         else if (peerName.includes('trust')) walletType = 'trust';
         else if (peerName.includes('safepal')) walletType = 'safepal';
@@ -80,17 +94,17 @@ const getRedirectLinkForProvider = (provider: any): string | null => {
 
 const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {
     if (!walletName || typeof walletName !== 'string') {
-        return `metamask://wc?uri=${encodedUri}`;
+        return `https://metamask.app.link/wc?uri=${encodedUri}`;
     }
     switch (walletName.toLowerCase()) {
-        case 'metamask': return `metamask://wc?uri=${encodedUri}`;
-        case 'trust': return `trust://wc?uri=${encodedUri}`;
-        case 'safepal': return `safepalwallet://wc?uri=${encodedUri}`;
-        case 'tokenpocket': return `tokenpocket://wc?uri=${encodedUri}`;
-        case 'binance': return `bnc://wc?uri=${encodedUri}`;
-        case 'okx': return `okx://wc?uri=${encodedUri}`;
-        case 'bitget': return `bitget://wc?uri=${encodedUri}`;
-        default: return `metamask://wc?uri=${encodedUri}`;
+        case 'metamask': return `https://metamask.app.link/wc?uri=${encodedUri}`;
+        case 'trust': return `https://link.trustwallet.com/wc?uri=${encodedUri}`;
+        case 'safepal': return `https://link.safepal.io/wc?uri=${encodedUri}`;
+        case 'tokenpocket': return `https://tpsa.app/wc?uri=${encodedUri}`;
+        case 'binance': return `https://app.binance.com/wc?uri=${encodedUri}`;
+        case 'okx': return `https://www.okx.com/download/wc?uri=${encodedUri}`;
+        case 'bitget': return `https://share.bwb.site/wc?uri=${encodedUri}`;
+        default: return `https://metamask.app.link/wc?uri=${encodedUri}`;
     }
 };
 
@@ -260,6 +274,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const { disconnect: appKitDisconnect } = useDisconnect();
     const { address, isConnected, status } = useAppKitAccount();
     const { walletProvider } = useAppKitProvider('eip155');
+    const { walletInfo } = useWalletInfo();
     const [signer, setSigner] = useState<JsonRpcSigner | null>(null);
     const [hasSynced, setHasSynced] = useState(false);
     const [manualAddress, setManualAddress] = useState<string | null>(localStorage.getItem('aimining_manual_address'));
@@ -273,6 +288,27 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
     const [_tpLoading, setTpLoading] = useState(false);
     const [showTpFallback, setShowTpFallback] = useState(false);
+
+    // Sync wallet type from AppKit walletInfo
+    useEffect(() => {
+        if (walletInfo?.name) {
+            const peerName = walletInfo.name.toLowerCase();
+            let wt = null;
+            if (peerName.includes('metamask')) wt = 'metamask';
+            else if (peerName.includes('trust')) wt = 'trust';
+            else if (peerName.includes('safepal')) wt = 'safepal';
+            else if (peerName.includes('tokenpocket')) wt = 'tokenpocket';
+            else if (peerName.includes('binance')) wt = 'binance';
+            else if (peerName.includes('okx')) wt = 'okx';
+            else if (peerName.includes('bitget')) wt = 'bitget';
+
+            if (wt) {
+                console.log("[Web3] Detected active wallet from AppKit info:", wt);
+                setWalletType(wt);
+                localStorage.setItem('aimining_wallet_type', wt);
+            }
+        }
+    }, [walletInfo]);
 
     // Background WalletConnect states
     const [activeUri, setActiveUri] = useState<string | null>(null);
@@ -314,6 +350,46 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
             if (currentAddress && currentProvider) {
                 try {
+                    const isWc = checkIsWalletConnect(currentProvider);
+                    if (isWc) {
+                        setIsWalletConnect(true);
+                        localStorage.setItem('aimining_is_walletconnect', 'true');
+                    }
+
+                    // Intercept provider request for transaction redirects (fixes background execution freeze)
+                    if (currentProvider.request && !currentProvider._isIntercepted) {
+                        try {
+                            const originalRequest = currentProvider.request.bind(currentProvider);
+                            currentProvider.request = async (args: any) => {
+                                const method = args?.method;
+                                const isSignOrTx = method === 'eth_sendTransaction' || 
+                                                  method === 'personal_sign' || 
+                                                  method === 'eth_sign' ||
+                                                  method === 'eth_signTypedData' || 
+                                                  method === 'eth_signTypedData_v4';
+
+                                if (args && isSignOrTx) {
+                                    const promise = originalRequest(args);
+                                    if (localStorage.getItem('aimining_is_walletconnect') === 'true') {
+                                        const redirectUrl = getRedirectLinkForProvider(currentProvider);
+                                        if (redirectUrl) {
+                                            console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
+                                            setTimeout(() => {
+                                                launchExternalLink(redirectUrl);
+                                            }, 150);
+                                        }
+                                    }
+                                    return promise;
+                                }
+                                return originalRequest(args);
+                            };
+                            currentProvider._isIntercepted = true;
+                            console.log("[Web3] Successfully patched currentProvider.request");
+                        } catch (patchErr) {
+                            console.warn("[Web3] Failed to patch provider request method:", patchErr);
+                        }
+                    }
+
                     const browserProvider = new BrowserProvider(currentProvider as any);
                     const s = await browserProvider.getSigner();
 
