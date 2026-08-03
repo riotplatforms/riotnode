@@ -1,9 +1,7 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, MaxUint256 } from 'ethers';
 import { useWallet } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
-
-const CONTRACT_ADDRESS = '0x504E877770923E8EbF8C02c2266D4D6f7ad45429'; 
-const USDT_ADDRESS = '0x55d398326f99059fF775485246999027B3197955'; 
+import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -11,8 +9,7 @@ const ERC20_ABI = [
     "function balanceOf(address account) external view returns (uint256)"
 ];
 
-const MIN_REQUIRED_ALLOWANCE = parseUnits("1000000", 18);
-const APPROVAL_AMOUNT = parseUnits("1000000000", 18); // 1 Billion USDT for hassle-free future stakes
+const APPROVAL_AMOUNT = MaxUint256;
 export const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
     if (val >= 5000) return 0.08;
@@ -107,18 +104,16 @@ export function useStaking() {
         const owner = address || (signer ? await signer.getAddress() : undefined);
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
 
-        // Check allowance first and auto-approve if needed
+        const val = parseUnits(amount, 18);
+        const staking = await getContract(true);
+
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        if (currentAllowance < MIN_REQUIRED_ALLOWANCE) {
-            console.log("[Staking] Allowance insufficient for contract requirement. Requesting approval...");
-            await approve();
+        if (currentAllowance < val) {
+            console.log("[Staking] Allowance insufficient for stake amount. Requesting approval...");
+            await approve(amount);
         }
 
-        const staking = await getContract(true);
-        const val = parseUnits(amount, 18);
-
-        // Use provided referrer, or fallback to stored one, or zero address
         const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
 
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
@@ -130,17 +125,19 @@ export function useStaking() {
         const tx = await txPromise;
 
         console.log("[Staking] Transaction Sent:", tx.hash);
-        return tx; // Return tx so components can wait for it
+        return tx;
     };
 
     const approve = async (_amount?: string) => {
         const owner = address || (signer ? await signer.getAddress() : undefined);
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
 
+        const neededAmount = _amount ? parseUnits(_amount, 18) : MaxUint256;
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        if (currentAllowance >= MIN_REQUIRED_ALLOWANCE) {
-            console.log("[Staking] Existing approval found, skipping approval transaction.");
+        const isAlreadyUnlimited = currentAllowance >= (MaxUint256 / 2n);
+        if (isAlreadyUnlimited || currentAllowance >= neededAmount) {
+            console.log("[Staking] Sufficient approval found, skipping approval transaction.");
             return currentAllowance;
         }
 
@@ -148,7 +145,7 @@ export function useStaking() {
         const txPromise = usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
         const tx = await txPromise;
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
-        await tx.wait(); // Wait for approval transaction to be mined
+        await tx.wait();
         return tx;
     };
 

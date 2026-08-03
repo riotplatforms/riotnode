@@ -1,8 +1,7 @@
 import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
 import { useWallet } from '../lib/web3';
 import { CONTRACT_ABI as WITHDRAWAL_MANAGER_ABI } from '../lib/abi';
-
-const WITHDRAWAL_MANAGER_ADDRESS = '0x504E877770923E8EbF8C02c2266D4D6f7ad45429'; 
+import { WITHDRAWAL_MANAGER_ADDRESS } from '../lib/contracts'; 
 
 const BSC_RPC = 'https://bsc-rpc.publicnode.com';
 

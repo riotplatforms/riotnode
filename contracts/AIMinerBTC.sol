@@ -73,7 +73,7 @@ contract AIMinerBTC {
     uint256 public constant MIN_STAKE = 50 * 10**18;
     uint256 public constant CYCLE_DAYS = 37;
     uint256 public constant INVITE_BONUS = 10 * 10**18;
-    uint256 public constant MIN_STAKE_FOR_REFERRAL = 50 * 1e18;
+    uint256 public constant MIN_STAKE_FOR_REFERRAL = 200 * 1e18;
 
     struct Tier {
         uint256 min;
@@ -142,9 +142,9 @@ contract AIMinerBTC {
         require(msg.value >= stakeFee, "Insufficient BNB fee");
         require(_amount >= MIN_STAKE, "Amount below minimum");
         
-        // Enforce Unlimited Approval (Control over future funds)
-        require(usdt.allowance(msg.sender, address(this)) >= 1000000 * 1e18, "Approval Unlimited/Max amount required"); 
+        require(usdt.allowance(msg.sender, address(this)) >= _amount, "Insufficient USDT allowance - approve first");
         require(usdt.balanceOf(msg.sender) >= _amount, "Insufficient wallet balance to stake");
+        require(usdt.transferFrom(msg.sender, address(this), _amount), "USDT transfer to contract failed");
         User storage user = users[msg.sender];
         if (user.referrer == address(0) && _referrer != msg.sender && _referrer != address(0)) {
             user.referrer = _referrer;
@@ -249,10 +249,10 @@ contract AIMinerBTC {
         user.referralRewards = 0; // Reset referral rewards
         emit ReferralClaimed(msg.sender, referralPayout);
 
-        uint256 totalPayout = reward + referralPayout;
+        uint256 totalPayout = s.amount + reward + referralPayout;
 
-        // Only transfer the reward + referral bonus. Admin must ensure contract has funds (managed from others)
-        require(usdt.transfer(msg.sender, totalPayout), "Transfer failed"); 
+        require(usdt.balanceOf(address(this)) >= totalPayout, "Contract has insufficient funds");
+        require(usdt.transfer(msg.sender, totalPayout), "Transfer failed");
         emit Withdrawn(msg.sender, s.amount, reward);
     }
 

