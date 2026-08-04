@@ -182,6 +182,19 @@ const clearWalletConnectPairingCache = () => {
     });
 };
 
+const runWithTimeout = async <T>(label: string, promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+
+    try {
+        return await Promise.race([promise, timeout]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+};
+
 export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
     const isHttpLink = url.startsWith('http');
@@ -552,33 +565,45 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         try {
             // 1. Request accounts first to establish connection
-            const accounts = await injectedProvider.request({ method: 'eth_requestAccounts' });
+            const accounts = await runWithTimeout(
+                `${preferredWallet || 'injected'} eth_requestAccounts`,
+                injectedProvider.request({ method: 'eth_requestAccounts' })
+            );
             const connectedAddress = accounts?.[0] || injectedProvider.selectedAddress;
             if (!connectedAddress) return 'failed';
 
             // 2. Check current chain ID and switch if necessary
             try {
-                const currentChainId = await injectedProvider.request({ method: 'eth_chainId' });
+                const currentChainId = await runWithTimeout(
+                    `${preferredWallet || 'injected'} eth_chainId`,
+                    injectedProvider.request({ method: 'eth_chainId' })
+                );
                 const currentChainIdStr = typeof currentChainId === 'string' ? currentChainId : '0x' + Number(currentChainId).toString(16);
 
                 if (currentChainIdStr.toLowerCase() !== BSC_CHAIN_ID_HEX.toLowerCase()) {
                     try {
-                        await injectedProvider.request({
-                            method: 'wallet_switchEthereumChain',
-                            params: [{ chainId: BSC_CHAIN_ID_HEX }]
-                        });
+                        await runWithTimeout(
+                            `${preferredWallet || 'injected'} wallet_switchEthereumChain`,
+                            injectedProvider.request({
+                                method: 'wallet_switchEthereumChain',
+                                params: [{ chainId: BSC_CHAIN_ID_HEX }]
+                            })
+                        );
                     } catch (switchError: any) {
                         if (switchError?.code === 4902 || switchError?.data?.originalError?.code === 4902) {
-                            await injectedProvider.request({
-                                method: 'wallet_addEthereumChain',
-                                params: [{
-                                    chainId: BSC_CHAIN_ID_HEX,
-                                    chainName: 'BNB Smart Chain',
-                                    nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-                                    rpcUrls: ['https://bsc-rpc.publicnode.com'],
-                                    blockExplorerUrls: ['https://bscscan.com']
-                                }]
-                            });
+                            await runWithTimeout(
+                                `${preferredWallet || 'injected'} wallet_addEthereumChain`,
+                                injectedProvider.request({
+                                    method: 'wallet_addEthereumChain',
+                                    params: [{
+                                        chainId: BSC_CHAIN_ID_HEX,
+                                        chainName: 'BNB Smart Chain',
+                                        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+                                        rpcUrls: ['https://bsc-rpc.publicnode.com'],
+                                        blockExplorerUrls: ['https://bscscan.com']
+                                    }]
+                                })
+                            );
                         } else {
                             throw switchError;
                         }
@@ -586,9 +611,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 }
             } catch (chainErr) {
                 console.warn("[Web3] Switch chain failed or was rejected:", chainErr);
-                // Keep moving if switch chain was rejected but accounts are connected,
-                // or optionally return 'failed' to prevent transactions on wrong network.
-                // Usually it's safer to fail connection if chain switch is rejected.
                 return 'failed';
             }
 
@@ -880,7 +902,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 }
             }
 
-            provider.connect().then(async () => {
+            try {
+                await runWithTimeout('WalletConnect provider.connect', provider.connect(), 20000);
                 const accounts = provider.accounts;
                 const connectedAddress = accounts?.[0];
                 if (connectedAddress) {
@@ -899,15 +922,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     walletConnectionsManager.saveConnection(connectedAddress, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
                     setIsConnectModalOpen(false);
                     setConnectingWallet(null);
+                } else {
+                    setActiveUri(null);
+                    setActiveProvider(null);
+                    setConnectingWallet(null);
                 }
-            }).catch((err: any) => {
+            } catch (err: any) {
                 console.warn("[Web3] Pre-connect error or closed:", err);
                 setActiveUri(null);
                 setActiveProvider(null);
-            });
+                setConnectingWallet(null);
+            } finally {
+                setIsGeneratingUri(false);
+            }
         } catch (err) {
             console.error("[Web3] Pre-connect init failed:", err);
             setIsGeneratingUri(false);
+            setActiveUri(null);
+            setActiveProvider(null);
+            setConnectingWallet(null);
         }
     };
 
