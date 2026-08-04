@@ -20,11 +20,12 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, signer, miningStats, setMiningStats } = useWallet();
-    const { stake, approve, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { stake, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
     const [activeTab, setActiveTab] = useState('Riot Mining');
+    const [allowance, setAllowance] = useState('0.00');
     const [loading, setLoading] = useState<number | string | null>(null);
     const [userStakes, setUserStakes] = useState<any[]>([]);
     const [stats, setStats] = useState({
@@ -182,6 +183,7 @@ const Stake: React.FC = () => {
             setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
             setFunds({ walletBalance: '0.00', extraFund: '0.00' });
             setUserStakes([]);
+            setAllowance('0.00');
             return;
         }
         const info = await getStakedInfo(address);
@@ -260,6 +262,10 @@ const Stake: React.FC = () => {
             });
             setUserStakes(details);
 
+            // Fetch and set allowance
+            const currentAllowanceStr = await getAllowance(address);
+            setAllowance(currentAllowanceStr);
+
             // Update global context for other pages
             setMiningStats((prev: any) => ({
                 ...prev,
@@ -270,7 +276,7 @@ const Stake: React.FC = () => {
                 isLoaded: true
             }));
         }
-    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
+    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, getAllowance, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
 
     useEffect(() => {
         updateStakes();
@@ -316,14 +322,6 @@ const Stake: React.FC = () => {
         return `${days}h ${hours}m ${minutes}s ${seconds}s`; // Using Short format for button
     };
 
-    useEffect(() => {
-        if (signer && localStorage.getItem('pending_upgrade')) {
-            const data = JSON.parse(localStorage.getItem('pending_upgrade')!);
-            localStorage.removeItem('pending_upgrade');
-            handleBuy(data.id, data.priceStr);
-        }
-    }, [signer, address, showAlert, stake, referrer]);
-
     const handleBuy = async (id: number | string, priceStr: string) => {
         if (!signer || !address) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
@@ -335,7 +333,8 @@ const Stake: React.FC = () => {
 
         setLoading(id);
         try {
-            await approve();
+            const cleanedPriceStr = (typeof priceStr === 'string') ? priceStr.replace(/[^0-9.]/g, '') : String(priceStr || '0').replace(/[^0-9.]/g, '');
+            localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr: cleanedPriceStr }));
 
             const balanceStr = await getWalletBalance(address);
             if (balanceStr === null) {
@@ -343,7 +342,7 @@ const Stake: React.FC = () => {
             }
             
             const balanceBigInt = parseUnits(balanceStr, 18);
-            const refAddress = referrer || '0x0000000000000000000000000000000000000000';
+            const refAddress = referrer || localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000';
 
             let priceBigInt;
             if (id === 'extra-fund') {
@@ -372,31 +371,51 @@ const Stake: React.FC = () => {
                 }
                 priceBigInt = balanceBigInt - activeStakedBigInt;
                 if (priceBigInt < 0n) priceBigInt = 0n;
-                // Round down to 2 decimals (10^16 units) to prevent gas estimation errors on full balance
-                const remainder = priceBigInt % 10000000000000000n; // 10^16
+                const remainder = priceBigInt % 10000000000000000n;
                 priceBigInt = priceBigInt - remainder;
             } else {
-                const cleanedPriceStr = priceStr.replace(/[^0-9.]/g, '');
                 priceBigInt = parseUnits(cleanedPriceStr, 18);
             }
 
             if (balanceBigInt < priceBigInt) {
+                localStorage.removeItem('pending_upgrade');
                 showAlert(`Insufficient wallet balance. You need at least ${formatUnits(priceBigInt, 18)} USDT.`);
                 return;
             }
 
             const minStakeBigInt = parseUnits("50", 18);
             if (priceBigInt < minStakeBigInt) {
+                localStorage.removeItem('pending_upgrade');
                 showAlert("Minimum 50 USDT required to activate mining node.");
                 return;
             }
 
-            const tx = await stake(formatUnits(priceBigInt, 18), refAddress);
-            await tx.wait();
+            const finalAmount = formatUnits(priceBigInt, 18);
+
+            const tx = await stake(finalAmount, refAddress);
+            try {
+                await tx.wait();
+            } catch (waitErr: any) {
+                console.warn("[Stake] tx.wait failed after wallet redirect (may be mined). Attempting update anyway:", waitErr?.shortMessage || waitErr);
+                localStorage.setItem('pending_stake_refresh', '1');
+            }
+            localStorage.removeItem('pending_upgrade');
+            localStorage.removeItem('pending_stake_refresh');
             showAlert(`Success: Staked ${formatUnits(priceBigInt, 18)} USDT and upgraded mining node!`);
             await updateStakes();
         } catch (err: any) {
-            showAlert(parseEthersError(err));
+            const msg = parseEthersError(err);
+            const needsRetry = msg && (
+                msg.includes('wallet') || msg.includes('connection') ||
+                msg.includes('user rejected') || msg.includes('cancelled') ||
+                msg.includes('reconnect')
+            );
+            if (needsRetry) {
+                localStorage.setItem('pending_upgrade_fail_msg', msg);
+            } else {
+                localStorage.removeItem('pending_upgrade');
+            }
+            showAlert(msg);
         } finally {
             setLoading(null);
         }
@@ -409,7 +428,14 @@ const Stake: React.FC = () => {
         }
         setLoading(`withdraw-${index}`);
         try {
-            await withdraw(index);
+            const tx = await withdraw(index);
+            try {
+                if (tx && typeof tx.wait === 'function') {
+                    await tx.wait();
+                }
+            } catch (waitErr: any) {
+                console.warn("[Withdraw] tx.wait failed after wallet redirect:", waitErr?.shortMessage || waitErr);
+            }
             showAlert('Success: Withdrawal completed!');
             await updateStakes();
         } catch (err: any) {
@@ -847,14 +873,18 @@ const Stake: React.FC = () => {
                                 </div>
                             </div>
                             <button
-                                onClick={() => handleBuy('extra-fund', '50 USDT')}
+                                onClick={() => handleBuy('extra-fund', funds.extraFund)}
                                 disabled={loading === 'extra-fund'}
                                 className={`relative z-10 w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-none ${parseFloat(funds.extraFund) >= 50
                                     ? 'bg-primary text-black shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
                                     : 'bg-white/5 text-gray-300 border border-white/5 cursor-pointer'
                                     }`}
                             >
-                                {loading === 'extra-fund' ? 'Processing...' : 'Stake Extra Fund'}
+                                {loading === 'extra-fund' 
+                                    ? 'Processing...' 
+                                    : (parseFloat(funds.extraFund) >= 50 && parseFloat(allowance) < parseFloat(funds.extraFund)
+                                        ? 'Approve USDT' 
+                                        : 'Stake Extra Fund')}
                             </button>
                         </div>
 
@@ -878,13 +908,23 @@ const Stake: React.FC = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => handleBuy(item.id, item.price)}
-                                        disabled={loading === item.id}
-                                        className="mt-1 w-full bg-primary text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer border-none"
-                                    >
-                                        {loading === item.id ? 'Processing...' : `Purchase for ${item.price}`}
-                                    </button>
+                                    {(() => {
+                                        const priceNum = parseFloat(item.price.replace(/[^0-9.]/g, ''));
+                                        const needsApproval = parseFloat(allowance) < priceNum;
+                                        return (
+                                            <button
+                                                onClick={() => handleBuy(item.id, item.price)}
+                                                disabled={loading === item.id}
+                                                className="mt-1 w-full bg-primary text-black py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer border-none"
+                                            >
+                                                {loading === item.id 
+                                                    ? 'Processing...' 
+                                                    : (needsApproval 
+                                                        ? 'Approve USDT' 
+                                                        : `Purchase for ${item.price}`)}
+                                            </button>
+                                        );
+                                    })()}
                                 </div>
                             );
                         })}

@@ -22,7 +22,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, approve, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -74,8 +74,6 @@ const Dashboard: React.FC = () => {
 
         setLoading(true);
         try {
-            await approve();
-
             const balanceStr = await getWalletBalance(userAddress);
             if (!balanceStr) {
                 showAlert("Could not check wallet balance due to network issues. Try again.");

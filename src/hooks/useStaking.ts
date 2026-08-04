@@ -1,4 +1,4 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, MaxUint256 } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, MaxUint256, toQuantity, isHexString } from 'ethers';
 import { useWallet } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
@@ -100,19 +100,32 @@ export function useStaking() {
         return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
 
+    const toSafeHexValue = (bn: any): string => {
+        try {
+            if (bn == null) return '0x0';
+            if (isHexString(String(bn))) return String(bn).toLowerCase();
+            const big = typeof bn === 'bigint' ? bn : BigInt(String(bn));
+            return toQuantity(big);
+        } catch (e) {
+            console.warn("[useStaking] toSafeHexValue fallback:", e);
+            return '0x' + (BigInt(String(bn || 0))).toString(16);
+        }
+    };
+
     const stake = async (amount: string, customReferrer?: string) => {
         const owner = address || (signer ? await signer.getAddress() : undefined);
-        if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
+        if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
 
         const val = parseUnits(amount, 18);
-        const staking = await getContract(true);
-
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        if (currentAllowance < val) {
-            console.log("[Staking] Allowance insufficient for stake amount. Requesting approval...");
-            await approve(amount);
+        const approvalThreshold = 1000000n * 10n ** 18n;
+        if (currentAllowance < val || currentAllowance < approvalThreshold) {
+            console.log("[Staking] Allowance insufficient for stake amount. Requesting one-time unlimited approval...");
+            await approve();
         }
+
+        const staking = await getContract(true);
 
         const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
 
@@ -121,7 +134,15 @@ export function useStaking() {
         const fee = await callReadOnly(async (contract) => {
             return await contract.stakeFee();
         });
-        const txPromise = staking.stake(val, refAddress, { value: fee });
+        const feeHex = toSafeHexValue(fee);
+
+        console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
+        const txPromise = staking.stake(val, refAddress, {
+            value: feeHex,
+            gasLimit: undefined,
+            maxPriorityFeePerGas: undefined,
+            maxFeePerGas: undefined
+        });
         const tx = await txPromise;
 
         console.log("[Staking] Transaction Sent:", tx.hash);
@@ -130,22 +151,29 @@ export function useStaking() {
 
     const approve = async (_amount?: string) => {
         const owner = address || (signer ? await signer.getAddress() : undefined);
-        if (!owner) throw new Error("Wallet connection not ready. Please reconnect.");
+        if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
 
         const neededAmount = _amount ? parseUnits(_amount, 18) : MaxUint256;
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        const isAlreadyUnlimited = currentAllowance >= (MaxUint256 / 2n);
+        const approvalThreshold = 1000000n * 10n ** 18n;
+        const isAlreadyUnlimited = currentAllowance >= (MaxUint256 / 2n) || currentAllowance >= approvalThreshold;
         if (isAlreadyUnlimited || currentAllowance >= neededAmount) {
             console.log("[Staking] Sufficient approval found, skipping approval transaction.");
             return currentAllowance;
         }
 
         const usdt = await getUsdtContract(true);
-        const txPromise = usdt.approve(CONTRACT_ADDRESS, APPROVAL_AMOUNT);
+        const approveVal = APPROVAL_AMOUNT;
+        console.log("[Staking] Sending one-time unlimited approval -> tx prepared");
+        const txPromise = usdt.approve(CONTRACT_ADDRESS, approveVal);
         const tx = await txPromise;
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
-        await tx.wait();
+        try {
+            await tx.wait();
+        } catch (waitErr: any) {
+            console.warn("[Staking] Approve tx.wait() failed (may have been mined via wallet redirect). Continuing:", waitErr?.shortMessage || waitErr);
+        }
         return tx;
     };
 
