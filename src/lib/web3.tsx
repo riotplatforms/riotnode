@@ -108,6 +108,22 @@ const getWalletConnectionLink = (walletName: string | null | undefined, encodedU
     }
 };
 
+const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: string): string => {
+    const url = encodeURIComponent(dappUrl);
+    switch ((walletName || '').toLowerCase()) {
+        case 'metamask':
+            return `https://metamask.app.link/dapp/${url}`;
+        case 'trust':
+            return `https://link.trustwallet.com/open_url?url=${url}`;
+        case 'safepal':
+            return `https://link.safepal.io/open_url?url=${url}`;
+        case 'tokenpocket':
+            return `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl, chain: 'BSC', source: 'Riot Mining Platform' }))}`;
+        default:
+            return `https://metamask.app.link/dapp/${url}`;
+    }
+};
+
 const TOKENPOCKET_ANDROID_PACKAGE = 'vip.mytokenpocket';
 const TOKENPOCKET_DOWNLOAD_URL = 'https://www.tokenpocket.pro/download/app';
 
@@ -699,13 +715,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     setWalletType(wallet);
                     localStorage.setItem('aimining_wallet_type', wallet);
 
+                    const dappUrl = getDappUrl();
+                    const deepLink = getWalletDappDeepLink(wallet, dappUrl);
+
                     if (activeUri) {
                         const encoded = encodeURIComponent(activeUri);
                         const link = getWalletConnectionLink(wallet, encoded);
                         if (link) {
                             launchExternalLink(link);
+                            return;
                         }
                     }
+
+                    launchExternalLink(deepLink);
                 } else {
                     // On desktop, open general AppKit connection modal so they can scan the QR code
                     setIsConnectModalOpen(false);
@@ -960,6 +982,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (link) {
                 launchExternalLink(link);
             }
+        } else if (connectingWallet && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            const dappUrl = getDappUrl();
+            const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
+            launchExternalLink(deepLink);
         }
     }, [activeUri, connectingWallet]);
 
