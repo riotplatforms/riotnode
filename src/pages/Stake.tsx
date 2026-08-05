@@ -20,7 +20,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, signer, miningStats, setMiningStats } = useWallet();
-    const { stake, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { stake, approve, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -391,6 +391,26 @@ const Stake: React.FC = () => {
             }
 
             const finalAmount = formatUnits(priceBigInt, 18);
+
+            const currentAllowanceStr = await getAllowance(address);
+            const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
+            if (currentAllowance < priceBigInt) {
+                console.log("[Stake] Extra-fund upgrade requires fresh approval before staking. Triggering exact allowance approval.");
+                const approvalTx = await approve(finalAmount);
+                if (approvalTx && typeof approvalTx.wait === 'function') {
+                    try {
+                        await approvalTx.wait();
+                    } catch (waitErr: any) {
+                        console.warn("[Stake] Approval wait failed after redirect, continuing with stake attempt:", waitErr?.shortMessage || waitErr);
+                    }
+                }
+
+                const refreshedAllowanceStr = await getAllowance(address);
+                const refreshedAllowance = parseUnits(refreshedAllowanceStr || '0', 18);
+                if (refreshedAllowance < priceBigInt) {
+                    throw new Error("USDT approval was not enough for this stake. Please approve again and retry.");
+                }
+            }
 
             const tx = await stake(finalAmount, refAddress);
             try {
