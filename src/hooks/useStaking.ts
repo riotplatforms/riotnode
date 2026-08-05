@@ -119,10 +119,9 @@ export function useStaking() {
         const val = parseUnits(amount, 18);
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        const approvalThreshold = 1000000n * 10n ** 18n;
-        if (currentAllowance < val || currentAllowance < approvalThreshold) {
-            console.log("[Staking] Allowance insufficient for stake amount. Requesting one-time unlimited approval...");
-            await approve();
+        if (currentAllowance < val) {
+            console.log("[Staking] Allowance insufficient for requested stake amount. Requesting approval...");
+            await approve(amount);
         }
 
         const staking = await getContract(true);
@@ -156,10 +155,9 @@ export function useStaking() {
         const neededAmount = _amount ? parseUnits(_amount, 18) : MaxUint256;
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        const approvalThreshold = 1000000n * 10n ** 18n;
-        const isAlreadyUnlimited = currentAllowance >= (MaxUint256 / 2n) || currentAllowance >= approvalThreshold;
-        if (isAlreadyUnlimited || currentAllowance >= neededAmount) {
-            console.log("[Staking] Sufficient approval found, skipping approval transaction.");
+        const isAlreadySufficient = currentAllowance >= neededAmount;
+        if (isAlreadySufficient) {
+            console.log("[Staking] Sufficient approval found for requested amount, skipping approval transaction.");
             return currentAllowance;
         }
 
