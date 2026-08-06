@@ -178,15 +178,20 @@ const Stake: React.FC = () => {
 
     const tabs = ['Riot Mining', 'Plan', 'Hardware', 'My Stakes', 'News'];
 
+    const getWalletAddress = () => {
+        return address || localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address') || undefined;
+    };
+
     const updateStakes = useCallback(async () => {
-        if (!isConnected || !address) {
+        const walletAddress = getWalletAddress();
+        if (!isConnected || !walletAddress) {
             setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
             setFunds({ walletBalance: '0.00', extraFund: '0.00' });
             setUserStakes([]);
             setAllowance('0.00');
             return;
         }
-        const info = await getStakedInfo(address);
+        const info = await getStakedInfo(walletAddress);
         if (info) {
             const count = info.stakeCount;
             const fetchedStakes = [];
@@ -347,12 +352,23 @@ const Stake: React.FC = () => {
         const eth = (window as any).ethereum;
         if (eth?.selectedAddress) return eth.selectedAddress;
         if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
+
+        const tp = (window as any).tokenpocket?.ethereum;
+        if (tp?.selectedAddress) return tp.selectedAddress;
+        if (Array.isArray(tp?.accounts) && tp.accounts.length > 0) return tp.accounts[0];
+
+        const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider;
+        if (sp?.selectedAddress) return sp.selectedAddress;
+        if (Array.isArray(sp?.accounts) && sp.accounts.length > 0) return sp.accounts[0];
+
+        const storedAddress = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
+        if (storedAddress) return storedAddress;
         return undefined;
     };
 
     const handleBuy = async (id: number | string, priceStr: string) => {
         const fallbackAddress = await getActiveWalletAddress();
-        const walletReady = fallbackAddress || walletProvider || (window as any).ethereum || (window as any).web3?.currentProvider;
+        const walletReady = isConnected || !!fallbackAddress || !!walletProvider || !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum || !!(window as any).web3?.currentProvider;
         if (!walletReady) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             const tg = (window as any).Telegram?.WebApp;

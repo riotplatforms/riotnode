@@ -114,6 +114,25 @@ export function useStaking() {
         }
     };
 
+    const getStoredAddress = (): string | undefined => {
+        const storedAddress = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
+        if (storedAddress) return storedAddress;
+
+        const eth = (window as any).ethereum;
+        if (eth?.selectedAddress) return eth.selectedAddress;
+        if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
+
+        const tp = (window as any).tokenpocket?.ethereum;
+        if (tp?.selectedAddress) return tp.selectedAddress;
+        if (Array.isArray(tp?.accounts) && tp.accounts.length > 0) return tp.accounts[0];
+
+        const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider;
+        if (sp?.selectedAddress) return sp.selectedAddress;
+        if (Array.isArray(sp?.accounts) && sp.accounts.length > 0) return sp.accounts[0];
+
+        return undefined;
+    };
+
     const getSignerAddress = async (): Promise<string | undefined> => {
         if (address) return address;
         if (signer) {
@@ -137,10 +156,7 @@ export function useStaking() {
             if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
             if (Array.isArray(providerAny.wallets) && providerAny.wallets.length > 0) return providerAny.wallets[0];
         }
-        const eth = (window as any).ethereum;
-        if (eth?.selectedAddress) return eth.selectedAddress;
-        if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
-        return undefined;
+        return getStoredAddress();
     };
 
     const stake = async (amount: string, customReferrer?: string) => {
@@ -207,7 +223,7 @@ export function useStaking() {
     };
 
     const getAllowance = async (ownerAddress?: string) => {
-        const owner = ownerAddress || address;
+        const owner = ownerAddress || address || getStoredAddress();
         if (!owner) return "0";
         try {
             return await callReadOnly(async (contract) => {
@@ -229,7 +245,7 @@ export function useStaking() {
     };
 
     const getStakedInfo = async (userAddress?: string) => {
-        const target = userAddress || address;
+        const target = userAddress || address || getStoredAddress();
         if (!target) return null;
         try {
             return await callReadOnly(async (contract) => {
@@ -252,10 +268,11 @@ export function useStaking() {
     };
 
     const getStakeDetails = async (userAddress: string, index: number) => {
-        if (!userAddress) return null;
+        const target = userAddress || getStoredAddress();
+        if (!target) return null;
         try {
             return await callReadOnly(async (contract) => {
-                const stake = await contract.getUserStake(userAddress, index);
+                const stake = await contract.getUserStake(target, index);
                 return {
                     amount: stake.amount,
                     startTime: Number(stake.startTime),
@@ -270,7 +287,7 @@ export function useStaking() {
     };
 
     const getWalletBalance = async (userAddress?: string) => {
-        const target = userAddress || address;
+        const target = userAddress || address || getStoredAddress();
         if (!target) return null;
         try {
             const usdtBalStr = await callReadOnly(async (contract) => {

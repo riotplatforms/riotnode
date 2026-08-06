@@ -374,7 +374,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
         const syncSigner = async () => {
-            const currentProvider = walletProvider || manualWalletProvider || (window as any).ethereum;
+            const currentProvider = walletProvider || manualWalletProvider || (window as any).ethereum || (window as any).tokenpocket?.ethereum || (window as any).safepal?.ethereum || (window as any).trustwallet?.ethereum || (window as any).binance?.ethereum || (window as any).okxwallet?.ethereum || (window as any).bitget?.ethereum;
             const currentAddress = address || manualAddress;
 
             if (currentAddress && currentProvider) {
