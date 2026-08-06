@@ -19,7 +19,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, signer, walletProvider, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, walletProvider, openInWalletBrowser, miningStats, setMiningStats } = useWallet();
     const { stake, approve, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -326,7 +326,14 @@ const Stake: React.FC = () => {
         const walletReady = address || walletProvider || (window as any).ethereum;
         if (!walletReady) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
-            connect();
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg && typeof openInWalletBrowser === 'function') {
+                // Prompt user to open the dApp in a wallet browser (TokenPocket fallback)
+                openInWalletBrowser('tokenpocket');
+                showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
+            } else {
+                connect();
+            }
             return;
         }
 
@@ -445,7 +452,13 @@ const Stake: React.FC = () => {
     const handleWithdraw = async (index: number) => {
         const walletReady = address || walletProvider || (window as any).ethereum;
         if (!walletReady) {
-            connect();
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg && typeof openInWalletBrowser === 'function') {
+                openInWalletBrowser('tokenpocket');
+                showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
+            } else {
+                connect();
+            }
             return;
         }
         setLoading(`withdraw-${index}`);
