@@ -215,15 +215,17 @@ export function useStaking() {
             if (Array.isArray(injectedAny.accounts) && injectedAny.accounts.length > 0) return injectedAny.accounts[0];
             if (typeof injectedAny.request === 'function') {
                 try {
-                    const accounts = await injectedAny.request({ method: 'eth_accounts' });
+                    let accounts = await injectedAny.request({ method: 'eth_accounts' });
+                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+                    accounts = await injectedAny.request({ method: 'eth_requestAccounts' });
                     if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
                 } catch (err) {
-                    console.warn('[useStaking] injected provider eth_accounts failed:', err);
+                    console.warn('[useStaking] injected provider account request failed:', err);
                 }
             }
         }
 
-        return getStoredAddress();
+        return undefined;
     };
 
     const stake = async (amount: string, customReferrer?: string) => {

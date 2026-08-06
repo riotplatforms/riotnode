@@ -330,6 +330,23 @@ const Stake: React.FC = () => {
         return `${days}h ${hours}m ${minutes}s ${seconds}s`; // Using Short format for button
     };
 
+    const requestAccountsFromProvider = async (provider: any): Promise<string | undefined> => {
+        if (!provider || typeof provider.request !== 'function') return undefined;
+        try {
+            let accounts = await provider.request({ method: 'eth_accounts' });
+            if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+        } catch (err) {
+            console.warn('[Stake] provider eth_accounts failed:', err);
+        }
+        try {
+            const accounts = await provider.request({ method: 'eth_requestAccounts' });
+            if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+        } catch (err) {
+            console.warn('[Stake] provider eth_requestAccounts failed:', err);
+        }
+        return undefined;
+    };
+
     const getActiveWalletAddress = async (): Promise<string | undefined> => {
         if (address) return address;
         if (signer) {
@@ -351,63 +368,56 @@ const Stake: React.FC = () => {
             const providerAny = walletProvider as any;
             if (providerAny.selectedAddress) return providerAny.selectedAddress;
             if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
-            if (providerAny.request) {
-                try {
-                    const accounts = await providerAny.request({ method: 'eth_accounts' });
-                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
-                } catch (err) {
-                    console.warn('[Stake] walletProvider eth_accounts failed:', err);
-                }
-            }
+            const accountFromRequest = await requestAccountsFromProvider(providerAny);
+            if (accountFromRequest) return accountFromRequest;
         }
         const eth = (window as any).ethereum;
         if (eth?.selectedAddress) return eth.selectedAddress;
         if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
         if (Array.isArray(eth?.providers) && eth.providers.length > 0) {
-            const chosen = eth.providers.find((p: any) => p.selectedAddress || Array.isArray(p.accounts) && p.accounts.length > 0);
+            const chosen = eth.providers.find((p: any) => p.selectedAddress || Array.isArray(p.accounts) && p.accounts.length > 0 || typeof p.request === 'function');
             if (chosen) {
                 if (chosen.selectedAddress) return chosen.selectedAddress;
                 if (Array.isArray(chosen.accounts) && chosen.accounts.length > 0) return chosen.accounts[0];
+                const accountFromRequest = await requestAccountsFromProvider(chosen);
+                if (accountFromRequest) return accountFromRequest;
             }
         }
+        if (eth?.request) {
+            const account = await requestAccountsFromProvider(eth);
+            if (account) return account;
+        }
+
         const web3Provider = (window as any).web3?.currentProvider;
         if (web3Provider && web3Provider !== eth) {
             if (web3Provider.selectedAddress) return web3Provider.selectedAddress;
             if (Array.isArray(web3Provider.accounts) && web3Provider.accounts.length > 0) return web3Provider.accounts[0];
-            if (typeof web3Provider.request === 'function') {
-                try {
-                    const accounts = await web3Provider.request({ method: 'eth_accounts' });
-                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
-                } catch (err) {
-                    console.warn('[Stake] web3.currentProvider eth_accounts failed:', err);
-                }
-            }
-        }
-        if (eth?.request) {
-            try {
-                const accounts = await eth.request({ method: 'eth_accounts' });
-                if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
-            } catch (err) {
-                console.warn('[Stake] ethereum eth_accounts failed:', err);
-            }
+            const accountFromRequest = await requestAccountsFromProvider(web3Provider);
+            if (accountFromRequest) return accountFromRequest;
         }
 
         const tp = (window as any).tokenpocket?.ethereum;
         if (tp?.selectedAddress) return tp.selectedAddress;
         if (Array.isArray(tp?.accounts) && tp.accounts.length > 0) return tp.accounts[0];
+        if (tp?.request) {
+            const account = await requestAccountsFromProvider(tp);
+            if (account) return account;
+        }
 
         const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider;
         if (sp?.selectedAddress) return sp.selectedAddress;
         if (Array.isArray(sp?.accounts) && sp.accounts.length > 0) return sp.accounts[0];
+        if (sp?.request) {
+            const account = await requestAccountsFromProvider(sp);
+            if (account) return account;
+        }
 
-        const storedAddress = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
-        if (storedAddress) return storedAddress;
         return undefined;
     };
 
     const handleBuy = async (id: number | string, priceStr: string) => {
         const fallbackAddress = await getActiveWalletAddress();
-        const walletReady = isConnected || !!fallbackAddress || !!walletProvider || !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum || !!(window as any).web3?.currentProvider;
+        const walletReady = isConnected || !!fallbackAddress || !!walletProvider || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum || !!(window as any).web3?.currentProvider || !!(window as any).ethereum;
         if (!walletReady) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             const tg = (window as any).Telegram?.WebApp;
@@ -546,7 +556,7 @@ const Stake: React.FC = () => {
 
     const handleWithdraw = async (index: number) => {
         const fallbackAddress = await getActiveWalletAddress();
-        const walletReady = fallbackAddress || walletProvider || (window as any).ethereum || (window as any).tokenpocket?.ethereum || (window as any).safepal?.ethereum || (window as any).web3?.currentProvider;
+        const walletReady = fallbackAddress || walletProvider || (window as any).tokenpocket?.ethereum || (window as any).safepal?.ethereum || (window as any).web3?.currentProvider;
         if (!walletReady) {
             const tg = (window as any).Telegram?.WebApp;
             if (tg && typeof openInWalletBrowser === 'function') {
