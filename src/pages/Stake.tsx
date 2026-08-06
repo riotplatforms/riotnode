@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
-import { formatUnits, parseUnits } from 'ethers';
+import { BrowserProvider, formatUnits, parseUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
@@ -322,9 +322,36 @@ const Stake: React.FC = () => {
         return `${days}h ${hours}m ${minutes}s ${seconds}s`; // Using Short format for button
     };
 
+    const getActiveWalletAddress = async (): Promise<string | undefined> => {
+        if (address) return address;
+        if (signer) {
+            try {
+                return await signer.getAddress();
+            } catch (err) {
+                console.warn('[Stake] signer.getAddress failed:', err);
+            }
+        }
+        if (walletProvider) {
+            try {
+                const browserProvider = new BrowserProvider(walletProvider as any);
+                const addressFromSigner = await browserProvider.getSigner().getAddress();
+                if (addressFromSigner) return addressFromSigner;
+            } catch (err) {
+                console.warn('[Stake] walletProvider signer failed:', err);
+            }
+            const providerAny = walletProvider as any;
+            if (providerAny.selectedAddress) return providerAny.selectedAddress;
+            if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
+        }
+        const eth = (window as any).ethereum;
+        if (eth?.selectedAddress) return eth.selectedAddress;
+        if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
+        return undefined;
+    };
+
     const handleBuy = async (id: number | string, priceStr: string) => {
-        const fallbackAddress = address || (signer ? await signer.getAddress() : undefined) || (window as any).ethereum?.selectedAddress;
-        const walletReady = fallbackAddress || walletProvider || (window as any).ethereum;
+        const fallbackAddress = await getActiveWalletAddress();
+        const walletReady = fallbackAddress || walletProvider || (window as any).ethereum || (window as any).web3?.currentProvider;
         if (!walletReady) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             const tg = (window as any).Telegram?.WebApp;

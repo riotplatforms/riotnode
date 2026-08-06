@@ -114,8 +114,37 @@ export function useStaking() {
         }
     };
 
+    const getSignerAddress = async (): Promise<string | undefined> => {
+        if (address) return address;
+        if (signer) {
+            try {
+                return await signer.getAddress();
+            } catch (e) {
+                console.warn('[useStaking] signer.getAddress failed:', e);
+            }
+        }
+        if (walletProvider) {
+            const providerAny = walletProvider as any;
+            try {
+                const browserProvider = new BrowserProvider(providerAny);
+                const signerFromProvider = browserProvider.getSigner();
+                const addr = await signerFromProvider.getAddress();
+                if (addr) return addr;
+            } catch (e) {
+                console.warn('[useStaking] walletProvider signer failed:', e);
+            }
+            if (providerAny.selectedAddress) return providerAny.selectedAddress;
+            if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
+            if (Array.isArray(providerAny.wallets) && providerAny.wallets.length > 0) return providerAny.wallets[0];
+        }
+        const eth = (window as any).ethereum;
+        if (eth?.selectedAddress) return eth.selectedAddress;
+        if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
+        return undefined;
+    };
+
     const stake = async (amount: string, customReferrer?: string) => {
-        const owner = address || (signer ? await signer.getAddress() : undefined);
+        const owner = await getSignerAddress();
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
 
         const val = parseUnits(amount, 18);
@@ -151,7 +180,7 @@ export function useStaking() {
     };
 
     const approve = async (_amount?: string) => {
-        const owner = address || (signer ? await signer.getAddress() : undefined);
+        const owner = await getSignerAddress();
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
 
         const neededAmount = _amount ? parseUnits(_amount, 18) : MaxUint256;
