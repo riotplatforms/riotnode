@@ -65,7 +65,7 @@ export function useStaking() {
             }
 
             // 3. Fallback to injected provider or legacy web3 provider
-            const fallbackProvider = (window as any).ethereum || (window as any).web3?.currentProvider;
+            const fallbackProvider = getInjectedProvider();
             if (fallbackProvider) {
                 const browserProvider = new BrowserProvider(fallbackProvider as any);
                 const s = await browserProvider.getSigner();
@@ -75,6 +75,34 @@ export function useStaking() {
             throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
         return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
+    };
+
+    const getInjectedProvider = () => {
+        const eth = (window as any).ethereum;
+        if (eth) return eth;
+
+        const tp = (window as any).tokenpocket?.ethereum;
+        if (tp) return tp;
+
+        const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider;
+        if (sp) return sp;
+
+        const trust = (window as any).trustwallet?.ethereum || (window as any).trustwallet;
+        if (trust) return trust;
+
+        const binance = (window as any).binance?.ethereum || (window as any).binance;
+        if (binance) return binance;
+
+        const okx = (window as any).okxwallet?.ethereum || (window as any).okxwallet;
+        if (okx) return okx;
+
+        const bitget = (window as any).bitget?.ethereum || (window as any).bitget;
+        if (bitget) return bitget;
+
+        const fallbackProvider = (window as any).web3?.currentProvider;
+        if (fallbackProvider) return fallbackProvider;
+
+        return undefined;
     };
 
     const getUsdtContract = async (withSigner = false) => {
@@ -90,7 +118,7 @@ export function useStaking() {
             }
 
             // 3. Fallback to injected provider or legacy web3 provider
-            const fallbackProvider = (window as any).ethereum || (window as any).web3?.currentProvider;
+            const fallbackProvider = getInjectedProvider();
             if (fallbackProvider) {
                 const browserProvider = new BrowserProvider(fallbackProvider as any);
                 const s = await browserProvider.getSigner();
