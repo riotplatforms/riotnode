@@ -197,7 +197,7 @@ const Stake: React.FC = () => {
             const fetchedStakes = [];
             let failed = false;
             for (let i = 0; i < count; i++) {
-                const detail = await getStakeDetails(address, i);
+                const detail = await getStakeDetails(walletAddress, i);
                 if (detail === null) {
                     failed = true;
                     break;
@@ -207,7 +207,7 @@ const Stake: React.FC = () => {
             if (failed) return; // Keep previous state!
             
             // FETCH LIVE WALLET BALANCE - One Truth Policy
-            const usdtBalanceStr = await getWalletBalance(address);
+            const usdtBalanceStr = await getWalletBalance(walletAddress);
             if (usdtBalanceStr === null) return;
             const usdtBalance = parseFloat(usdtBalanceStr);
 
@@ -222,19 +222,19 @@ const Stake: React.FC = () => {
                 if (detail && !detail.withdrawn) {
                     const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                     const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                    const wasFlushed = isStakePermanentlyFlushed(address, i);
+                    const wasFlushed = isStakePermanentlyFlushed(walletAddress, i);
                     const isBalanceSufficient = finished || (usdtBalance + 0.1) >= runningStakedSum + stakeAmount;
                     if (isBalanceSufficient && wasFlushed) {
-                        clearPermanentStakeFlush(address, i);
+                        clearPermanentStakeFlush(walletAddress, i);
                     }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (usdtBalance + 0.1) < runningStakedSum + stakeAmount);
+                    const isViolated = isStakePermanentlyFlushed(walletAddress, i) || (!finished && (usdtBalance + 0.1) < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
                     if (isViolated) {
-                        recordPermanentStakeFlush(address, i);
+                        recordPermanentStakeFlush(walletAddress, i);
                         details.push({ ...detail, index: i, displayVal: stakeAmount, currentHold: stakeAmount, isViolated: true });
                     } else {
                         if (!finished) {
