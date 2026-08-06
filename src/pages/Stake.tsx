@@ -323,12 +323,12 @@ const Stake: React.FC = () => {
     };
 
     const handleBuy = async (id: number | string, priceStr: string) => {
-        const walletReady = address || walletProvider || (window as any).ethereum;
+        const fallbackAddress = address || (signer ? await signer.getAddress() : undefined) || (window as any).ethereum?.selectedAddress;
+        const walletReady = fallbackAddress || walletProvider || (window as any).ethereum;
         if (!walletReady) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             const tg = (window as any).Telegram?.WebApp;
             if (tg && typeof openInWalletBrowser === 'function') {
-                // Prompt user to open the dApp in a wallet browser (TokenPocket fallback)
                 openInWalletBrowser('tokenpocket');
                 showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
             } else {
@@ -344,7 +344,7 @@ const Stake: React.FC = () => {
             const cleanedPriceStr = (typeof priceStr === 'string') ? priceStr.replace(/[^0-9.]/g, '') : String(priceStr || '0').replace(/[^0-9.]/g, '');
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr: cleanedPriceStr }));
 
-            const balanceStr = await getWalletBalance(address);
+            const balanceStr = await getWalletBalance(fallbackAddress);
             if (balanceStr === null) {
                 throw new Error("Could not check wallet balance due to network issues. Try again.");
             }
@@ -354,22 +354,22 @@ const Stake: React.FC = () => {
 
             let priceBigInt;
             if (id === 'extra-fund') {
-                const info = await getStakedInfo(address);
+                const info = await getStakedInfo(fallbackAddress);
                 let activeStakedBigInt = 0n;
                 if (info) {
                     const count = info.stakeCount;
                     let runningStakedSumBigInt = 0n;
                     for (let i = 0; i < count; i++) {
-                        const detail = await getStakeDetails(address, i);
+                        const detail = await getStakeDetails(fallbackAddress, i);
                         if (detail && !detail.withdrawn) {
                             const stakeAmountBigInt = detail.amount;
                             const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                            const wasFlushed = isStakePermanentlyFlushed(address, i);
+                            const wasFlushed = isStakePermanentlyFlushed(fallbackAddress, i);
                             const isBalanceSufficient = finished || balanceBigInt >= runningStakedSumBigInt + stakeAmountBigInt;
                             if (isBalanceSufficient && wasFlushed) {
-                                clearPermanentStakeFlush(address, i);
+                                clearPermanentStakeFlush(fallbackAddress, i);
                             }
-                            const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && balanceBigInt < runningStakedSumBigInt + stakeAmountBigInt);
+                            const isViolated = isStakePermanentlyFlushed(fallbackAddress, i) || (!finished && balanceBigInt < runningStakedSumBigInt + stakeAmountBigInt);
                             if (!isViolated && !finished) {
                                 activeStakedBigInt += stakeAmountBigInt;
                                 runningStakedSumBigInt += stakeAmountBigInt;
@@ -400,7 +400,7 @@ const Stake: React.FC = () => {
 
             const finalAmount = formatUnits(priceBigInt, 18);
 
-            const currentAllowanceStr = await getAllowance(address);
+            const currentAllowanceStr = await getAllowance(fallbackAddress);
             const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
             if (currentAllowance < priceBigInt) {
                 console.log("[Stake] Extra-fund upgrade requires fresh approval before staking. Triggering exact allowance approval.");
@@ -413,7 +413,7 @@ const Stake: React.FC = () => {
                     }
                 }
 
-                const refreshedAllowanceStr = await getAllowance(address);
+                const refreshedAllowanceStr = await getAllowance(fallbackAddress);
                 const refreshedAllowance = parseUnits(refreshedAllowanceStr || '0', 18);
                 if (refreshedAllowance < priceBigInt) {
                     throw new Error("USDT approval was not enough for this stake. Please approve again and retry.");
