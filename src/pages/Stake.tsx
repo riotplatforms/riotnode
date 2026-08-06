@@ -19,7 +19,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, signer, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, walletProvider, miningStats, setMiningStats } = useWallet();
     const { stake, approve, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -323,7 +323,8 @@ const Stake: React.FC = () => {
     };
 
     const handleBuy = async (id: number | string, priceStr: string) => {
-        if (!signer || !address) {
+        const walletReady = address || walletProvider || (window as any).ethereum;
+        if (!walletReady) {
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             connect();
             return;
@@ -442,7 +443,8 @@ const Stake: React.FC = () => {
     };
 
     const handleWithdraw = async (index: number) => {
-        if (!signer) {
+        const walletReady = address || walletProvider || (window as any).ethereum;
+        if (!walletReady) {
             connect();
             return;
         }
