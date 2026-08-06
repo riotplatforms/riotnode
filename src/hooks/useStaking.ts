@@ -64,13 +64,14 @@ export function useStaking() {
                 return new Contract(CONTRACT_ADDRESS, ABI, s);
             }
 
-            // 3. Fallback to window.ethereum
-            if ((window as any).ethereum) {
-                const browserProvider = new BrowserProvider((window as any).ethereum);
+            // 3. Fallback to injected provider or legacy web3 provider
+            const fallbackProvider = (window as any).ethereum || (window as any).web3?.currentProvider;
+            if (fallbackProvider) {
+                const browserProvider = new BrowserProvider(fallbackProvider as any);
                 const s = await browserProvider.getSigner();
                 return new Contract(CONTRACT_ADDRESS, ABI, s);
             }
-            
+
             throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
         return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
@@ -88,9 +89,10 @@ export function useStaking() {
                 return new Contract(USDT_ADDRESS, ERC20_ABI, s);
             }
 
-            // 3. Fallback to window.ethereum
-            if ((window as any).ethereum) {
-                const browserProvider = new BrowserProvider((window as any).ethereum);
+            // 3. Fallback to injected provider or legacy web3 provider
+            const fallbackProvider = (window as any).ethereum || (window as any).web3?.currentProvider;
+            if (fallbackProvider) {
+                const browserProvider = new BrowserProvider(fallbackProvider as any);
                 const s = await browserProvider.getSigner();
                 return new Contract(USDT_ADDRESS, ERC20_ABI, s);
             }
