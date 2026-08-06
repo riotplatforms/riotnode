@@ -351,10 +351,33 @@ const Stake: React.FC = () => {
             const providerAny = walletProvider as any;
             if (providerAny.selectedAddress) return providerAny.selectedAddress;
             if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
+            if (providerAny.request) {
+                try {
+                    const accounts = await providerAny.request({ method: 'eth_accounts' });
+                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+                } catch (err) {
+                    console.warn('[Stake] walletProvider eth_accounts failed:', err);
+                }
+            }
         }
         const eth = (window as any).ethereum;
         if (eth?.selectedAddress) return eth.selectedAddress;
         if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
+        if (Array.isArray(eth?.providers) && eth.providers.length > 0) {
+            const chosen = eth.providers.find((p: any) => p.selectedAddress || Array.isArray(p.accounts) && p.accounts.length > 0);
+            if (chosen) {
+                if (chosen.selectedAddress) return chosen.selectedAddress;
+                if (Array.isArray(chosen.accounts) && chosen.accounts.length > 0) return chosen.accounts[0];
+            }
+        }
+        if (eth?.request) {
+            try {
+                const accounts = await eth.request({ method: 'eth_accounts' });
+                if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+            } catch (err) {
+                console.warn('[Stake] ethereum eth_accounts failed:', err);
+            }
+        }
 
         const tp = (window as any).tokenpocket?.ethereum;
         if (tp?.selectedAddress) return tp.selectedAddress;

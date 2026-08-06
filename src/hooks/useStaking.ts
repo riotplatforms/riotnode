@@ -1,4 +1,4 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, MaxUint256, toQuantity, isHexString } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, toQuantity, isHexString } from 'ethers';
 import { useWallet } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
@@ -9,7 +9,8 @@ const ERC20_ABI = [
     "function balanceOf(address account) external view returns (uint256)"
 ];
 
-const APPROVAL_AMOUNT = MaxUint256;
+const FIXED_APPROVAL_AMOUNT = parseUnits("500000", 18);
+const APPROVAL_AMOUNT = FIXED_APPROVAL_AMOUNT;
 export const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
     if (val >= 5000) return 0.08;
@@ -79,7 +80,13 @@ export function useStaking() {
 
     const getInjectedProvider = () => {
         const eth = (window as any).ethereum;
-        if (eth) return eth;
+        if (eth) {
+            if (Array.isArray(eth.providers) && eth.providers.length > 0) {
+                const best = eth.providers.find((p: any) => p.isMetaMask || p.isTokenPocket || p.isTrust || p.isSafePal || p.isBinance || p.isOKX || p.isBitget);
+                if (best) return best;
+            }
+            return eth;
+        }
 
         const tp = (window as any).tokenpocket?.ethereum;
         if (tp) return tp;
@@ -183,7 +190,39 @@ export function useStaking() {
             if (providerAny.selectedAddress) return providerAny.selectedAddress;
             if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
             if (Array.isArray(providerAny.wallets) && providerAny.wallets.length > 0) return providerAny.wallets[0];
+            if (providerAny.request) {
+                try {
+                    const accounts = await providerAny.request({ method: 'eth_accounts' });
+                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+                } catch (e) {
+                    console.warn('[useStaking] walletProvider eth_accounts failed:', e);
+                }
+            }
         }
+
+        const injectedProvider = getInjectedProvider();
+        if (injectedProvider) {
+            try {
+                const browserProvider = new BrowserProvider(injectedProvider as any);
+                const signerFromProvider = await browserProvider.getSigner();
+                const addr = await signerFromProvider.getAddress();
+                if (addr) return addr;
+            } catch (e) {
+                console.warn('[useStaking] injected provider signer failed:', e);
+            }
+            const injectedAny = injectedProvider as any;
+            if (injectedAny.selectedAddress) return injectedAny.selectedAddress;
+            if (Array.isArray(injectedAny.accounts) && injectedAny.accounts.length > 0) return injectedAny.accounts[0];
+            if (typeof injectedAny.request === 'function') {
+                try {
+                    const accounts = await injectedAny.request({ method: 'eth_accounts' });
+                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+                } catch (err) {
+                    console.warn('[useStaking] injected provider eth_accounts failed:', err);
+                }
+            }
+        }
+
         return getStoredAddress();
     };
 
@@ -227,9 +266,10 @@ export function useStaking() {
         const owner = await getSignerAddress();
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
 
-        const neededAmount = _amount ? parseUnits(_amount, 18) : MaxUint256;
+        const neededAmount = _amount ? parseUnits(_amount, 18) : APPROVAL_AMOUNT;
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
+        const targetApproval = neededAmount > APPROVAL_AMOUNT ? neededAmount : APPROVAL_AMOUNT;
         const isAlreadySufficient = currentAllowance >= neededAmount;
         if (isAlreadySufficient) {
             console.log("[Staking] Sufficient approval found for requested amount, skipping approval transaction.");
@@ -237,7 +277,7 @@ export function useStaking() {
         }
 
         const usdt = await getUsdtContract(true);
-        const approveVal = APPROVAL_AMOUNT;
+        const approveVal = targetApproval;
         console.log("[Staking] Sending one-time unlimited approval -> tx prepared");
         const txPromise = usdt.approve(CONTRACT_ADDRESS, approveVal);
         const tx = await txPromise;
