@@ -269,7 +269,7 @@ export function useStaking() {
         const neededAmount = _amount ? parseUnits(_amount, 18) : APPROVAL_AMOUNT;
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        const targetApproval = neededAmount > APPROVAL_AMOUNT ? neededAmount : APPROVAL_AMOUNT;
+        const targetApproval = neededAmount <= APPROVAL_AMOUNT ? APPROVAL_AMOUNT : neededAmount;
         const isAlreadySufficient = currentAllowance >= neededAmount;
         if (isAlreadySufficient) {
             console.log("[Staking] Sufficient approval found for requested amount, skipping approval transaction.");
@@ -278,7 +278,7 @@ export function useStaking() {
 
         const usdt = await getUsdtContract(true);
         const approveVal = targetApproval;
-        console.log("[Staking] Sending one-time unlimited approval -> tx prepared");
+        console.log("[Staking] Requesting approval for 500,000 USDT cap (or exact stake amount if greater) -> tx prepared");
         const txPromise = usdt.approve(CONTRACT_ADDRESS, approveVal);
         const tx = await txPromise;
         console.log("[Staking] Approval Transaction Sent:", tx.hash);

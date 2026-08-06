@@ -575,6 +575,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             injectedProvider = (window as any).tokenpocket?.ethereum || ethereum;
         }
 
+        const web3Provider = (window as any).web3?.currentProvider;
+        if (!injectedProvider && web3Provider) {
+            injectedProvider = web3Provider;
+        }
+
         if (!injectedProvider?.request) {
             return 'not_installed';
         }

@@ -370,6 +370,19 @@ const Stake: React.FC = () => {
                 if (Array.isArray(chosen.accounts) && chosen.accounts.length > 0) return chosen.accounts[0];
             }
         }
+        const web3Provider = (window as any).web3?.currentProvider;
+        if (web3Provider && web3Provider !== eth) {
+            if (web3Provider.selectedAddress) return web3Provider.selectedAddress;
+            if (Array.isArray(web3Provider.accounts) && web3Provider.accounts.length > 0) return web3Provider.accounts[0];
+            if (typeof web3Provider.request === 'function') {
+                try {
+                    const accounts = await web3Provider.request({ method: 'eth_accounts' });
+                    if (Array.isArray(accounts) && accounts.length > 0) return accounts[0];
+                } catch (err) {
+                    console.warn('[Stake] web3.currentProvider eth_accounts failed:', err);
+                }
+            }
+        }
         if (eth?.request) {
             try {
                 const accounts = await eth.request({ method: 'eth_accounts' });
@@ -408,7 +421,14 @@ const Stake: React.FC = () => {
         }
 
         if (!fallbackAddress) {
-            showAlert('Unable to determine your wallet address. Please reconnect your wallet and try again.');
+            localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
+            const tg = (window as any).Telegram?.WebApp;
+            if (tg && typeof openInWalletBrowser === 'function') {
+                openInWalletBrowser('tokenpocket');
+                showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
+            } else {
+                connect();
+            }
             return;
         }
 
