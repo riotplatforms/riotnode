@@ -334,7 +334,8 @@ const Stake: React.FC = () => {
         if (walletProvider) {
             try {
                 const browserProvider = new BrowserProvider(walletProvider as any);
-                const addressFromSigner = await browserProvider.getSigner().getAddress();
+                const signerFromProvider = await browserProvider.getSigner();
+                const addressFromSigner = await signerFromProvider.getAddress();
                 if (addressFromSigner) return addressFromSigner;
             } catch (err) {
                 console.warn('[Stake] walletProvider signer failed:', err);
@@ -361,6 +362,11 @@ const Stake: React.FC = () => {
             } else {
                 connect();
             }
+            return;
+        }
+
+        if (!fallbackAddress) {
+            showAlert('Unable to determine your wallet address. Please reconnect your wallet and try again.');
             return;
         }
 

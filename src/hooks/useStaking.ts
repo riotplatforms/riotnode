@@ -127,7 +127,7 @@ export function useStaking() {
             const providerAny = walletProvider as any;
             try {
                 const browserProvider = new BrowserProvider(providerAny);
-                const signerFromProvider = browserProvider.getSigner();
+                const signerFromProvider = await browserProvider.getSigner();
                 const addr = await signerFromProvider.getAddress();
                 if (addr) return addr;
             } catch (e) {
