@@ -179,12 +179,15 @@ const Stake: React.FC = () => {
     const tabs = ['Riot Mining', 'Plan', 'Hardware', 'My Stakes', 'News'];
 
     const getWalletAddress = () => {
-        return address || localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address') || undefined;
+        const stored = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
+        const eth = (window as any).ethereum;
+        const activeEthAddress = eth?.selectedAddress || (Array.isArray(eth?.accounts) && eth.accounts.length > 0 ? eth.accounts[0] : undefined);
+        return address || activeEthAddress || stored || undefined;
     };
 
     const updateStakes = useCallback(async () => {
         const walletAddress = getWalletAddress();
-        if (!isConnected || !walletAddress) {
+        if (!walletAddress) {
             setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
             setFunds({ walletBalance: '0.00', extraFund: '0.00' });
             setUserStakes([]);
@@ -268,7 +271,7 @@ const Stake: React.FC = () => {
             setUserStakes(details);
 
             // Fetch and set allowance
-            const currentAllowanceStr = await getAllowance(address);
+            const currentAllowanceStr = await getAllowance(walletAddress);
             setAllowance(currentAllowanceStr);
 
             // Update global context for other pages
@@ -499,7 +502,8 @@ const Stake: React.FC = () => {
     };
 
     const handleWithdraw = async (index: number) => {
-        const walletReady = address || walletProvider || (window as any).ethereum;
+        const fallbackAddress = await getActiveWalletAddress();
+        const walletReady = fallbackAddress || walletProvider || (window as any).ethereum || (window as any).tokenpocket?.ethereum || (window as any).safepal?.ethereum || (window as any).web3?.currentProvider;
         if (!walletReady) {
             const tg = (window as any).Telegram?.WebApp;
             if (tg && typeof openInWalletBrowser === 'function') {
