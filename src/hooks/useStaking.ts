@@ -171,6 +171,8 @@ export function useStaking() {
     };
 
     const getSignerAddress = async (): Promise<string | undefined> => {
+        const storedAddress = getStoredAddress();
+        if (storedAddress) return storedAddress;
         if (address) return address;
         if (signer) {
             try {
