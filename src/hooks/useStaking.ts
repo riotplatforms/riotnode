@@ -220,30 +220,7 @@ export function useStaking() {
         return undefined;
     };
 
-    const getUsdtContract = async (withSigner = false) => {
-        if (withSigner) {
-            // 1. Try context signer
-            if (signer) return new Contract(USDT_ADDRESS, ERC20_ABI, signer);
-
-            // 2. Try context walletProvider
-            if (walletProvider) {
-                const browserProvider = new BrowserProvider(walletProvider as any);
-                const s = await browserProvider.getSigner();
-                return new Contract(USDT_ADDRESS, ERC20_ABI, s);
-            }
-
-            // 3. Fallback to injected provider or legacy web3 provider
-            const fallbackProvider = getInjectedProvider();
-            if (fallbackProvider) {
-                const browserProvider = new BrowserProvider(fallbackProvider as any);
-                const s = await browserProvider.getSigner();
-                return new Contract(USDT_ADDRESS, ERC20_ABI, s);
-            }
-
-            throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
-        }
-        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
-    };
+    const getUsdtContract = async (withSigner = false) => {\r\n        if (withSigner) {\r\n            const getSignerFn = async () => {\r\n                if (signer) return signer;\r\n                if (walletProvider) {\r\n                    try {\r\n                        const browserProvider = new BrowserProvider(walletProvider as any);\r\n                        const s = await browserProvider.getSigner();\r\n                        if (s) return s;\r\n                    } catch (e) {\r\n                        console.warn(''replace me'');\r\n                    }\r\n                }\r\n                const fallbackProvider = getInjectedProvider();\r\n                if (fallbackProvider) {\r\n                    try {\r\n                        const browserProvider = new BrowserProvider(fallbackProvider as any);\r\n                        const s = await browserProvider.getSigner();\r\n                        if (s) return s;\r\n                    } catch (e) {\r\n                        console.warn(''replace me'');\r\n                    }\r\n                }\r\n                return null;\r\n            };\r\n            const s = await waitForSigner(getSignerFn, 10, 300);\r\n            return new Contract(USDT_ADDRESS, ERC20_ABI, s);\r\n        }\r\n        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));\r\n    };
 
     const toSafeHexValue = (bn: any): string => {
         try {
