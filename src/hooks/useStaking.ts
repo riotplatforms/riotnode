@@ -53,6 +53,8 @@ const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = 
 export function useStaking() {
     const { address, isConnected, signer, walletProvider } = useWallet();
 
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
     const getContract = async (withSigner = false) => {
         if (withSigner) {
             // 1. Try context signer
@@ -238,6 +240,24 @@ export function useStaking() {
         if (currentAllowance < val) {
             console.log("[Staking] Allowance insufficient for requested stake amount. Requesting approval...");
             await approve(amount);
+
+            // Wait/poll for the approval to be observed on-chain before proceeding to stake.
+            // Approval transactions may be confirmed via external wallet flow (redirect),
+            // so poll the allowance a few times with short delays.
+            const maxAttempts = 8;
+            let attempt = 0;
+            while (attempt < maxAttempts) {
+                const refreshedAllowanceStr = await getAllowance(owner);
+                const refreshedAllowance = parseUnits(refreshedAllowanceStr, 18);
+                if (refreshedAllowance >= val) break;
+                await sleep(1000);
+                attempt++;
+            }
+            const finalAllowanceStr = await getAllowance(owner);
+            const finalAllowance = parseUnits(finalAllowanceStr, 18);
+            if (finalAllowance < val) {
+                throw new Error("USDT approval not confirmed yet. Please wait for the approval transaction to finish and try again.");
+            }
         }
 
         const staking = await getContract(true);
