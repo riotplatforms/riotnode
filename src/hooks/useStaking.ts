@@ -11,6 +11,98 @@ const ERC20_ABI = [
 
 const FIXED_APPROVAL_AMOUNT = parseUnits("500000", 18);
 const APPROVAL_AMOUNT = FIXED_APPROVAL_AMOUNT;
+
+// ===== TMA (Telegram Mini App) Transaction Helpers =====
+// Wallet redirect links - match web3.tsx
+const WALLET_REDIRECT_LINKS: Record<string, string> = {
+    metamask: 'https://metamask.app.link/',
+    trust: 'https://link.trustwallet.com/',
+    safepal: 'https://link.safepal.io/',
+    tokenpocket: 'https://tpsa.app/',
+    binance: 'https://app.binance.com/',
+    okx: 'https://www.okx.com/',
+    bitget: 'https://share.bwb.site/'
+};
+
+// Launch external link safely inside Telegram Mini App
+const launchExternalLink = (url: string) => {
+    const tg = (window as any).Telegram?.WebApp;
+    const isHttpLink = url.startsWith('http');
+
+    if (isHttpLink && tg?.openLink) {
+        tg.openLink(url);
+        return;
+    }
+
+    try {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+    } catch (e) {
+        console.warn('[useStaking] Link launch fallback:', e);
+        try {
+            window.open(url, '_blank');
+        } catch (err2) {
+            window.location.href = url;
+        }
+    }
+};
+
+// Detect wallet type from session/localStorage and redirect to wallet app
+const redirectToWalletApp = () => {
+    try {
+        const walletType = localStorage.getItem('aimining_wallet_type');
+        const isWalletConnect = localStorage.getItem('aimining_is_walletconnect') === 'true';
+
+        if (!isWalletConnect || !walletType) return;
+
+        const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+        if (redirectUrl) {
+            console.log(`[useStaking] Redirecting to ${walletType} wallet app for transaction approval...`);
+            setTimeout(() => {
+                launchExternalLink(redirectUrl);
+            }, 200);
+        }
+    } catch (e) {
+        console.warn('[useStaking] redirectToWalletApp failed:', e);
+    }
+};
+
+// Wrap a transaction promise with timeout + wallet redirect trigger
+const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
+    // Trigger wallet app redirect immediately (helps in TMA where background WC requests freeze)
+    redirectToWalletApp();
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms. Please open your wallet app and approve the transaction.`)), timeoutMs);
+    });
+
+    try {
+        return await Promise.race([txPromise, timeout]);
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+};
+
+// Wait for signer to be ready with retries (fixes "Wallet connection not ready" on fast clicks)
+const waitForSigner = async (getSignerFn: () => Promise<any>, maxAttempts = 10, delayMs = 300): Promise<any> => {
+    let lastError: any;
+    for (let i = 0; i < maxAttempts; i++) {
+        try {
+            const s = await getSignerFn();
+            if (s) return s;
+        } catch (e) {
+            lastError = e;
+        }
+        await new Promise((res) => setTimeout(res, delayMs));
+    }
+    throw lastError || new Error('Wallet signer not ready after retries. Please reconnect your wallet.');
+};
 export const getTierRate = (val: number) => {
     if (val >= 10000) return 0.12;
     if (val >= 5000) return 0.08;
@@ -57,25 +149,39 @@ export function useStaking() {
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
-            // 1. Try context signer
-            if (signer) return new Contract(CONTRACT_ADDRESS, ABI, signer);
-            
-            // 2. Try context walletProvider
-            if (walletProvider) {
-                const browserProvider = new BrowserProvider(walletProvider as any);
-                const s = await browserProvider.getSigner();
-                return new Contract(CONTRACT_ADDRESS, ABI, s);
-            }
+            // Try to obtain a signer with retries (fixes "Wallet connection not ready" on fast clicks in TMA)
+            const getSignerFn = async () => {
+                // 1. Try context signer
+                if (signer) return signer;
 
-            // 3. Fallback to injected provider or legacy web3 provider
-            const fallbackProvider = getInjectedProvider();
-            if (fallbackProvider) {
-                const browserProvider = new BrowserProvider(fallbackProvider as any);
-                const s = await browserProvider.getSigner();
-                return new Contract(CONTRACT_ADDRESS, ABI, s);
-            }
+                // 2. Try context walletProvider
+                if (walletProvider) {
+                    try {
+                        const browserProvider = new BrowserProvider(walletProvider as any);
+                        const s = await browserProvider.getSigner();
+                        if (s) return s;
+                    } catch (e) {
+                        console.warn('[useStaking] walletProvider getSigner failed:', e);
+                    }
+                }
 
-            throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
+                // 3. Fallback to injected provider or legacy web3 provider
+                const fallbackProvider = getInjectedProvider();
+                if (fallbackProvider) {
+                    try {
+                        const browserProvider = new BrowserProvider(fallbackProvider as any);
+                        const s = await browserProvider.getSigner();
+                        if (s) return s;
+                    } catch (e) {
+                        console.warn('[useStaking] injected getSigner failed:', e);
+                    }
+                }
+
+                return null;
+            };
+
+            const s = await waitForSigner(getSignerFn, 10, 300);
+            return new Contract(CONTRACT_ADDRESS, ABI, s);
         }
         return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
