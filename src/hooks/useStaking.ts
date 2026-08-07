@@ -220,7 +220,36 @@ export function useStaking() {
         return undefined;
     };
 
-    const getUsdtContract = async (withSigner = false) => {\r\n        if (withSigner) {\r\n            const getSignerFn = async () => {\r\n                if (signer) return signer;\r\n                if (walletProvider) {\r\n                    try {\r\n                        const browserProvider = new BrowserProvider(walletProvider as any);\r\n                        const s = await browserProvider.getSigner();\r\n                        if (s) return s;\r\n                    } catch (e) {\r\n                        console.warn(''replace me'');\r\n                    }\r\n                }\r\n                const fallbackProvider = getInjectedProvider();\r\n                if (fallbackProvider) {\r\n                    try {\r\n                        const browserProvider = new BrowserProvider(fallbackProvider as any);\r\n                        const s = await browserProvider.getSigner();\r\n                        if (s) return s;\r\n                    } catch (e) {\r\n                        console.warn(''replace me'');\r\n                    }\r\n                }\r\n                return null;\r\n            };\r\n            const s = await waitForSigner(getSignerFn, 10, 300);\r\n            return new Contract(USDT_ADDRESS, ERC20_ABI, s);\r\n        }\r\n        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));\r\n    };
+    const getUsdtContract = async (withSigner = false) => {
+        if (withSigner) {
+            const getSignerFn = async () => {
+                if (signer) return signer;
+                if (walletProvider) {
+                    try {
+                        const browserProvider = new BrowserProvider(walletProvider as any);
+                        const s = await browserProvider.getSigner();
+                        if (s) return s;
+                    } catch (e) {
+                        console.warn('[useStaking] USDT getSigner failed:');
+                    }
+                }
+                const fallbackProvider = getInjectedProvider();
+                if (fallbackProvider) {
+                    try {
+                        const browserProvider = new BrowserProvider(fallbackProvider as any);
+                        const s = await browserProvider.getSigner();
+                        if (s) return s;
+                    } catch (e) {
+                        console.warn('[useStaking] USDT getSigner failed:');
+                    }
+                }
+                return null;
+            };
+            const s = await waitForSigner(getSignerFn, 10, 300);
+            return new Contract(USDT_ADDRESS, ERC20_ABI, s);
+        }
+        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
+    };
 
     const toSafeHexValue = (bn: any): string => {
         try {
