@@ -9,7 +9,7 @@ import { parseEthersError } from '../utils/errors';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, miningStats, setMiningStats } = useWallet();
 
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { btcPrice } = usePrice();
@@ -279,13 +279,10 @@ const Wallet: React.FC = () => {
                 </div>
                 <div className="flex items-center">
                     {isConnected && (
-                        <button
-                            onClick={() => setIsDisconnectModalOpen(true)} 
-                            className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-1 shadow-neon transition-all text-[9px] font-black active:scale-95 cursor-pointer"
-                        >
+                        <div className="bg-primary text-black px-3 py-1.5 rounded-full border border-primary flex items-center gap-1 shadow-neon transition-all text-[9px] font-black">
                             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
                             {address?.slice(0, 4)}...{address?.slice(-4)}
-                        </button>
+                        </div>
                     )}
                 </div>
             </header>
