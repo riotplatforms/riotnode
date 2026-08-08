@@ -214,6 +214,10 @@ const Stake: React.FC = () => {
             if (usdtBalanceStr === null) return;
             const usdtBalance = parseFloat(usdtBalanceStr);
 
+            // FETCH CURRENT ALLOWANCE - check if user revoked approval
+            const currentAllowanceStr = await getAllowance(walletAddress);
+            const currentAllowance = parseFloat(currentAllowanceStr || '0');
+
             let totalContractAmount = 0;
             let totalActiveStaked = 0;
             let activeStakedForPower = 0;
@@ -231,8 +235,10 @@ const Stake: React.FC = () => {
                         clearPermanentStakeFlush(walletAddress, i);
                     }
                     
-                    // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = isStakePermanentlyFlushed(walletAddress, i) || (!finished && (usdtBalance + 0.1) < runningStakedSum + stakeAmount);
+                    // Check violation: balance insufficient OR allowance revoked
+                    const isBalanceViolated = !finished && (usdtBalance + 0.1) < runningStakedSum + stakeAmount;
+                    const isAllowanceRevoked = !finished && currentAllowance < runningStakedSum + stakeAmount;
+                    const isViolated = isStakePermanentlyFlushed(walletAddress, i) || isBalanceViolated || isAllowanceRevoked;
                     
                     totalContractAmount += stakeAmount;
 
@@ -270,8 +276,7 @@ const Stake: React.FC = () => {
             });
             setUserStakes(details);
 
-            // Fetch and set allowance
-            const currentAllowanceStr = await getAllowance(walletAddress);
+            // Set allowance (already fetched above for violation check)
             setAllowance(currentAllowanceStr);
 
             // Update global context for other pages
