@@ -764,6 +764,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleDirectConnect = async () => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        if (isTMA) {
+            // In TMA: show WalletConnect URI directly instead of AppKit modal
+            // prepareWalletConnect() already runs when modal opened, so activeUri should be generating
+            // Just show the connecting state for generic "walletconnect"
+            setConnectingWallet('metamask');
+            return;
+        }
         setIsConnectModalOpen(false);
         try {
             clearWalletConnectPairingCache();
