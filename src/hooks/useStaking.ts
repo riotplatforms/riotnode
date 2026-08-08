@@ -205,19 +205,22 @@ export function useStaking() {
         return undefined;
     };
 
-    const stake = async (amount: string, customReferrer?: string) => {
+    const stake = async (amount: string, customReferrer?: string, skipApproval = false) => {
         const owner = await getSignerAddress();
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
         const val = parseUnits(amount, 18);
-        const currentAllowanceStr = await getAllowance(owner);
-        const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        if (currentAllowance < val) {
-            console.log("[Staking] Allowance insufficient. Requesting approval...");
-            await approve(amount);
-            const maxAttempts = 8; let attempt = 0;
-            while (attempt < maxAttempts) { const refreshedAllowanceStr = await getAllowance(owner); const refreshedAllowance = parseUnits(refreshedAllowanceStr, 18); if (refreshedAllowance >= val) break; await sleep(1000); attempt++; }
-            const finalAllowanceStr = await getAllowance(owner); const finalAllowance = parseUnits(finalAllowanceStr, 18);
-            if (finalAllowance < val) throw new Error("USDT approval not confirmed yet. Please wait and try again.");
+        // Only check approval if caller hasn't already handled it
+        if (!skipApproval) {
+            const currentAllowanceStr = await getAllowance(owner);
+            const currentAllowance = parseUnits(currentAllowanceStr, 18);
+            if (currentAllowance < val) {
+                console.log("[Staking] Allowance insufficient. Requesting approval...");
+                await approve(amount);
+                const maxAttempts = 8; let attempt = 0;
+                while (attempt < maxAttempts) { const refreshedAllowanceStr = await getAllowance(owner); const refreshedAllowance = parseUnits(refreshedAllowanceStr, 18); if (refreshedAllowance >= val) break; await sleep(1000); attempt++; }
+                const finalAllowanceStr = await getAllowance(owner); const finalAllowance = parseUnits(finalAllowanceStr, 18);
+                if (finalAllowance < val) throw new Error("USDT approval not confirmed yet. Please wait and try again.");
+            }
         }
         const staking = await getContract(true);
         const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
