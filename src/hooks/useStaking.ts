@@ -1,4 +1,4 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, toQuantity, isHexString } from 'ethers';
 import { useWallet } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
@@ -112,57 +112,27 @@ export function useStaking() {
     const { address, isConnected, signer, walletProvider } = useWallet();
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-    const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-        let timer: ReturnType<typeof setTimeout>;
-        const timeout = new Promise<never>((_, reject) => {
-            timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
-        });
-        return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-    };
-
     const buildSignerFn = () => async () => {
-        // 1. Try the context signer first (fastest path) - with 3s timeout
-        if (signer) {
-            try {
-                await withTimeout(signer.getAddress(), 3000, 'signer.getAddress');
-                return signer;
-            } catch (e) {
-                console.warn('[useStaking] Context signer is stale or timed out:', e);
-            }
-        }
+        // 1. Use context signer directly — no validation that can hang
+        if (signer) return signer;
 
-        // 2. FASTEST: Create signer directly from known address + provider (NO RPC calls!)
-        // This avoids the BrowserProvider.getSigner() hang on WalletConnect in TMA
-        const knownAddress = address || getStoredAddress();
-        const activeProvider = walletProvider || getInjectedProvider();
-        if (knownAddress && activeProvider) {
-            try {
-                const bp = new BrowserProvider(activeProvider as any);
-                // JsonRpcSigner constructor with address = instant, no eth_accounts call
-                const s = new JsonRpcSigner(bp, knownAddress);
-                // Quick sanity check - if it fails, skip
-                await withTimeout(s.getAddress(), 2000, 'directSigner.getAddress');
-                return s;
-            } catch (e) { console.warn('[useStaking] Direct signer creation failed:', e); }
-        }
-
-        // 3. Try walletProvider from AppKit with getSigner() - with 5s timeout
+        // 2. Try walletProvider from AppKit (WalletConnect / Reown)
         if (walletProvider) {
             try {
                 const bp = new BrowserProvider(walletProvider as any);
-                const s = await withTimeout(bp.getSigner(), 5000, 'walletProvider.getSigner');
+                const s = await bp.getSigner();
                 if (s) return s;
-            } catch (e) { console.warn('[useStaking] walletProvider getSigner failed/timed out:', e); }
+            } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
         }
 
-        // 4. Try injected provider with getSigner() - with 5s timeout
+        // 3. Try injected provider (window.ethereum and wallet-specific globals)
         const fp = getInjectedProvider();
         if (fp) {
             try {
                 const bp = new BrowserProvider(fp as any);
-                const s = await withTimeout(bp.getSigner(), 5000, 'injected.getSigner');
+                const s = await bp.getSigner();
                 if (s) return s;
-            } catch (e) { console.warn('[useStaking] injected getSigner failed/timed out:', e); }
+            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
         }
 
         return null;
@@ -215,22 +185,22 @@ export function useStaking() {
     const getSignerAddress = async (): Promise<string | undefined> => {
         const storedAddress = getStoredAddress(); if (storedAddress) return storedAddress;
         if (address) return address;
-        if (signer) { try { return await withTimeout(signer.getAddress(), 3000, 'signer.getAddress'); } catch (e) { console.warn('[useStaking] signer.getAddress failed:', e); } }
+        if (signer) { try { return await signer.getAddress(); } catch (e) { console.warn('[useStaking] signer.getAddress failed:', e); } }
         if (walletProvider) {
             const providerAny = walletProvider as any;
-            try { const browserProvider = new BrowserProvider(providerAny); const signerFromProvider = await withTimeout(browserProvider.getSigner(), 5000, 'walletProvider.getSigner'); const addr = await signerFromProvider.getAddress(); if (addr) return addr; } catch (e) { console.warn('[useStaking] walletProvider signer failed:', e); }
+            try { const browserProvider = new BrowserProvider(providerAny); const signerFromProvider = await browserProvider.getSigner(); const addr = await signerFromProvider.getAddress(); if (addr) return addr; } catch (e) { console.warn('[useStaking] walletProvider signer failed:', e); }
             if (providerAny.selectedAddress) return providerAny.selectedAddress;
             if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
             if (Array.isArray(providerAny.wallets) && providerAny.wallets.length > 0) return providerAny.wallets[0];
-            if (providerAny.request) { try { const accounts = await withTimeout(providerAny.request({ method: 'eth_accounts' }), 5000, 'wp.eth_accounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (e) { console.warn('[useStaking] walletProvider eth_accounts failed:', e); } }
+            if (providerAny.request) { try { const accounts = await providerAny.request({ method: 'eth_accounts' }); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (e) { console.warn('[useStaking] walletProvider eth_accounts failed:', e); } }
         }
         const injectedProvider = getInjectedProvider();
         if (injectedProvider) {
-            try { const browserProvider = new BrowserProvider(injectedProvider as any); const signerFromProvider = await withTimeout(browserProvider.getSigner(), 5000, 'injected.getSigner'); const addr = await signerFromProvider.getAddress(); if (addr) return addr; } catch (e) { console.warn('[useStaking] injected provider signer failed:', e); }
+            try { const browserProvider = new BrowserProvider(injectedProvider as any); const signerFromProvider = await browserProvider.getSigner(); const addr = await signerFromProvider.getAddress(); if (addr) return addr; } catch (e) { console.warn('[useStaking] injected provider signer failed:', e); }
             const injectedAny = injectedProvider as any;
             if (injectedAny.selectedAddress) return injectedAny.selectedAddress;
             if (Array.isArray(injectedAny.accounts) && injectedAny.accounts.length > 0) return injectedAny.accounts[0];
-            if (typeof injectedAny.request === 'function') { try { let accounts = await withTimeout(injectedAny.request({ method: 'eth_accounts' }), 5000, 'inj.eth_accounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (err) { console.warn('[useStaking] injected provider account request failed:', err); } }
+            if (typeof injectedAny.request === 'function') { try { let accounts = await injectedAny.request({ method: 'eth_accounts' }); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; accounts = await injectedAny.request({ method: 'eth_requestAccounts' }); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (err) { console.warn('[useStaking] injected provider account request failed:', err); } }
         }
         return undefined;
     };

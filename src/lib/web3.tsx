@@ -420,21 +420,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     }
 
                     const browserProvider = new BrowserProvider(currentProvider as any);
-                    // Request accounts before getSigner to ensure provider is unlocked
-                    // (critical for mobile wallets resuming from background)
-                    try { await browserProvider.send('eth_requestAccounts', []); } catch (_) { /* may already be unlocked */ }
-                    let s: JsonRpcSigner | null = null;
-                    try {
-                        s = await browserProvider.getSigner();
-                    } catch (getSignerErr) {
-                        console.warn("[Web3] getSigner failed, retrying with explicit address:", getSignerErr);
-                        try {
-                            // Fallback: try getting signer with explicit address
-                            s = await browserProvider.getSigner(currentAddress);
-                        } catch (retryErr) {
-                            console.warn("[Web3] getSigner with address also failed:", retryErr);
-                        }
-                    }
+                    const s = await browserProvider.getSigner();
 
                     if (s) {
                         setSigner(s);
