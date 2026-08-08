@@ -529,7 +529,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const connectInjectedWallet = async (preferredWallet?: string): Promise<'connected' | 'not_installed' | 'failed'> => {
-        const ethereum = (window as any).ethereum;
+        // Wait for window.ethereum to be injected (MetaMask may inject after page load)
+        let ethereum = (window as any).ethereum;
+        if (!ethereum && preferredWallet) {
+            for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 200));
+                ethereum = (window as any).ethereum;
+                if (ethereum) break;
+            }
+        }
         let injectedProvider = null;
 
         if (preferredWallet === 'tokenpocket') {
