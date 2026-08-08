@@ -57,11 +57,23 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
     try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }
 };
 
-const waitForSigner = async (getSignerFn: () => Promise<any>, maxAttempts = 10, delayMs = 300): Promise<any> => {
+const waitForSigner = async (getSignerFn: () => Promise<any>, maxAttempts = 15, delayMs = 500): Promise<any> => {
     let lastError: any;
     for (let i = 0; i < maxAttempts; i++) {
-        try { const s = await getSignerFn(); if (s) return s; } catch (e) { lastError = e; }
-        await new Promise((res) => setTimeout(res, delayMs));
+        try {
+            const s = await getSignerFn();
+            if (s) return s;
+        } catch (e: any) {
+            lastError = e;
+            // If the provider is locked, don't keep retrying — request accounts explicitly
+            const msg = e?.message || e?.code || '';
+            if (msg.includes('Already processing') || msg.includes('user rejected') || msg.includes('User rejected')) {
+                throw e; // Fail fast on user rejection
+            }
+        }
+        // Exponential-ish backoff: 500, 600, 700, ... capped at 1500ms
+        const backoff = Math.min(delayMs + i * 100, 1500);
+        await new Promise((res) => setTimeout(res, backoff));
     }
     throw lastError || new Error('Wallet signer not ready after retries. Please reconnect your wallet.');
 };
@@ -97,15 +109,65 @@ export function useStaking() {
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
     const buildSignerFn = () => async () => {
-        if (signer) return signer;
-        if (walletProvider) { try { const bp = new BrowserProvider(walletProvider as any); const s = await bp.getSigner(); if (s) return s; } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); } }
+        // 1. Try the context signer first (fastest path)
+        if (signer) {
+            try {
+                // Verify signer is still valid by attempting getAddress
+                await signer.getAddress();
+                return signer;
+            } catch (e) {
+                console.warn('[useStaking] Context signer is stale, will try recovery:', e);
+            }
+        }
+
+        // 2. Try walletProvider from AppKit (WalletConnect / Reown)
+        if (walletProvider) {
+            try {
+                const bp = new BrowserProvider(walletProvider as any);
+                // Ensure accounts are unlocked before getSigner
+                try { await bp.send('eth_requestAccounts', []); } catch (_) { /* may already be unlocked */ }
+                const s = await bp.getSigner();
+                if (s) return s;
+            } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
+        }
+
+        // 3. Try injected provider (window.ethereum and wallet-specific globals)
         const fp = getInjectedProvider();
-        if (fp) { try { const bp = new BrowserProvider(fp as any); const s = await bp.getSigner(); if (s) return s; } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); } }
+        if (fp) {
+            try {
+                const bp = new BrowserProvider(fp as any);
+                // Request accounts to ensure the provider is unlocked (critical for mobile/TMA)
+                try { await bp.send('eth_requestAccounts', []); } catch (_) { /* may already be unlocked */ }
+                const s = await bp.getSigner();
+                if (s) return s;
+            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
+        }
+
+        // 4. Last-resort: try raw provider.request directly to get a signer
+        const rawProvider = walletProvider || fp;
+        if (rawProvider?.request) {
+            try {
+                const accounts = await rawProvider.request({ method: 'eth_accounts' });
+                if (Array.isArray(accounts) && accounts.length > 0) {
+                    const bp = new BrowserProvider(rawProvider as any);
+                    const s = await bp.getSigner(accounts[0]);
+                    if (s) return s;
+                }
+                // If eth_accounts returned empty, try requesting
+                const requestedAccounts = await rawProvider.request({ method: 'eth_requestAccounts' });
+                if (Array.isArray(requestedAccounts) && requestedAccounts.length > 0) {
+                    const bp = new BrowserProvider(rawProvider as any);
+                    const s = await bp.getSigner(requestedAccounts[0]);
+                    if (s) return s;
+                }
+            } catch (e) { console.warn('[useStaking] raw provider.request signer recovery failed:', e); }
+        }
+
         return null;
     };
 
     const getContract = async (withSigner = false) => {
-        if (withSigner) { const s = await waitForSigner(buildSignerFn(), 10, 300); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+        if (withSigner) { const s = await waitForSigner(buildSignerFn()); return new Contract(CONTRACT_ADDRESS, ABI, s); }
         return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
 
@@ -126,7 +188,7 @@ export function useStaking() {
     };
 
     const getUsdtContract = async (withSigner = false) => {
-        if (withSigner) { const s = await waitForSigner(buildSignerFn(), 10, 300); return new Contract(USDT_ADDRESS, ERC20_ABI, s); }
+        if (withSigner) { const s = await waitForSigner(buildSignerFn()); return new Contract(USDT_ADDRESS, ERC20_ABI, s); }
         return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
 
