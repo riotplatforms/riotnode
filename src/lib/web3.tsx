@@ -420,7 +420,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     }
 
                     const browserProvider = new BrowserProvider(currentProvider as any);
-                    const s = await browserProvider.getSigner();
+                    let s: JsonRpcSigner | null = null;
+                    try {
+                        s = await browserProvider.getSigner();
+                    } catch (getSignerErr) {
+                        // Fallback: create signer directly from known address (no RPC call)
+                        console.warn("[Web3] getSigner() failed, creating direct signer:", getSignerErr);
+                        try {
+                            s = new JsonRpcSigner(browserProvider, currentAddress);
+                        } catch (directErr) {
+                            console.warn("[Web3] Direct JsonRpcSigner creation failed:", directErr);
+                        }
+                    }
 
                     if (s) {
                         setSigner(s);
