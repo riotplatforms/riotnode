@@ -445,6 +445,13 @@ const Stake: React.FC = () => {
         if (loading) return;
 
         setLoading(id);
+
+        // Safety timeout: clear loading after 45 seconds no matter what
+        const safetyTimer = setTimeout(() => {
+            console.warn('[Stake] Safety timeout: clearing loading state after 45s');
+            setLoading(null);
+        }, 45000);
+
         try {
             const cleanedPriceStr = (typeof priceStr === 'string') ? priceStr.replace(/[^0-9.]/g, '') : String(priceStr || '0').replace(/[^0-9.]/g, '');
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr: cleanedPriceStr }));
@@ -507,14 +514,39 @@ const Stake: React.FC = () => {
 
             const currentAllowanceStr = await getAllowance(fallbackAddress);
             const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
+            const isTMA = !!(window as any).Telegram?.WebApp;
+
             if (currentAllowance < priceBigInt) {
                 console.log("[Stake] Extra-fund upgrade requires fresh approval before staking. Triggering exact allowance approval.");
                 const approvalTx = await approve(finalAmount);
+
                 if (approvalTx && typeof approvalTx.wait === 'function') {
-                    try {
-                        await approvalTx.wait();
-                    } catch (waitErr: any) {
-                        console.warn("[Stake] Approval wait failed after redirect, continuing with stake attempt:", waitErr?.shortMessage || waitErr);
+                    if (isTMA) {
+                        // In TMA: Don't block on tx.wait() — it hangs after wallet redirect.
+                        // Instead, poll allowance with timeout.
+                        console.log("[Stake] TMA mode: Polling allowance instead of tx.wait()...");
+                        const maxPoll = 15;
+                        for (let p = 0; p < maxPoll; p++) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            const polled = await getAllowance(fallbackAddress);
+                            if (parseUnits(polled || '0', 18) >= priceBigInt) {
+                                console.log(`[Stake] Allowance confirmed on poll ${p + 1}`);
+                                break;
+                            }
+                        }
+                    } else {
+                        try {
+                            const waitPromise = approvalTx.wait();
+                            const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Approval wait timeout')), 30000));
+                            await Promise.race([waitPromise, timeout]);
+                        } catch (waitErr: any) {
+                            console.warn("[Stake] Approval wait failed, polling allowance...", waitErr?.shortMessage || waitErr);
+                            for (let p = 0; p < 8; p++) {
+                                await new Promise(r => setTimeout(r, 2000));
+                                const polled = await getAllowance(fallbackAddress);
+                                if (parseUnits(polled || '0', 18) >= priceBigInt) break;
+                            }
+                        }
                     }
                 }
 
@@ -526,12 +558,24 @@ const Stake: React.FC = () => {
             }
 
             const tx = await stake(finalAmount, refAddress);
-            try {
-                await tx.wait();
-            } catch (waitErr: any) {
-                console.warn("[Stake] tx.wait failed after wallet redirect (may be mined). Attempting update anyway:", waitErr?.shortMessage || waitErr);
+
+            // In TMA: tx is already sent to blockchain via wallet.
+            // Don't block on tx.wait() which hangs after wallet redirect.
+            // Show success immediately — on-chain state updates on next refresh.
+            if (isTMA) {
+                console.log("[Stake] TMA mode: Transaction sent, skipping tx.wait() to avoid hang.");
                 localStorage.setItem('pending_stake_refresh', '1');
+            } else {
+                try {
+                    const waitPromise = tx.wait();
+                    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('Stake wait timeout')), 30000));
+                    await Promise.race([waitPromise, timeout]);
+                } catch (waitErr: any) {
+                    console.warn("[Stake] tx.wait failed (may be mined). Proceeding:", waitErr?.shortMessage || waitErr);
+                    localStorage.setItem('pending_stake_refresh', '1');
+                }
             }
+
             localStorage.removeItem('pending_upgrade');
             localStorage.removeItem('pending_stake_refresh');
             showAlert(`Success: Staked ${formatUnits(priceBigInt, 18)} USDT and upgraded mining node!`);
@@ -541,7 +585,7 @@ const Stake: React.FC = () => {
             const needsRetry = msg && (
                 msg.includes('wallet') || msg.includes('connection') ||
                 msg.includes('user rejected') || msg.includes('cancelled') ||
-                msg.includes('reconnect')
+                msg.includes('reconnect') || msg.includes('signer')
             );
             if (needsRetry) {
                 localStorage.setItem('pending_upgrade_fail_msg', msg);
@@ -550,6 +594,7 @@ const Stake: React.FC = () => {
             }
             showAlert(msg);
         } finally {
+            clearTimeout(safetyTimer);
             setLoading(null);
         }
     };
