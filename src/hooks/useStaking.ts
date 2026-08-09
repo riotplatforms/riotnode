@@ -93,20 +93,88 @@ export const getTierRate = (val: number) => {
     return 0;
 };
 
-const RPC_NODES = ['https://bsc-rpc.publicnode.com', 'https://binance.llamarpc.com', 'https://bsc.meowrpc.com', 'https://bsc-dataseed.binance.org/'];
+const RPC_NODES = [
+    'https://bsc-dataseed.binance.org',
+    'https://bsc-dataseed1.binance.org',
+    'https://bsc-dataseed2.binance.org',
+    'https://bsc-dataseed3.binance.org',
+    'https://bsc-dataseed4.binance.org',
+    'https://binance.llamarpc.com',
+    'https://bsc-rpc.publicnode.com',
+    'https://bsc.meowrpc.com'
+];
 let currentRpcIdx = 0;
+
+// Provider cache to avoid creating new providers for every call
+const providerCache = new Map<string, JsonRpcProvider>();
+const getCachedProvider = (rpcUrl: string): JsonRpcProvider => {
+    let provider = providerCache.get(rpcUrl);
+    if (!provider) {
+        provider = new JsonRpcProvider(rpcUrl);
+        providerCache.set(rpcUrl, provider);
+    }
+    return provider;
+};
+
+// Simple request throttler — max 3 concurrent RPC calls
+let activeRequests = 0;
+const MAX_CONCURRENT = 3;
+const requestQueue: (() => void)[] = [];
+const acquireSlot = () => new Promise<void>((resolve) => {
+    if (activeRequests < MAX_CONCURRENT) { activeRequests++; resolve(); return; }
+    requestQueue.push(() => { activeRequests++; resolve(); });
+});
+const releaseSlot = () => {
+    activeRequests--;
+    if (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
+        const next = requestQueue.shift()!;
+        next();
+    }
+};
+
+// 429 backoff tracker per RPC node
+const rpcCooldown = new Map<string, number>();
 
 const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = false): Promise<T> => {
     let lastError: any;
+    const contractAddr = isUsdt ? USDT_ADDRESS : CONTRACT_ADDRESS;
+    const abi = isUsdt ? ERC20_ABI : ABI;
+
     for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
+        // Skip nodes on cooldown (429 backoff)
         const rpcUrl = RPC_NODES[currentRpcIdx];
+        const cooldownUntil = rpcCooldown.get(rpcUrl) || 0;
+        if (Date.now() < cooldownUntil) {
+            currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+            continue;
+        }
+
+        await acquireSlot();
         try {
-            const provider = new JsonRpcProvider(rpcUrl);
-            const contract = new Contract(isUsdt ? USDT_ADDRESS : CONTRACT_ADDRESS, isUsdt ? ERC20_ABI : ABI, provider);
-            return await fn(contract);
-        } catch (err) { console.warn(`[useStaking] RPC Call failed on ${rpcUrl} (attempt ${attempt + 1}/${RPC_NODES.length}):`, err); lastError = err; currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length; }
+            const provider = getCachedProvider(rpcUrl);
+            const contract = new Contract(contractAddr, abi, provider);
+            const result = await fn(contract);
+            return result;
+        } catch (err: any) {
+            lastError = err;
+            const errMsg = String(err?.message || err?.code || '');
+            // Detect 429 rate limit and put this node on cooldown
+            if (errMsg.includes('429') || errMsg.includes('Too Many Requests') || err?.status === 429) {
+                console.warn(`[useStaking] RPC ${rpcUrl} rate-limited (429). Cooling down 15s.`);
+                rpcCooldown.set(rpcUrl, Date.now() + 15000);
+            } else {
+                console.warn(`[useStaking] RPC Call failed on ${rpcUrl} (attempt ${attempt + 1}/${RPC_NODES.length}):`, err);
+            }
+            currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
+            // Small delay between retries to avoid hammering
+            if (attempt < RPC_NODES.length - 1) {
+                await new Promise(r => setTimeout(r, 500 + attempt * 300));
+            }
+        } finally {
+            releaseSlot();
+        }
     }
-    throw lastError || new Error("All RPC nodes failed");
+    throw lastError || new Error("All RPC nodes failed. Please wait a moment and try again.");
 };
 
 export function useStaking() {

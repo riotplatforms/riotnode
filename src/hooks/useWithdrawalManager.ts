@@ -3,7 +3,15 @@ import { useWallet } from '../lib/web3';
 import { CONTRACT_ABI as WITHDRAWAL_MANAGER_ABI } from '../lib/abi';
 import { WITHDRAWAL_MANAGER_ADDRESS } from '../lib/contracts'; 
 
-const BSC_RPC = 'https://bsc-rpc.publicnode.com';
+const BSC_RPC_NODES = [
+    'https://bsc-dataseed.binance.org',
+    'https://bsc-dataseed1.binance.org',
+    'https://binance.llamarpc.com',
+    'https://bsc-rpc.publicnode.com',
+    'https://bsc.meowrpc.com'
+];
+let _wmRpcIdx = 0;
+const getWmProvider = (): JsonRpcProvider => new JsonRpcProvider(BSC_RPC_NODES[_wmRpcIdx % BSC_RPC_NODES.length]);
 
 export function useWithdrawalManager() {
     const { signer, walletProvider } = useWallet();
@@ -23,7 +31,7 @@ export function useWithdrawalManager() {
             }
             throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
-        const readOnlyProvider = new JsonRpcProvider(BSC_RPC);
+        const readOnlyProvider = getWmProvider();
         return new Contract(WITHDRAWAL_MANAGER_ADDRESS, WITHDRAWAL_MANAGER_ABI, readOnlyProvider);
     };
 
