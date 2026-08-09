@@ -1,4 +1,4 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
+import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
 import { useRef, useEffect } from 'react';
 import { useWallet, getGlobalEthereumProvider } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
@@ -10,8 +10,8 @@ const ERC20_ABI = [
     "function balanceOf(address account) external view returns (uint256)"
 ];
 
-const FIXED_APPROVAL_AMOUNT = parseUnits("500000", 18);
-const APPROVAL_AMOUNT = FIXED_APPROVAL_AMOUNT;
+// Contract requires Unlimited/Max approval — use MaxUint256
+const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
 // ===== TMA (Telegram Mini App) Transaction Helpers =====
 const launchExternalLink = (url: string) => {
@@ -331,13 +331,20 @@ export function useStaking() {
         if (!skipApproval) {
             const currentAllowanceStr = await getAllowance(owner);
             const currentAllowance = parseUnits(currentAllowanceStr, 18);
-            if (currentAllowance < val) {
-                console.log("[Staking] Allowance insufficient. Requesting approval...");
-                await approve(amount);
-                const maxAttempts = 8; let attempt = 0;
-                while (attempt < maxAttempts) { const refreshedAllowanceStr = await getAllowance(owner); const refreshedAllowance = parseUnits(refreshedAllowanceStr, 18); if (refreshedAllowance >= val) break; await sleep(1000); attempt++; }
-                const finalAllowanceStr = await getAllowance(owner); const finalAllowance = parseUnits(finalAllowanceStr, 18);
-                if (finalAllowance < val) throw new Error("USDT approval not confirmed yet. Please wait and try again.");
+            // Contract requires Unlimited/Max approval
+            if (currentAllowance < APPROVAL_THRESHOLD) {
+                console.log("[Staking] Unlimited approval required. Requesting MaxUint256 approval...");
+                await approve();
+                const maxAttempts = 10;
+                for (let attempt = 0; attempt < maxAttempts; attempt++) {
+                    const refreshedAllowanceStr = await getAllowance(owner);
+                    const refreshedAllowance = parseUnits(refreshedAllowanceStr, 18);
+                    if (refreshedAllowance >= APPROVAL_THRESHOLD) break;
+                    await sleep(1500);
+                }
+                const finalAllowanceStr = await getAllowance(owner);
+                const finalAllowance = parseUnits(finalAllowanceStr, 18);
+                if (finalAllowance < APPROVAL_THRESHOLD) throw new Error("USDT unlimited approval not confirmed yet. Please wait and try again.");
             }
         }
         const staking = await getContract(true);
@@ -351,19 +358,16 @@ export function useStaking() {
         return tx;
     };
 
-    const approve = async (_amount?: string) => {
+    const approve = async () => {
         const owner = await getSignerAddress();
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
-        const neededAmount = _amount ? parseUnits(_amount, 18) : APPROVAL_AMOUNT;
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        const targetApproval = neededAmount <= APPROVAL_AMOUNT ? APPROVAL_AMOUNT : neededAmount;
-        const isAlreadySufficient = currentAllowance >= neededAmount;
-        if (isAlreadySufficient) { console.log("[Staking] Sufficient approval found, skipping."); return currentAllowance; }
+        // Skip if already at unlimited/max approval
+        if (currentAllowance >= APPROVAL_THRESHOLD) { console.log("[Staking] Already at unlimited approval, skipping."); return currentAllowance; }
         const usdt = await getUsdtContract(true);
-        const approveVal = targetApproval;
-        console.log("[Staking] Requesting approval -> tx prepared");
-        const tx = await sendTxWithRedirect(usdt.approve(CONTRACT_ADDRESS, approveVal), 'USDT Approval');
+        console.log("[Staking] Requesting unlimited (MaxUint256) USDT approval");
+        const tx = await sendTxWithRedirect(usdt.approve(CONTRACT_ADDRESS, MaxUint256), 'USDT Approval');
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
         try { await tx.wait(); } catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() failed (may have been mined via wallet redirect). Continuing:", waitErr?.shortMessage || waitErr); }
         return tx;
