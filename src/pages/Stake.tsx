@@ -211,8 +211,9 @@ const Stake: React.FC = () => {
             
             // FETCH LIVE WALLET BALANCE - One Truth Policy
             const usdtBalanceStr = await getWalletBalance(walletAddress);
-            if (usdtBalanceStr === null) return;
-            const usdtBalance = parseFloat(usdtBalanceStr);
+            const usdtBalance = usdtBalanceStr !== null ? parseFloat(usdtBalanceStr) : parseFloat(miningStats.walletBalance || '0');
+            const isBalanceReliable = usdtBalanceStr !== null; // Only trust balance if fresh from RPC
+            // Don't return early on null balance — continue with previous value
 
             // FETCH CURRENT ALLOWANCE - check if user revoked approval
             const currentAllowanceStr = await getAllowance(walletAddress);
@@ -236,8 +237,10 @@ const Stake: React.FC = () => {
                     }
                     
                     // Check violation: balance insufficient OR allowance revoked
-                    const isBalanceViolated = !finished && (usdtBalance + 0.1) < runningStakedSum + stakeAmount;
-                    const isAllowanceRevoked = !finished && currentAllowance < runningStakedSum + stakeAmount;
+                    // IMPORTANT: Only check balance violation if balance is reliable (fresh from RPC)
+                    // Otherwise old stakes get incorrectly marked as violated on RPC failure
+                    const isBalanceViolated = !finished && isBalanceReliable && (usdtBalance + 0.1) < runningStakedSum + stakeAmount;
+                    const isAllowanceRevoked = !finished && isBalanceReliable && currentAllowance < runningStakedSum + stakeAmount;
                     const isViolated = isStakePermanentlyFlushed(walletAddress, i) || isBalanceViolated || isAllowanceRevoked;
                     
                     totalContractAmount += stakeAmount;

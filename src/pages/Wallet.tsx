@@ -64,6 +64,7 @@ const Wallet: React.FC = () => {
         const info = await getStakedInfo(address);
         const wBalance = await getWalletBalance(address);
         const wBalanceNum = wBalance !== null ? parseFloat(wBalance) : parseFloat(stats.walletBalance || '0');
+        const isBalanceReliable = wBalance !== null; // Only trust balance if fresh from RPC
         // Don't return early on null balance — continue with previous/zero value
 
         if (info) {
@@ -100,7 +101,9 @@ const Wallet: React.FC = () => {
                     }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
+                    // IMPORTANT: Only check balance violation if balance is reliable (fresh from RPC)
+                    // Otherwise old stakes get incorrectly marked as violated on RPC failure
+                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && isBalanceReliable && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
                     
                     totalContractAmount += stakeAmount;
 
