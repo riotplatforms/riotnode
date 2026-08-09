@@ -1,5 +1,6 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, toQuantity, isHexString } from 'ethers';
-import { useWallet } from '../lib/web3';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
+import { useRef, useEffect } from 'react';
+import { useWallet, getGlobalEthereumProvider } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 
@@ -63,7 +64,7 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
 
 const waitForSigner = async (getSignerFn: () => Promise<any>, maxAttempts?: number, delayMs = 500): Promise<any> => {
     const isTMA = !!(window as any).Telegram?.WebApp;
-    const attempts = maxAttempts ?? (isTMA ? 3 : 15);
+    const attempts = maxAttempts ?? (isTMA ? 10 : 15);
     let lastError: any;
     for (let i = 0; i < attempts; i++) {
         try {
@@ -112,14 +113,31 @@ export function useStaking() {
     const { address, isConnected, signer, walletProvider } = useWallet();
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
+    // FIX: Use refs to avoid stale closure bug — buildSignerFn captures signer at render time,
+    // but waitForSigner retries may run after signer is set in a later render.
+    const signerRef = useRef(signer);
+    const walletProviderRef = useRef(walletProvider);
+    useEffect(() => { signerRef.current = signer; }, [signer]);
+    useEffect(() => { walletProviderRef.current = walletProvider; }, [walletProvider]);
+
     const buildSignerFn = () => async () => {
-        // 1. Use context signer directly — no validation that can hang
-        if (signer) return signer;
+        // 1. Try context signer via ref (always latest value, avoids stale closure)
+        const currentSigner = signerRef.current;
+        if (currentSigner) {
+            try {
+                // Verify signer is still valid
+                await currentSigner.getAddress();
+                return currentSigner;
+            } catch (e) {
+                console.warn('[useStaking] Context signer invalid, trying alternatives:', e);
+            }
+        }
 
         // 2. Try walletProvider from AppKit (WalletConnect / Reown)
-        if (walletProvider) {
+        const currentWp = walletProviderRef.current;
+        if (currentWp) {
             try {
-                const bp = new BrowserProvider(walletProvider as any);
+                const bp = new BrowserProvider(currentWp as any);
                 const s = await bp.getSigner();
                 if (s) return s;
             } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
@@ -133,6 +151,38 @@ export function useStaking() {
                 const s = await bp.getSigner();
                 if (s) return s;
             } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
+        }
+
+        // 4. Try global WalletConnect EthereumProvider (direct session)
+        try {
+            const wcProvider = await getGlobalEthereumProvider();
+            if (wcProvider && wcProvider.session) {
+                const accounts = wcProvider.accounts;
+                if (accounts && accounts.length > 0) {
+                    const bp = new BrowserProvider(wcProvider as any);
+                    const s = await bp.getSigner(accounts[0]);
+                    if (s) {
+                        console.log('[useStaking] Got signer from global WC provider');
+                        return s;
+                    }
+                }
+            }
+        } catch (e) { console.warn('[useStaking] global WC provider getSigner failed:', e); }
+
+        // 5. Last resort: create signer from stored address + any available provider
+        const storedAddr = getStoredAddress();
+        if (storedAddr) {
+            try {
+                // Try with injected provider first
+                const anyProvider = fp || (window as any).ethereum;
+                if (anyProvider) {
+                    const bp = new BrowserProvider(anyProvider as any);
+                    const s = new JsonRpcSigner(bp, storedAddr);
+                    // Verify it can at least get the address
+                    await s.getAddress();
+                    return s;
+                }
+            } catch (e) { console.warn('[useStaking] Last resort signer failed:', e); }
         }
 
         return null;
@@ -228,7 +278,7 @@ export function useStaking() {
         const fee = await callReadOnly(async (contract) => { return await contract.stakeFee(); });
         const feeHex = toSafeHexValue(fee);
         console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
-        const tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex, gasLimit: undefined, maxPriorityFeePerGas: undefined, maxFeePerGas: undefined }), 'Stake transaction');
+        const tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex }), 'Stake transaction');
         console.log("[Staking] Transaction Sent:", tx.hash);
         return tx;
     };

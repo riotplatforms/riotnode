@@ -17,7 +17,7 @@ let globalEthereumProvider: any = null;
 let globalEthereumProviderPromise: Promise<any> | null = null;
 let activeDisplayUriCallback: ((uri: string) => void) | null = null;
 
-const getGlobalEthereumProvider = async () => {
+export const getGlobalEthereumProvider = async () => {
     if (globalEthereumProvider) return globalEthereumProvider;
     if (globalEthereumProviderPromise) return globalEthereumProviderPromise;
 
