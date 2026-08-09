@@ -52,11 +52,9 @@ const redirectToWalletApp = () => {
 };
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
-    const isTMA = !!(window as any).Telegram?.WebApp;
-    if (!isTMA) {
-        // Only redirect to wallet app outside of TMA
-        redirectToWalletApp();
-    }
+    // Always try to redirect to wallet app for transaction approval
+    // In TMA with WalletConnect, user needs to switch to wallet app to approve
+    redirectToWalletApp();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out. Please open your wallet app and approve the transaction.`)), timeoutMs); });
     try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }

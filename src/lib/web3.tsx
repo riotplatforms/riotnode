@@ -1254,10 +1254,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     </button>
                                 </div>
 
-                                {/* RainbowKit Connect Button */}
-                                <div className="flex justify-center mb-6">
-                                    <RainbowKitConnectButton />
-                                </div>
+                                {/* RainbowKit Connect Button — hide in TMA (incompatible with Telegram webview) */}
+                                {!(window as any).Telegram?.WebApp && (
+                                    <div className="flex justify-center mb-6">
+                                        <RainbowKitConnectButton />
+                                    </div>
+                                )}
 
                                 {/* Copy Link Helper */}
                                 <div className="bg-primary/5 border border-primary/10 rounded-3xl p-6 mb-8 text-center">
