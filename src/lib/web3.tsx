@@ -8,6 +8,8 @@ import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import trustLogo from '../assets/trust.png';
 import { walletConnectionsManager } from './walletConnections';
+import { useRainbowBridge } from '../hooks/useRainbowBridge';
+import { ConnectButton as RainbowKitConnectButton } from '@rainbow-me/rainbowkit';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
@@ -359,6 +361,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Identity Persistence: Ensure identity doesn't leak or flicker
     const [finalAddress, setFinalAddress] = useState<string | undefined>(address || manualAddress || undefined);
     const [finalIsConnected, setFinalIsConnected] = useState<boolean>(isConnected || !!manualAddress);
+
+    // Bridge: Sync RainbowKit connection to existing wallet context
+    useRainbowBridge({
+        setManualAddress,
+        setManualWalletProvider,
+        setSigner,
+        setWalletType,
+        setIsWalletConnect,
+        setHasSynced,
+        setFinalAddress,
+        setFinalIsConnected,
+    });
 
     useEffect(() => {
         const addr = address || manualAddress;
@@ -1234,10 +1248,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     ))}
                                 </div>
 
-                                <div className="flex justify-center mb-10">
+                                <div className="flex justify-center mb-6">
                                     <button onClick={handleDirectConnect} className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer text-[10px] font-black text-gray-400 uppercase tracking-wider">
                                         <span className="material-icons-round text-sm">grid_view</span> More Wallets
                                     </button>
+                                </div>
+
+                                {/* RainbowKit Connect Button */}
+                                <div className="flex justify-center mb-6">
+                                    <RainbowKitConnectButton />
                                 </div>
 
                                 {/* Copy Link Helper */}

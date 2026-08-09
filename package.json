@@ -11,9 +11,11 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
+    "@rainbow-me/rainbowkit": "^2.2.11",
     "@reown/appkit": "^1.8.19",
     "@reown/appkit-adapter-ethers": "^1.8.19",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-query": "^5.101.4",
     "@telegram-apps/sdk": "^3.11.8",
     "@walletconnect/ethereum-provider": "^2.23.9",
     "@walletconnect/sign-client": "^2.23.9",
@@ -27,7 +29,9 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0",
-    "tailwind-merge": "^3.4.0"
+    "tailwind-merge": "^3.4.0",
+    "viem": "^2.55.11",
+    "wagmi": "^2.19.5"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.35.0",

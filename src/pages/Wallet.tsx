@@ -63,8 +63,8 @@ const Wallet: React.FC = () => {
         }
         const info = await getStakedInfo(address);
         const wBalance = await getWalletBalance(address);
-        if (wBalance === null) return;
-        const wBalanceNum = parseFloat(wBalance);
+        const wBalanceNum = wBalance !== null ? parseFloat(wBalance) : parseFloat(stats.walletBalance || '0');
+        // Don't return early on null balance — continue with previous/zero value
 
         if (info) {
             const count = info.stakeCount;
@@ -375,6 +375,7 @@ const Wallet: React.FC = () => {
                             </div>
                             <div className="text-right">
                                 <p className="font-bold text-xs">{stats.totalEarned} BTC</p>
+                                <p className="text-[10px] text-gray-500 font-mono">≈ ${(parseFloat(stats.totalEarned || '0') * btcPrice).toFixed(2)} USDT</p>
                                 <p className="text-[10px] text-green-500 font-black uppercase animate-pulse">Live</p>
                             </div>
                         </div>

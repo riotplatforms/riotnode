@@ -10,8 +10,14 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { Web3Provider } from './lib/web3'
 import App from './App.tsx'
+import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
+import { WagmiProvider } from 'wagmi'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { rainbowConfig } from './lib/rainbowConfig'
 
 import { HashRouter as Router } from 'react-router-dom'
+
+const queryClient = new QueryClient()
 
 console.log('main.tsx: BOOTING...');
 
@@ -25,11 +31,17 @@ if (rootElement) {
     // 1. Render App with Router at ROOT immediately
     const root = createRoot(rootElement);
     root.render(
-      <Router>
-        <Web3Provider>
-          <App />
-        </Web3Provider>
-      </Router>
+      <WagmiProvider config={rainbowConfig}>
+        <QueryClientProvider client={queryClient}>
+          <RainbowKitProvider theme={darkTheme({ accentColor: '#FFD700', accentColorForeground: '#000' })} modalSize="compact">
+            <Router>
+              <Web3Provider>
+                <App />
+              </Web3Provider>
+            </Router>
+          </RainbowKitProvider>
+        </QueryClientProvider>
+      </WagmiProvider>
     );
 
     // 3. Robust TMA Readiness - Signal AS SOON AS build is solid
