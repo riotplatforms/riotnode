@@ -716,6 +716,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    // @ts-ignore - used internally, kept for future wallet-specific connections
     const handleWalletClick = async (wallet: string) => {
         const isWcMobileWallet = ["metamask", "trust", "safepal", "binance", "okx", "bitget", "tokenpocket"].includes(wallet);
         const isTMA = !!(window as any).Telegram?.WebApp;
@@ -1368,35 +1369,34 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             <>
                                 <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Wallet</h3>
 
-                                {/* Unified Wallet Grid */}
-                                <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-6">
-                                    {[
-                                        { id: 'metamask', name: 'MetaMask', icon: metamaskLogo },
-                                        { id: 'trust', name: 'Trust Wallet', icon: trustLogo },
-                                        { id: 'safepal', name: 'SafePal', icon: safepalLogo },
-                                        { id: 'tokenpocket', name: 'TP Wallet', icon: tpLogo }
-                                    ].map((w) => (
-                                        <button key={w.id} onClick={() => handleWalletClick(w.id)} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
-                                            <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg overflow-hidden">
-                                                <img src={w.icon} className="w-11 h-11 object-contain" alt={w.name} />
-                                            </div>
-                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{w.name}</span>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div className="flex justify-center mb-6">
-                                    <button onClick={handleDirectConnect} className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full hover:bg-white/10 transition-colors cursor-pointer text-[10px] font-black text-gray-400 uppercase tracking-wider">
-                                        <span className="material-icons-round text-sm">grid_view</span> More Wallets
+                                {/* Simple 2-option layout: WalletConnect + Rainbow */}
+                                <div className="space-y-4 mb-6">
+                                    {/* WalletConnect Button */}
+                                    <button
+                                        onClick={handleDirectConnect}
+                                        className="w-full flex items-center gap-4 p-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
+                                    >
+                                        <div className="w-12 h-12 bg-[3B82F6]/10 rounded-xl flex items-center justify-center">
+                                            <span className="material-icons-round text-[#3B82F6] text-2xl">qr_code_2</span>
+                                        </div>
+                                        <div className="text-left flex-1">
+                                            <p className="font-bold text-white text-sm">WalletConnect</p>
+                                            <p className="text-[11px] text-gray-500">Scan QR code with any wallet</p>
+                                        </div>
+                                        <span className="material-icons-round text-gray-600">chevron_right</span>
                                     </button>
-                                </div>
 
-                                {/* RainbowKit Connect Button — hide in TMA (incompatible with Telegram webview) */}
-                                {!(window as any).Telegram?.WebApp && (
-                                    <div className="flex justify-center mb-6">
-                                        <RainbowKitConnectButton />
+                                    {/* Rainbow Button */}
+                                    <div className="w-full flex items-center gap-4 p-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98]">
+                                        <div className="w-12 h-12 bg-gradient-to-br from-pink-500/10 to-violet-500/10 rounded-xl flex items-center justify-center">
+                                            <span className="text-2xl">🌈</span>
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-bold text-white text-sm mb-1">Rainbow Wallet</p>
+                                            <RainbowKitConnectButton />
+                                        </div>
                                     </div>
-                                )}
+                                </div>
 
                                 {/* Copy Link Helper */}
                                 <div className="bg-primary/5 border border-primary/10 rounded-3xl p-6 mb-8 text-center">
