@@ -1396,21 +1396,21 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             <>
                                 <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Wallet</h3>
 
-                                {/* WalletConnect Button */}
-                                <div className="mb-6">
-                                    <button
-                                        onClick={handleDirectConnect}
-                                        className="w-full flex items-center gap-4 p-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
-                                    >
-                                        <div className="w-12 h-12 bg-[3B82F6]/10 rounded-xl flex items-center justify-center">
-                                            <span className="material-icons-round text-[#3B82F6] text-2xl">qr_code_2</span>
-                                        </div>
-                                        <div className="text-left flex-1">
-                                            <p className="font-bold text-white text-sm">Connect Wallet</p>
-                                            <p className="text-[11px] text-gray-500">Scan QR code with any wallet</p>
-                                        </div>
-                                        <span className="material-icons-round text-gray-600">chevron_right</span>
-                                    </button>
+                                {/* All Wallets Grid */}
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-8 mb-6">
+                                    {[
+                                        { id: 'metamask', name: 'MetaMask', icon: metamaskLogo },
+                                        { id: 'trust', name: 'Trust Wallet', icon: trustLogo },
+                                        { id: 'safepal', name: 'SafePal', icon: safepalLogo },
+                                        { id: 'tokenpocket', name: 'TP Wallet', icon: tpLogo }
+                                    ].map((w) => (
+                                        <button key={w.id} onClick={() => handleDirectConnect()} className="flex flex-col items-center gap-3 bg-transparent border-none cursor-pointer group">
+                                            <div className="w-16 h-16 bg-white/5 rounded-[22px] flex items-center justify-center border border-white/10 group-active:scale-90 transition-all shadow-lg overflow-hidden">
+                                                <img src={w.icon} className="w-11 h-11 object-contain" alt={w.name} />
+                                            </div>
+                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">{w.name}</span>
+                                        </button>
+                                    ))}
                                 </div>
 
                                 {/* Copy Link Helper */}
