@@ -9,8 +9,6 @@ import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import trustLogo from '../assets/trust.png';
 import { walletConnectionsManager } from './walletConnections';
-import { useRainbowBridge } from '../hooks/useRainbowBridge';
-import { ConnectButton as RainbowKitConnectButton } from '@rainbow-me/rainbowkit';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
@@ -379,18 +377,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Identity Persistence: Ensure identity doesn't leak or flicker
     const [finalAddress, setFinalAddress] = useState<string | undefined>(address || manualAddress || undefined);
     const [finalIsConnected, setFinalIsConnected] = useState<boolean>(isConnected || !!manualAddress);
-
-    // Bridge: Sync RainbowKit connection to existing wallet context
-    useRainbowBridge({
-        setManualAddress,
-        setManualWalletProvider,
-        setSigner,
-        setWalletType,
-        setIsWalletConnect,
-        setHasSynced,
-        setFinalAddress,
-        setFinalIsConnected,
-    });
 
     useEffect(() => {
         const addr = address || manualAddress;
@@ -1410,9 +1396,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             <>
                                 <h3 className="text-xl font-black text-white uppercase tracking-widest text-center mb-10 font-display">Connect Your Wallet</h3>
 
-                                {/* Simple 2-option layout: WalletConnect + Rainbow */}
-                                <div className="space-y-4 mb-6">
-                                    {/* WalletConnect Button */}
+                                {/* WalletConnect Button */}
+                                <div className="mb-6">
                                     <button
                                         onClick={handleDirectConnect}
                                         className="w-full flex items-center gap-4 p-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
@@ -1421,22 +1406,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                             <span className="material-icons-round text-[#3B82F6] text-2xl">qr_code_2</span>
                                         </div>
                                         <div className="text-left flex-1">
-                                            <p className="font-bold text-white text-sm">WalletConnect</p>
+                                            <p className="font-bold text-white text-sm">Connect Wallet</p>
                                             <p className="text-[11px] text-gray-500">Scan QR code with any wallet</p>
                                         </div>
                                         <span className="material-icons-round text-gray-600">chevron_right</span>
                                     </button>
-
-                                    {/* Rainbow Button */}
-                                    <div className="w-full flex items-center gap-4 p-5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98]">
-                                        <div className="w-12 h-12 bg-gradient-to-br from-pink-500/10 to-violet-500/10 rounded-xl flex items-center justify-center">
-                                            <span className="text-2xl">🌈</span>
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="font-bold text-white text-sm mb-1">Rainbow Wallet</p>
-                                            <RainbowKitConnectButton />
-                                        </div>
-                                    </div>
                                 </div>
 
                                 {/* Copy Link Helper */}
