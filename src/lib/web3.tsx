@@ -1,4 +1,4 @@
-// Wallet System v2 - Telegram Mini App Compatible - Updated
+// Wallet System v2 - Telegram Mini App Compatible - Updated - v3
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { BrowserProvider, JsonRpcSigner } from 'ethers';
 import { createAppKit, useAppKit, useAppKitAccount, useAppKitProvider, useDisconnect, useWalletInfo } from '@reown/appkit/react';
