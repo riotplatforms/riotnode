@@ -6,23 +6,6 @@ if (typeof (window as any).global === 'undefined') {
   (window as any).global = window;
 }
 
-// Block custom URL schemes (wc:, metamask://, etc.) in Telegram WebView
-try {
-  if ((window as any).Telegram?.WebApp) {
-    const _origOpen = window.open;
-    window.open = function(url?: string | URL | null, ...args: any[]) {
-      try {
-        const u = typeof url === 'string' ? url : (url ? url.toString() : '');
-        if (u && !u.startsWith('http') && !u.startsWith('/') && !u.startsWith('about:')) {
-          console.warn('[TMA] Blocked custom scheme:', u.substring(0, 50));
-          return null;
-        }
-      } catch {}
-      return _origOpen.apply(window, [url, ...args] as any);
-    };
-  }
-} catch {}
-
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import { Web3Provider } from './lib/web3'
