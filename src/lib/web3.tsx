@@ -848,32 +848,45 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleDirectConnect = async () => {
         const isTMA = !!(window as any).Telegram?.WebApp;
         if (isTMA) {
-            // In TMA: Use WalletConnect QR modal (renders in-page, no deep links)
+            // In TMA: Use WalletConnect modal directly (QR code + all wallets)
             try {
                 setIsConnectModalOpen(false);
                 setConnectingWallet('walletconnect');
-                
+
                 const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                const { WalletConnectModal } = await import('@walletconnect/modal');
+
                 const qrProvider = await EthereumProvider.init({
                     projectId: 'ec457184730a7f1e24bbe58a393f442b',
                     metadata,
-                    showQrModal: true, // QR code renders in-page!
+                    showQrModal: false, // We handle modal ourselves
                     chains: [56],
                     methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
                     events: ["accountsChanged", "chainChanged"],
                     rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
                 });
 
-                // Listen for connection
-                qrProvider.on('display_uri', (uri: string) => {
-                    console.log('[TMA] WalletConnect QR URI:', uri);
+                // Create modal instance
+                const modal = new WalletConnectModal({
+                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                    themeMode: 'dark',
+                    themeVariables: {
+                        '--wcm-accent-color': '#FFD700',
+                        '--wcm-background-color': '#1a1a2e',
+                    }
                 });
 
-                qrProvider.on('connect', () => {
-                    console.log('[TMA] WalletConnect connected!');
+                // When URI is ready, show the modal
+                qrProvider.on('display_uri', async (uri: string) => {
+                    console.log('[TMA] Opening WC modal with URI');
+                    await modal.openModal({ uri });
                 });
 
+                // Connect - this triggers display_uri event
                 await qrProvider.connect();
+
+                // Close modal after connection
+                modal.closeModal();
 
                 const accounts = qrProvider.accounts;
                 if (accounts?.[0]) {
@@ -893,7 +906,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 }
                 setConnectingWallet(null);
             } catch (err) {
-                console.error('[TMA] WalletConnect QR failed:', err);
+                console.error('[TMA] WalletConnect failed:', err);
                 setConnectingWallet(null);
             }
             return;
