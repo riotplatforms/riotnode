@@ -554,7 +554,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
-        setIsConnectModalOpen(true);
+        try {
+            clearWalletConnectPairingCache();
+            await open({ view: 'Connect' });
+        } catch (err) {
+            console.warn("[Web3] AppKit modal failed, falling back to custom modal:", err);
+            setIsConnectModalOpen(true);
+        }
     };
 
     const connectInjectedWallet = async (preferredWallet?: string): Promise<'connected' | 'not_installed' | 'failed'> => {
@@ -1354,25 +1360,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                         Connect Wallet
                                     </button>
                                     <p className="text-center text-[10px] text-gray-500 mt-3">Supports MetaMask, Trust Wallet, SafePal, Rainbow, Coinbase & 100+ wallets</p>
-                                </div>
-
-                                {/* Copy Link Helper */}
-                                <div className="bg-primary/5 border border-primary/10 rounded-3xl p-6 mb-8 text-center">
-                                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-tight mb-4 leading-relaxed px-4">
-                                        Facing delays? Paste link in your Wallet's internal Browser.
-                                    </p>
-                                    <button
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(window.location.origin);
-                                            const tg = (window as any).Telegram?.WebApp;
-                                            if (tg?.showAlert) tg.showAlert("Link Copied! Now open your Wallet's dApp browser and paste it.");
-                                            else alert("URL Copied!");
-                                        }}
-                                        className="w-full bg-primary text-black p-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 cursor-pointer border-none font-black text-[12px] uppercase tracking-widest shadow-neon"
-                                    >
-                                        <span className="material-icons-round text-lg">content_copy</span>
-                                        COPY MINING LINK
-                                    </button>
                                 </div>
                             </>
                         )}
