@@ -862,12 +862,53 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleDirectConnect = async () => {
         const isTMA = !!(window as any).Telegram?.WebApp;
         if (isTMA) {
-            // In TMA: prepare WC URI and auto-select MetaMask
-            setConnectingWallet('metamask');
-            const uri = await prepareWalletConnectFast();
-            if (uri) {
-                const encoded = encodeURIComponent(uri);
-                launchExternalLink(getWalletConnectionLink('metamask', encoded));
+            // In TMA: Use WalletConnect QR modal (renders in-page, no deep links)
+            try {
+                setIsConnectModalOpen(false);
+                setConnectingWallet('walletconnect');
+                
+                const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                const qrProvider = await EthereumProvider.init({
+                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                    metadata,
+                    showQrModal: true, // QR code renders in-page!
+                    chains: [56],
+                    methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+                    events: ["accountsChanged", "chainChanged"],
+                    rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
+                });
+
+                // Listen for connection
+                qrProvider.on('display_uri', (uri: string) => {
+                    console.log('[TMA] WalletConnect QR URI:', uri);
+                });
+
+                qrProvider.on('connect', () => {
+                    console.log('[TMA] WalletConnect connected!');
+                });
+
+                await qrProvider.connect();
+
+                const accounts = qrProvider.accounts;
+                if (accounts?.[0]) {
+                    const bp = new BrowserProvider(qrProvider);
+                    const sg = await bp.getSigner(accounts[0]);
+                    setSigner(sg);
+                    setManualAddress(accounts[0]);
+                    setManualWalletProvider(qrProvider);
+                    setIsWalletConnect(true);
+                    localStorage.setItem('aimining_is_walletconnect', 'true');
+                    setHasSynced(true);
+                    setFinalAddress(accounts[0]);
+                    setFinalIsConnected(true);
+                    localStorage.setItem('aimining_manual_address', accounts[0]);
+                    localStorage.setItem('aimining_address', accounts[0]);
+                    walletConnectionsManager.saveConnection(accounts[0], 'walletconnect');
+                }
+                setConnectingWallet(null);
+            } catch (err) {
+                console.error('[TMA] WalletConnect QR failed:', err);
+                setConnectingWallet(null);
             }
             return;
         }
