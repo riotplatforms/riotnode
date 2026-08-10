@@ -1088,8 +1088,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const prepareWalletConnectFast = async (): Promise<string | null> => {
         try {
             clearWalletConnectPairingCache();
-            wcProviderInstance = null; // Force fresh provider
-            wcProviderPromise = null;
+            globalEthereumProvider = null; // Force fresh provider
+            globalEthereumProviderPromise = null;
             const provider = await getGlobalEthereumProvider();
 
             // Intercept for tx redirects
