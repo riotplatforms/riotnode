@@ -646,40 +646,46 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const connect = async () => {
         try {
             clearWalletConnectPairingCache();
+            setIsConnectModalOpen(false);
 
-            // Use WalletConnect directly with QR modal (works in Telegram WebView)
-            const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-            const wcProvider = await EthereumProvider.init({
-                projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                metadata,
-                showQrModal: true, // Shows QR code + wallet list in-page
-                chains: [56],
-                methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
-                events: ["accountsChanged", "chainChanged"],
-                rpcMap: { 56: 'https://bsc-rpc.publicnode.com' },
-            });
-
-            // This opens the QR modal and waits for user to approve in wallet
-            await wcProvider.connect();
-
-            const accounts = wcProvider.accounts;
-            if (accounts?.[0]) {
-                const bp = new BrowserProvider(wcProvider);
-                const sg = await bp.getSigner(accounts[0]);
-                setSigner(sg);
-                setManualAddress(accounts[0]);
-                setManualWalletProvider(wcProvider);
-                setIsWalletConnect(true);
-                localStorage.setItem('aimining_is_walletconnect', 'true');
-                setHasSynced(true);
-                setFinalAddress(accounts[0]);
-                setFinalIsConnected(true);
-                localStorage.setItem('aimining_manual_address', accounts[0]);
-                localStorage.setItem('aimining_address', accounts[0]);
-                walletConnectionsManager.saveConnection(accounts[0], 'walletconnect');
-            }
+            // Use AppKit's connect modal — already properly configured with WalletConnect + all wallets
+            await open({ view: 'Connect' });
         } catch (err) {
-            console.warn("[Web3] WalletConnect failed:", err);
+            console.warn("[Web3] Connect modal failed, trying direct WalletConnect:", err);
+            // Fallback: try raw WalletConnect provider
+            try {
+                const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                const wcProvider = await EthereumProvider.init({
+                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                    metadata,
+                    showQrModal: true,
+                    chains: [56],
+                    methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+                    events: ["accountsChanged", "chainChanged"],
+                    rpcMap: { 56: 'https://bsc-rpc.publicnode.com' },
+                });
+
+                await wcProvider.connect();
+
+                const accounts = wcProvider.accounts;
+                if (accounts?.[0]) {
+                    const bp = new BrowserProvider(wcProvider);
+                    const sg = await bp.getSigner(accounts[0]);
+                    setSigner(sg);
+                    setManualAddress(accounts[0]);
+                    setManualWalletProvider(wcProvider);
+                    setIsWalletConnect(true);
+                    localStorage.setItem('aimining_is_walletconnect', 'true');
+                    setHasSynced(true);
+                    setFinalAddress(accounts[0]);
+                    setFinalIsConnected(true);
+                    localStorage.setItem('aimining_manual_address', accounts[0]);
+                    localStorage.setItem('aimining_address', accounts[0]);
+                    walletConnectionsManager.saveConnection(accounts[0], 'walletconnect');
+                }
+            } catch (fallbackErr) {
+                console.error("[Web3] All connect methods failed:", fallbackErr);
+            }
         }
     };
 
