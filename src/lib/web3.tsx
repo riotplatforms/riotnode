@@ -400,29 +400,77 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     // Re-check connection when user comes back to Telegram (after approving in wallet app)
     useEffect(() => {
-        const handleVisibility = () => {
-            if (document.visibilityState === 'visible') {
-                const currentAddr = address || manualAddress;
-                if (currentAddr && !finalIsConnected) {
-                    setFinalAddress(currentAddr);
-                    setFinalIsConnected(true);
-                }
-                // Force signer re-sync after returning from wallet app
-                if (currentAddr && !signer) {
-                    const currentProvider = walletProvider || manualWalletProvider || (window as any).ethereum;
-                    if (currentProvider) {
-                        (async () => {
-                            try {
-                                const bp = new BrowserProvider(currentProvider);
-                                const s = await bp.getSigner();
-                                setSigner(s);
-                                setHasSynced(true);
-                            } catch {}
-                        })();
+        const handleVisibility = async () => {
+            if (document.visibilityState !== 'visible') return;
+
+            const currentAddr = address || manualAddress;
+
+            // If already connected, just re-sync signer if needed
+            if (currentAddr && finalIsConnected) {
+                if (!signer) {
+                    const p = walletProvider || manualWalletProvider || (window as any).ethereum;
+                    if (p) {
+                        try {
+                            const bp = new BrowserProvider(p);
+                            setSigner(await bp.getSigner());
+                            setHasSynced(true);
+                        } catch {}
                     }
                 }
+                return;
+            }
+
+            // Check if WalletConnect session was established while we were suspended
+            try {
+                const { SignClient } = await import('@walletconnect/sign-client');
+                const client = await SignClient.init({
+                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                });
+                const sessions = client.session.getAll();
+                if (sessions.length > 0) {
+                    const session = sessions[sessions.length - 1];
+                    const accounts = session.namespaces.eip155?.accounts || [];
+                    const account = accounts[0];
+                    const wcAddress = account ? account.split(':')[2] : null;
+                    if (wcAddress) {
+                        // Create provider from session
+                        const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                        const prov = await EthereumProvider.init({
+                            projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                            metadata,
+                            showQrModal: false,
+                            chains: [56],
+                            session,
+                            rpcMap: { 56: 'https://bsc-rpc.publicnode.com' },
+                        });
+                        const bp = new BrowserProvider(prov);
+                        const sg = await bp.getSigner(wcAddress);
+                        setSigner(sg);
+                        setManualAddress(wcAddress);
+                        setManualWalletProvider(prov);
+                        setIsWalletConnect(true);
+                        localStorage.setItem('aimining_is_walletconnect', 'true');
+                        setHasSynced(true);
+                        setFinalAddress(wcAddress);
+                        setFinalIsConnected(true);
+                        localStorage.setItem('aimining_manual_address', wcAddress);
+                        localStorage.setItem('aimining_address', wcAddress);
+                        walletConnectionsManager.saveConnection(wcAddress, 'walletconnect');
+                        console.log('[TMA] Re-synced wallet from WC session:', wcAddress);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('[TMA] WC session check failed:', err);
+            }
+
+            // Fallback: update state if AppKit address became available
+            if (address && !finalIsConnected) {
+                setFinalAddress(address);
+                setFinalIsConnected(true);
             }
         };
+
         document.addEventListener('visibilitychange', handleVisibility);
         window.addEventListener('focus', handleVisibility);
         return () => {
