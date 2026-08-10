@@ -848,61 +848,81 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleDirectConnect = async () => {
         const isTMA = !!(window as any).Telegram?.WebApp;
         if (isTMA) {
-            // In TMA: Use WalletConnect modal directly (QR code + all wallets)
             try {
                 setIsConnectModalOpen(false);
                 setConnectingWallet('walletconnect');
 
-                const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                // Step 1: Create WalletConnect SignClient manually
+                const { SignClient } = await import('@walletconnect/sign-client');
                 const { WalletConnectModal } = await import('@walletconnect/modal');
 
-                const qrProvider = await EthereumProvider.init({
+                const client = await SignClient.init({
                     projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                    metadata,
-                    showQrModal: false, // We handle modal ourselves
-                    chains: [56],
-                    methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
-                    events: ["accountsChanged", "chainChanged"],
-                    rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
-                });
-
-                // Create modal instance
-                const modal = new WalletConnectModal({
-                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                    themeMode: 'dark',
-                    themeVariables: {
-                        '--wcm-accent-color': '#FFD700',
-                        '--wcm-background-color': '#1a1a2e',
+                    metadata: {
+                        name: metadata.name,
+                        description: metadata.description,
+                        url: metadata.url,
+                        icons: metadata.icons,
                     }
                 });
 
-                // When URI is ready, show the modal
-                qrProvider.on('display_uri', async (uri: string) => {
-                    console.log('[TMA] Opening WC modal with URI');
-                    await modal.openModal({ uri });
+                // Step 2: Create pairing and get URI
+                const { uri, approval } = await client.connect({
+                    requiredNamespaces: {
+                        eip155: {
+                            methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData'],
+                            chains: ['eip155:56'],
+                            events: ['accountsChanged', 'chainChanged'],
+                        },
+                    },
                 });
 
-                // Connect - this triggers display_uri event
-                await qrProvider.connect();
+                if (!uri) {
+                    throw new Error('Failed to generate WalletConnect URI');
+                }
 
-                // Close modal after connection
+                // Step 3: Show modal with URI (QR code + all wallets)
+                const modal = new WalletConnectModal({
+                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                    themeMode: 'dark',
+                });
+
+                await modal.openModal({ uri });
+
+                // Step 4: Wait for user to approve in wallet
+                const session = await approval();
                 modal.closeModal();
 
-                const accounts = qrProvider.accounts;
-                if (accounts?.[0]) {
-                    const bp = new BrowserProvider(qrProvider);
-                    const sg = await bp.getSigner(accounts[0]);
+                // Step 5: Extract account from session
+                const accounts = session.namespaces.eip155?.accounts || [];
+                const account = accounts[0]; // eip155:56:0xABC...
+                const address = account ? account.split(':')[2] : null;
+
+                if (address) {
+                    // Create a provider from the session for transactions
+                    const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+                    const txProvider = await EthereumProvider.init({
+                        projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                        metadata,
+                        showQrModal: false,
+                        chains: [56],
+                        session, // Reuse the session we just created
+                        rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
+                    });
+
+                    const bp = new BrowserProvider(txProvider);
+                    const sg = await bp.getSigner(address);
                     setSigner(sg);
-                    setManualAddress(accounts[0]);
-                    setManualWalletProvider(qrProvider);
+                    setManualAddress(address);
+                    setManualWalletProvider(txProvider);
                     setIsWalletConnect(true);
                     localStorage.setItem('aimining_is_walletconnect', 'true');
                     setHasSynced(true);
-                    setFinalAddress(accounts[0]);
+                    setFinalAddress(address);
                     setFinalIsConnected(true);
-                    localStorage.setItem('aimining_manual_address', accounts[0]);
-                    localStorage.setItem('aimining_address', accounts[0]);
-                    walletConnectionsManager.saveConnection(accounts[0], 'walletconnect');
+                    localStorage.setItem('aimining_manual_address', address);
+                    localStorage.setItem('aimining_address', address);
+                    walletConnectionsManager.saveConnection(address, 'walletconnect');
                 }
                 setConnectingWallet(null);
             } catch (err) {
