@@ -846,97 +846,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleDirectConnect = async () => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-        if (isTMA) {
-            try {
-                setIsConnectModalOpen(false);
-                setConnectingWallet('walletconnect');
-
-                // Step 1: Create WalletConnect SignClient manually
-                const { SignClient } = await import('@walletconnect/sign-client');
-                const { WalletConnectModal } = await import('@walletconnect/modal');
-
-                const client = await SignClient.init({
-                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                    metadata: {
-                        name: metadata.name,
-                        description: metadata.description,
-                        url: metadata.url,
-                        icons: metadata.icons,
-                    }
-                });
-
-                // Step 2: Create pairing and get URI
-                const { uri, approval } = await client.connect({
-                    requiredNamespaces: {
-                        eip155: {
-                            methods: ['eth_sendTransaction', 'personal_sign', 'eth_signTypedData'],
-                            chains: ['eip155:56'],
-                            events: ['accountsChanged', 'chainChanged'],
-                        },
-                    },
-                });
-
-                if (!uri) {
-                    throw new Error('Failed to generate WalletConnect URI');
-                }
-
-                // Step 3: Show modal with URI (QR code + all wallets)
-                const modal = new WalletConnectModal({
-                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                    themeMode: 'dark',
-                });
-
-                await modal.openModal({ uri });
-
-                // Step 4: Wait for user to approve in wallet
-                const session = await approval();
-                modal.closeModal();
-
-                // Step 5: Extract account from session
-                const accounts = session.namespaces.eip155?.accounts || [];
-                const account = accounts[0]; // eip155:56:0xABC...
-                const address = account ? account.split(':')[2] : null;
-
-                if (address) {
-                    // Create a provider from the session for transactions
-                    const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-                    const txProvider = await EthereumProvider.init({
-                        projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                        metadata,
-                        showQrModal: false,
-                        chains: [56],
-                        session, // Reuse the session we just created
-                        rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
-                    });
-
-                    const bp = new BrowserProvider(txProvider);
-                    const sg = await bp.getSigner(address);
-                    setSigner(sg);
-                    setManualAddress(address);
-                    setManualWalletProvider(txProvider);
-                    setIsWalletConnect(true);
-                    localStorage.setItem('aimining_is_walletconnect', 'true');
-                    setHasSynced(true);
-                    setFinalAddress(address);
-                    setFinalIsConnected(true);
-                    localStorage.setItem('aimining_manual_address', address);
-                    localStorage.setItem('aimining_address', address);
-                    walletConnectionsManager.saveConnection(address, 'walletconnect');
-                }
-                setConnectingWallet(null);
-            } catch (err) {
-                console.error('[TMA] WalletConnect failed:', err);
-                setConnectingWallet(null);
-            }
-            return;
-        }
-        setIsConnectModalOpen(false);
         try {
+            setIsConnectModalOpen(false);
             clearWalletConnectPairingCache();
             await open({ view: 'Connect' });
         } catch (err) {
-            console.warn("[Web3] Reown Modal failed");
+            console.warn("[Web3] Connect modal failed:", err);
         }
     };
 
