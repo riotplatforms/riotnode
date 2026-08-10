@@ -17,12 +17,17 @@ const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
     const isHttpLink = url.startsWith('http');
-    if (isHttpLink && tg?.openLink) { tg.openLink(url); return; }
+    // In Telegram WebView, ONLY allow HTTPS links — block all custom schemes
+    if (tg?.openLink) {
+        if (isHttpLink) { tg.openLink(url); return; }
+        console.warn('[useStaking] Blocked non-HTTPS URL in TMA:', url.substring(0, 30) + '...');
+        return;
+    }
     try {
         const anchor = document.createElement('a');
         anchor.href = url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
         document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor);
-    } catch (e) { console.warn('[useStaking] Link launch fallback:', e); try { window.open(url, '_blank'); } catch (err2) { window.location.href = url; } }
+    } catch (e) { console.warn('[useStaking] Link launch fallback:', e); try { window.open(url, '_blank'); } catch (err2) { console.error('[useStaking] All link methods failed:', err2); } }
 };
 
 const getWalletDappDeepLink = (walletName: string, dappUrl: string): string => {

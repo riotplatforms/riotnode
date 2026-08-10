@@ -126,6 +126,20 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
     }
 };
 
+// HTTPS-only fallback pages for wallets — NO deep links, safe for Telegram WebView
+const getWalletHttpsHomepage = (wallet: string): string => {
+    switch (wallet.toLowerCase()) {
+        case 'metamask': return 'https://metamask.io/download/';
+        case 'trust': return 'https://trustwallet.com/download';
+        case 'safepal': return 'https://www.safepal.com/download';
+        case 'tokenpocket': return 'https://www.tokenpocket.pro/download/app';
+        case 'binance': return 'https://www.binance.com/en/download';
+        case 'okx': return 'https://www.okx.com/download';
+        case 'bitget': return 'https://www.bitget.com/download';
+        default: return 'https://metamask.io/download/';
+    }
+};
+
 const TOKENPOCKET_ANDROID_PACKAGE = 'vip.mytokenpocket';
 const TOKENPOCKET_DOWNLOAD_URL = 'https://www.tokenpocket.pro/download/app';
 
@@ -217,14 +231,18 @@ export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
     const isHttpLink = url.startsWith('http');
 
-    if (isHttpLink && tg?.openLink) {
-        tg.openLink(url);
+    // In Telegram WebView, ONLY allow HTTPS links — block all custom schemes
+    if (tg?.openLink) {
+        if (isHttpLink) {
+            tg.openLink(url);
+            return;
+        }
+        // Block custom schemes (wc:, metamask://, trust://, etc.) in Telegram
+        console.warn('[Web3] Blocked non-HTTPS URL in TMA:', url.substring(0, 30) + '...');
         return;
     }
 
-    // Direct window location trigger for wallet deep links
-    // BUT we must avoid modifying window.location.href directly for custom schemes inside Telegram
-    // to prevent net::ERR_UNKNOWN_URL_SCHEME crashes.
+    // Non-Telegram: try anchor element (works for deep links in normal browsers)
     try {
         const anchor = document.createElement('a');
         anchor.href = url;
@@ -238,8 +256,7 @@ export const launchExternalLink = (url: string) => {
         try {
             window.open(url, '_blank');
         } catch (err2) {
-            // Last resort
-            window.location.href = url;
+            console.error("[Web3] All link launch methods failed:", err2);
         }
     }
 };
@@ -700,7 +717,61 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const handleWalletClick = async (wallet: string) => {
         const isWcMobileWallet = ["metamask", "trust", "safepal", "binance", "okx", "bitget", "tokenpocket"].includes(wallet);
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || !!(window as any).Telegram?.WebApp;
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isTMA;
+
+        // ============================================================
+        // TELEGRAM MINI APP — ALWAYS use universal links, NEVER AppKit
+        // ============================================================
+        if (isTMA) {
+            try {
+                // Step 1: Try injected wallet (works if user opened in wallet's built-in browser)
+                const status = await connectInjectedWallet(wallet);
+                if (status === 'connected') return;
+                if (status === 'failed') return;
+
+                // Step 2: Wallet not injected → use WalletConnect via universal link
+                setConnectingWallet(wallet);
+                setWalletType(wallet);
+                localStorage.setItem('aimining_wallet_type', wallet);
+
+                // Step 3: Make sure we have a fresh WC URI
+                if (!activeUri) {
+                    clearWalletConnectPairingCache();
+                    await prepareWalletConnect();
+                    // Give a brief moment for display_uri event to fire
+                    await new Promise(r => setTimeout(r, 800));
+                }
+
+                // Step 4: Build universal link and open it (HTTPS only — no custom schemes)
+                if (activeUri) {
+                    const encoded = encodeURIComponent(activeUri);
+                    const universalLink = getWalletConnectionLink(wallet, encoded);
+                    if (universalLink) {
+                        launchExternalLink(universalLink);
+                        return;
+                    }
+                }
+
+                // Step 5: Fallback — open wallet's main HTTPS page (still no deep links)
+                const httpsFallback = getWalletHttpsHomepage(wallet);
+                if (httpsFallback) {
+                    launchExternalLink(httpsFallback);
+                    return;
+                }
+
+                // Step 6: Last resort — show wallet name to user so they can manually connect
+                setConnectingWallet(null);
+            } catch (e) {
+                console.error("[TMA] Wallet click error:", e);
+                setConnectingWallet(null);
+            }
+            return;
+        }
+
+        // ============================================================
+        // NON-TELEGRAM (regular browser) — original flow
+        // ============================================================
 
         // IMMEDIATE FAST-TRACK: TokenPocket (Direct App to DApp Browser)
         if (wallet === "tokenpocket") {
@@ -791,10 +862,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const handleDirectConnect = async () => {
         const isTMA = !!(window as any).Telegram?.WebApp;
         if (isTMA) {
-            // In TMA: show WalletConnect URI directly instead of AppKit modal
-            // prepareWalletConnect() already runs when modal opened, so activeUri should be generating
-            // Just show the connecting state for generic "walletconnect"
+            // In TMA: prepare WC URI and auto-select MetaMask (will use universal link)
             setConnectingWallet('metamask');
+            clearWalletConnectPairingCache();
+            await prepareWalletConnect();
             return;
         }
         setIsConnectModalOpen(false);
