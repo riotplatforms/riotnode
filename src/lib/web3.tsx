@@ -378,6 +378,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [finalAddress, setFinalAddress] = useState<string | undefined>(address || manualAddress || undefined);
     const [finalIsConnected, setFinalIsConnected] = useState<boolean>(isConnected || !!manualAddress);
 
+    // Sync AppKit connection → manual state
     useEffect(() => {
         const addr = address || manualAddress;
         if (addr && addr !== finalAddress) {
@@ -388,6 +389,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setFinalIsConnected(false);
         }
     }, [address, manualAddress, isConnected, status]);
+
+    // Re-check connection when user comes back to Telegram (after approving in wallet app)
+    useEffect(() => {
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') {
+                const currentAddr = address || manualAddress;
+                if (currentAddr && !finalIsConnected) {
+                    setFinalAddress(currentAddr);
+                    setFinalIsConnected(true);
+                }
+                // Force signer re-sync after returning from wallet app
+                if (currentAddr && !signer) {
+                    const currentProvider = walletProvider || manualWalletProvider || (window as any).ethereum;
+                    if (currentProvider) {
+                        (async () => {
+                            try {
+                                const bp = new BrowserProvider(currentProvider);
+                                const s = await bp.getSigner();
+                                setSigner(s);
+                                setHasSynced(true);
+                            } catch {}
+                        })();
+                    }
+                }
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        window.addEventListener('focus', handleVisibility);
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibility);
+            window.removeEventListener('focus', handleVisibility);
+        };
+    }, [address, manualAddress, finalIsConnected, signer, walletProvider, manualWalletProvider]);
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
