@@ -646,10 +646,40 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const connect = async () => {
         try {
             clearWalletConnectPairingCache();
-            await open({ view: 'Connect' });
+
+            // Use WalletConnect directly with QR modal (works in Telegram WebView)
+            const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+            const wcProvider = await EthereumProvider.init({
+                projectId: 'ec457184730a7f1e24bbe58a393f442b',
+                metadata,
+                showQrModal: true, // Shows QR code + wallet list in-page
+                chains: [56],
+                methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+                events: ["accountsChanged", "chainChanged"],
+                rpcMap: { 56: 'https://bsc-rpc.publicnode.com' },
+            });
+
+            // This opens the QR modal and waits for user to approve in wallet
+            await wcProvider.connect();
+
+            const accounts = wcProvider.accounts;
+            if (accounts?.[0]) {
+                const bp = new BrowserProvider(wcProvider);
+                const sg = await bp.getSigner(accounts[0]);
+                setSigner(sg);
+                setManualAddress(accounts[0]);
+                setManualWalletProvider(wcProvider);
+                setIsWalletConnect(true);
+                localStorage.setItem('aimining_is_walletconnect', 'true');
+                setHasSynced(true);
+                setFinalAddress(accounts[0]);
+                setFinalIsConnected(true);
+                localStorage.setItem('aimining_manual_address', accounts[0]);
+                localStorage.setItem('aimining_address', accounts[0]);
+                walletConnectionsManager.saveConnection(accounts[0], 'walletconnect');
+            }
         } catch (err) {
-            console.warn("[Web3] AppKit modal failed, falling back to custom modal:", err);
-            setIsConnectModalOpen(true);
+            console.warn("[Web3] WalletConnect failed:", err);
         }
     };
 
