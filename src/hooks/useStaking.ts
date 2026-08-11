@@ -19,7 +19,7 @@ const launchExternalLink = (url: string) => {
     const isHttpLink = url.startsWith('http');
     // In Telegram WebView, ONLY allow HTTPS links — block all custom schemes
     if (tg?.openLink) {
-        if (isHttpLink) { tg.openLink(url); return; }
+        if (isHttpLink) { tg.openLink(url, { try_instant_view: false }); return; }
         console.warn('[useStaking] Blocked non-HTTPS URL in TMA:', url.substring(0, 30) + '...');
         return;
     }

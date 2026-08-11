@@ -233,7 +233,10 @@ export const launchExternalLink = (url: string) => {
     // In Telegram WebView, ONLY allow HTTPS links — block all custom schemes
     if (tg?.openLink) {
         if (isHttpLink) {
-            tg.openLink(url);
+            // CRITICAL: try_instant_view: false forces external browser
+            // Without this, Telegram opens in its built-in browser which can't
+            // handle wallet universal links → causes "invalid deeplink" error
+            tg.openLink(url, { try_instant_view: false });
             return;
         }
         // Block custom schemes (wc:, metamask://, trust://, etc.) in Telegram
