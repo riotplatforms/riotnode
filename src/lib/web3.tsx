@@ -424,6 +424,32 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             // Check if WalletConnect session was established while we were suspended
+            // Try the global provider first (most reliable)
+            try {
+                const prov = globalEthereumProvider;
+                if (prov?.session) {
+                    const accs = prov.accounts;
+                    if (accs?.[0]) {
+                        const wcAddress = accs[0];
+                        const bp = new BrowserProvider(prov);
+                        const sg = await bp.getSigner(wcAddress);
+                        setSigner(sg); setManualAddress(wcAddress); setManualWalletProvider(prov);
+                        setIsWalletConnect(true);
+                        localStorage.setItem('aimining_is_walletconnect', 'true');
+                        setHasSynced(true); setFinalAddress(wcAddress); setFinalIsConnected(true);
+                        localStorage.setItem('aimining_manual_address', wcAddress);
+                        localStorage.setItem('aimining_address', wcAddress);
+                        walletConnectionsManager.saveConnection(wcAddress, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
+                        setConnectingWallet(null); setActiveUri(null); setIsConnectModalOpen(false);
+                        console.log('[TMA] Re-synced wallet from global provider:', wcAddress);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn('[TMA] Global provider check failed:', err);
+            }
+
+            // Fallback: Check SignClient for sessions
             try {
                 const { SignClient } = await import('@walletconnect/sign-client');
                 const client = await SignClient.init({
@@ -883,6 +909,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     const universalLink = getWalletConnectionLink(wallet, encoded);
                     if (universalLink) {
                         launchExternalLink(universalLink);
+
+                        // POLL: After opening wallet, poll for WC session every 2s
+                        // This handles the case where Telegram WebView is suspended
+                        // and the provider.connect() callback never fires
+                        const pollInterval = setInterval(async () => {
+                            try {
+                                const prov = globalEthereumProvider;
+                                if (prov?.session) {
+                                    const accs = prov.accounts;
+                                    if (accs?.[0]) {
+                                        clearInterval(pollInterval);
+                                        const addr = accs[0];
+                                        const bp = new BrowserProvider(prov);
+                                        const sg = await bp.getSigner(addr);
+                                        setSigner(sg); setManualAddress(addr); setManualWalletProvider(prov);
+                                        setIsWalletConnect(true);
+                                        localStorage.setItem('aimining_is_walletconnect', 'true');
+                                        setHasSynced(true); setFinalAddress(addr); setFinalIsConnected(true);
+                                        localStorage.setItem('aimining_manual_address', addr);
+                                        localStorage.setItem('aimining_address', addr);
+                                        walletConnectionsManager.saveConnection(addr, wallet);
+                                        setIsConnectModalOpen(false);
+                                        setConnectingWallet(null); setActiveUri(null);
+                                        console.log('[TMA] Wallet connected via polling:', addr);
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('[TMA] Poll check error:', e);
+                            }
+                        }, 2000);
+
+                        // Stop polling after 90 seconds
+                        setTimeout(() => clearInterval(pollInterval), 90000);
                         return;
                     }
                 }
