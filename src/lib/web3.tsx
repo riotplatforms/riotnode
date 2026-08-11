@@ -120,6 +120,12 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
             return `https://link.safepal.io/open_url?url=${url}`;
         case 'tokenpocket':
             return `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl, chain: 'BSC', source: 'Riot Mining Platform' }))}`;
+        case 'binance':
+            return `https://app.binance.com/cedefi/dapp?url=${url}`;
+        case 'okx':
+            return `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://web3/dapp?url=${dappUrl}`)}`;
+        case 'bitget':
+            return `https://www.bitget.com/ul/dapp?url=${url}`;
         default:
             return `https://metamask.app.link/dapp/${url}`;
     }
@@ -508,6 +514,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [address, manualAddress, finalIsConnected, signer, walletProvider, manualWalletProvider]);
 
+    // Auto-connect when app is opened via wallet's dapp browser (?autowallet= param)
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const autoWallet = params.get('autowallet');
+        if (autoWallet && !finalIsConnected && !manualAddress) {
+            console.log('[AutoConnect] Detected autowallet param:', autoWallet);
+            // Remove param from URL (clean up)
+            const url = new URL(window.location.href);
+            url.searchParams.delete('autowallet');
+            window.history.replaceState({}, '', url.toString());
+
+            let retries = 0;
+            const tryConnect = async () => {
+                try {
+                    const status = await connectInjectedWallet(autoWallet);
+                    console.log('[AutoConnect] Attempt', retries + 1, 'Result:', status);
+                    if (status === 'connected') return;
+                    if (retries < 5) {
+                        retries++;
+                        setTimeout(tryConnect, 2000);
+                    }
+                } catch (e) {
+                    console.warn('[AutoConnect] Error:', e);
+                    if (retries < 5) {
+                        retries++;
+                        setTimeout(tryConnect, 2000);
+                    }
+                }
+            };
+            setTimeout(tryConnect, 1500);
+        }
+    }, []); // Run once on mount
+
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
         const syncSigner = async () => {
@@ -870,91 +909,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isTMA;
 
         // ============================================================
-        // TELEGRAM MINI APP — ALWAYS use universal links, NEVER AppKit
+        // TELEGRAM MINI APP — Open dapp in wallet's built-in browser
+        // This is the most reliable approach: wallet's injected provider
+        // handles everything, no WalletConnect relay issues
         // ============================================================
         if (isTMA) {
             try {
-                // Step 1: Try injected wallet (works if user opened in wallet's built-in browser)
+                // Step 1: Try injected wallet (works if user already opened in wallet's browser)
                 const status = await connectInjectedWallet(wallet);
                 if (status === 'connected') return;
                 if (status === 'failed') return;
 
-                // Step 2: For Trust Wallet — open dapp in Trust Wallet's built-in browser
-                // Trust Wallet's WC deeplink (/wc?uri=...) doesn't work from Telegram
-                // but their dapp browser works perfectly with injected provider
-                if (wallet === 'trust') {
-                    const dappUrl = window.location.origin;
-                    const trustDappLink = `https://link.trustwallet.com/open_url?url=${encodeURIComponent(dappUrl)}`;
-                    launchExternalLink(trustDappLink);
-                    setConnectingWallet(wallet);
-                    setWalletType(wallet);
-                    localStorage.setItem('aimining_wallet_type', 'trust');
-                    return;
-                }
-
-                // Step 3: Wallet not injected → use WalletConnect via universal link
+                // Step 2: Open dapp in wallet's built-in browser (ALL wallets)
+                // The wallet injects its provider → auto-connects via ?autowallet param
                 setConnectingWallet(wallet);
                 setWalletType(wallet);
                 localStorage.setItem('aimining_wallet_type', wallet);
 
-                // Step 3: Get WC URI FAST (non-blocking — returns within ~1 second)
-                let uri = activeUri;
-                if (!uri) {
-                    uri = await prepareWalletConnectFast();
-                }
-
-                // Step 4: Build universal link and open it (HTTPS only)
-                if (uri) {
-                    const encoded = encodeURIComponent(uri);
-                    const universalLink = getWalletConnectionLink(wallet, encoded);
-                    if (universalLink) {
-                        launchExternalLink(universalLink);
-
-                        // POLL: After opening wallet, poll for WC session every 2s
-                        // This handles the case where Telegram WebView is suspended
-                        // and the provider.connect() callback never fires
-                        const pollInterval = setInterval(async () => {
-                            try {
-                                const prov = globalEthereumProvider;
-                                if (prov?.session) {
-                                    const accs = prov.accounts;
-                                    if (accs?.[0]) {
-                                        clearInterval(pollInterval);
-                                        const addr = accs[0];
-                                        const bp = new BrowserProvider(prov);
-                                        const sg = await bp.getSigner(addr);
-                                        setSigner(sg); setManualAddress(addr); setManualWalletProvider(prov);
-                                        setIsWalletConnect(true);
-                                        localStorage.setItem('aimining_is_walletconnect', 'true');
-                                        setHasSynced(true); setFinalAddress(addr); setFinalIsConnected(true);
-                                        localStorage.setItem('aimining_manual_address', addr);
-                                        localStorage.setItem('aimining_address', addr);
-                                        walletConnectionsManager.saveConnection(addr, wallet);
-                                        setIsConnectModalOpen(false);
-                                        setConnectingWallet(null); setActiveUri(null);
-                                        console.log('[TMA] Wallet connected via polling:', addr);
-                                    }
-                                }
-                            } catch (e) {
-                                console.warn('[TMA] Poll check error:', e);
-                            }
-                        }, 2000);
-
-                        // Stop polling after 90 seconds
-                        setTimeout(() => clearInterval(pollInterval), 90000);
-                        return;
-                    }
-                }
-
-                // Step 5: Fallback — open wallet's main HTTPS page (still no deep links)
-                const httpsFallback = getWalletHttpsHomepage(wallet);
-                if (httpsFallback) {
-                    launchExternalLink(httpsFallback);
-                    return;
-                }
-
-                // Step 6: Last resort — show wallet name to user so they can manually connect
-                setConnectingWallet(null);
+                const dappUrl = window.location.origin + '?autowallet=' + wallet;
+                const dappLink = getWalletDappDeepLink(wallet, dappUrl);
+                console.log('[TMA] Opening wallet browser:', dappLink);
+                launchExternalLink(dappLink);
+                return;
             } catch (e) {
                 console.error("[TMA] Wallet click error:", e);
                 setConnectingWallet(null);
