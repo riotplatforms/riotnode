@@ -505,53 +505,52 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [address, manualAddress, finalIsConnected, signer, walletProvider, manualWalletProvider]);
 
-    // Auto-connect when app is opened via wallet's dapp browser
-    // Uses localStorage instead of URL param to avoid "invalid deeplink" errors
+    // Auto-connect when app is opened inside a wallet's built-in browser
+    // Detect injected provider — no URL params or localStorage needed
     useEffect(() => {
-        const autoWallet = localStorage.getItem('aimining_wallet_type');
-        if (autoWallet && autoWallet !== 'walletconnect' && !finalIsConnected && !manualAddress && !signer) {
-            console.log('[AutoConnect] Detected wallet from localStorage:', autoWallet);
-            localStorage.removeItem('aimining_wallet_type'); // Prevent re-triggering
+        if (finalIsConnected || manualAddress || signer) return;
 
-            let retries = 0;
-            const maxRetries = 10;
-            const tryConnect = async () => {
-                try {
-                    // Check if any provider is available before trying
-                    const eth = (window as any).ethereum;
-                    const walletSpecific = 
-                        (autoWallet === 'trust' && (window as any).trustwallet?.ethereum) ||
-                        (autoWallet === 'safepal' && ((window as any).safepal?.ethereum || (window as any).safepalProvider)) ||
-                        (autoWallet === 'tokenpocket' && (window as any).tokenpocket?.ethereum) ||
-                        (autoWallet === 'binance' && (window as any).binance?.ethereum) ||
-                        (autoWallet === 'okx' && (window as any).okxwallet?.ethereum) ||
-                        (autoWallet === 'bitget' && (window as any).bitget?.ethereum);
-                    
-                    if (!eth && !walletSpecific && retries < maxRetries) {
-                        console.log('[AutoConnect] No provider yet, retry', retries + 1);
-                        retries++;
-                        setTimeout(tryConnect, 3000);
-                        return;
-                    }
+        // Don't auto-connect if user just opened normally (not from wallet browser)
+        // Only auto-connect if a wallet-specific provider is detected
+        const detectWalletProvider = () => {
+            const eth = (window as any).ethereum;
+            if (!eth) return null;
 
-                    const status = await connectInjectedWallet(autoWallet);
-                    console.log('[AutoConnect] Attempt', retries + 1, 'Result:', status);
-                    if (status === 'connected') return;
-                    if (retries < maxRetries) {
-                        retries++;
-                        setTimeout(tryConnect, 3000);
-                    }
-                } catch (e) {
-                    console.warn('[AutoConnect] Error:', e);
-                    if (retries < maxRetries) {
-                        retries++;
-                        setTimeout(tryConnect, 3000);
-                    }
+            // Check for wallet-specific flags
+            if (eth.isMetaMask && !(window as any).trustwallet) return 'metamask';
+            if ((window as any).trustwallet?.ethereum || eth.isTrust) return 'trust';
+            if ((window as any).safepal?.ethereum || (window as any).safepalProvider || eth.isSafePal) return 'safepal';
+            if ((window as any).tokenpocket?.ethereum || eth.isTokenPocket) return 'tokenpocket';
+            if ((window as any).binance?.ethereum || eth.isBinance) return 'binance';
+            if ((window as any).okxwallet?.ethereum || eth.isOKX) return 'okx';
+            if ((window as any).bitget?.ethereum || eth.isBitget) return 'bitget';
+            return null;
+        };
+
+        let retries = 0;
+        const maxRetries = 12;
+        const tryAutoConnect = async () => {
+            const detectedWallet = detectWalletProvider();
+            if (!detectedWallet) {
+                if (retries < maxRetries) {
+                    retries++;
+                    setTimeout(tryAutoConnect, 1000);
                 }
-            };
-            setTimeout(tryConnect, 2000);
-        }
-    }, []); // Run once on mount
+                return;
+            }
+
+            console.log('[AutoConnect] Detected wallet provider:', detectedWallet);
+            const status = await connectInjectedWallet(detectedWallet);
+            console.log('[AutoConnect] Result:', status);
+            if (status !== 'connected' && retries < maxRetries) {
+                retries++;
+                setTimeout(tryAutoConnect, 2000);
+            }
+        };
+
+        // Start checking after 1 second (give wallet browser time to inject)
+        setTimeout(tryAutoConnect, 1000);
+    }, [finalIsConnected, manualAddress, signer]);
 
     // Sync Signer when connection changes (High-Performance Mode for TMA)
     useEffect(() => {
