@@ -112,8 +112,11 @@ const getWalletConnectionLink = (walletName: string | null | undefined, encodedU
 const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: string): string => {
     const url = encodeURIComponent(dappUrl);
     switch ((walletName || '').toLowerCase()) {
-        case 'metamask':
-            return `https://metamask.app.link/dapp/${url}`;
+        case 'metamask': {
+            // MetaMask uses /dapp/ path — URL should NOT be encoded
+            const clean = dappUrl.replace(/^https?:\/\//, '');
+            return `https://metamask.app.link/dapp/${clean}`;
+        }
         case 'trust':
             return `https://link.trustwallet.com/open_url?url=${url}`;
         case 'safepal':
@@ -127,7 +130,7 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
         case 'bitget':
             return `https://www.bitget.com/ul/dapp?url=${url}`;
         default:
-            return `https://metamask.app.link/dapp/${url}`;
+            return `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`;
     }
 };
 
@@ -514,24 +517,42 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             window.history.replaceState({}, '', url.toString());
 
             let retries = 0;
+            const maxRetries = 10;
             const tryConnect = async () => {
                 try {
+                    // Check if any provider is available before trying
+                    const eth = (window as any).ethereum;
+                    const walletSpecific = 
+                        (autoWallet === 'trust' && (window as any).trustwallet?.ethereum) ||
+                        (autoWallet === 'safepal' && ((window as any).safepal?.ethereum || (window as any).safepalProvider)) ||
+                        (autoWallet === 'tokenpocket' && (window as any).tokenpocket?.ethereum) ||
+                        (autoWallet === 'binance' && (window as any).binance?.ethereum) ||
+                        (autoWallet === 'okx' && (window as any).okxwallet?.ethereum) ||
+                        (autoWallet === 'bitget' && (window as any).bitget?.ethereum);
+                    
+                    if (!eth && !walletSpecific && retries < maxRetries) {
+                        console.log('[AutoConnect] No provider yet, retry', retries + 1);
+                        retries++;
+                        setTimeout(tryConnect, 3000);
+                        return;
+                    }
+
                     const status = await connectInjectedWallet(autoWallet);
                     console.log('[AutoConnect] Attempt', retries + 1, 'Result:', status);
                     if (status === 'connected') return;
-                    if (retries < 5) {
+                    if (retries < maxRetries) {
                         retries++;
-                        setTimeout(tryConnect, 2000);
+                        setTimeout(tryConnect, 3000);
                     }
                 } catch (e) {
                     console.warn('[AutoConnect] Error:', e);
-                    if (retries < 5) {
+                    if (retries < maxRetries) {
                         retries++;
-                        setTimeout(tryConnect, 2000);
+                        setTimeout(tryConnect, 3000);
                     }
                 }
             };
-            setTimeout(tryConnect, 1500);
+            setTimeout(tryConnect, 2000);
         }
     }, []); // Run once on mount
 
@@ -746,11 +767,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const connectInjectedWallet = async (preferredWallet?: string): Promise<'connected' | 'not_installed' | 'failed'> => {
-        // Wait for window.ethereum to be injected (MetaMask may inject after page load)
+        // Wait for window.ethereum to be injected (wallet may inject after page load)
         let ethereum = (window as any).ethereum;
         if (!ethereum && preferredWallet) {
-            for (let i = 0; i < 10; i++) {
-                await new Promise(r => setTimeout(r, 200));
+            for (let i = 0; i < 15; i++) {
+                await new Promise(r => setTimeout(r, 500));
                 ethereum = (window as any).ethereum;
                 if (ethereum) break;
             }
@@ -897,7 +918,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isTMA;
 
         // ============================================================
-        // TELEGRAM MINI APP — Use AppKit modal (handles deeplinks + reconnection)
+        // TELEGRAM MINI APP — Open dapp in wallet's built-in browser
+        // SafePal confirmed working. This bypasses WC relay issues.
         // ============================================================
         if (isTMA) {
             try {
@@ -906,12 +928,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 if (status === 'connected') return;
                 if (status === 'failed') return;
 
-                // Step 2: Use AppKit's built-in connect modal
-                // AppKit handles WC deeplinks, reconnection, session management internally
+                // Step 2: Open dapp in wallet's built-in browser (ALL wallets)
                 setConnectingWallet(wallet);
                 setWalletType(wallet);
                 localStorage.setItem('aimining_wallet_type', wallet);
-                await open({ view: 'Connect' });
+
+                const dappUrl = window.location.origin + '?autowallet=' + wallet;
+                const dappLink = getWalletDappDeepLink(wallet, dappUrl);
+                console.log('[TMA] Opening wallet browser:', wallet, dappLink);
+                launchExternalLink(dappLink);
                 return;
             } catch (e) {
                 console.error("[TMA] Wallet click error:", e);
