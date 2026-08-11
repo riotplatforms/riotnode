@@ -131,18 +131,7 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
     }
 };
 
-// HTTPS-only fallback pages for wallets — NO deep links, safe for Telegram WebView
-const _getWalletHttpsHomepage = (wallet: string): string => {
-    switch (wallet.toLowerCase()) {
-        case 'metamask': return 'https://metamask.io/download/';
-        case 'trust': return 'https://trustwallet.com/download';
-        case 'safepal': return 'https://www.safepal.com/download';
-        case 'tokenpocket': return 'https://www.tokenpocket.pro/download/app';
-        case 'binance': return 'https://www.binance.com/en/download';
-        case 'okx': return 'https://www.okx.com/download';
-        case 'bitget': return 'https://www.bitget.com/download';
-        default: return 'https://metamask.io/download/';
-    }
+// HTTPS-only fallback pages — removed (unused after TMA dapp browser approach)
 };
 
 const TOKENPOCKET_ANDROID_PACKAGE = 'vip.mytokenpocket';
@@ -1244,69 +1233,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Fast URI generation for TMA — returns WC URI without waiting for user approval
-    const _prepareWalletConnectFast = async (): Promise<string | null> => {
-        try {
-            clearWalletConnectPairingCache();
-            globalEthereumProvider = null; // Force fresh provider
-            globalEthereumProviderPromise = null;
-            const provider = await getGlobalEthereumProvider();
-
-            // Intercept for tx redirects
-            if (!provider._isIntercepted) {
-                const origReq = provider.request.bind(provider);
-                (provider as any).request = async (args: any) => {
-                    const m = args?.method;
-                    const isTx = m === 'eth_sendTransaction' || m === 'personal_sign' || m === 'eth_sign' || m === 'eth_signTypedData' || m === 'eth_signTypedData_v4';
-                    if (args && isTx) {
-                        const p = origReq(args);
-                        const r = getRedirectLinkForProvider(provider);
-                        if (r) setTimeout(() => launchExternalLink(r), 150);
-                        return p;
-                    }
-                    return origReq(args);
-                };
-                provider._isIntercepted = true;
-            }
-
-            // Clean stale session
-            if (provider.session) { try { await provider.disconnect(); } catch {} }
-
-            // Capture URI via Promise — don't wait for full connection
-            let capturedUri: string | null = null;
-            const uriPromise = new Promise<string>((resolve) => {
-                const handler = (uri: string) => { capturedUri = uri; resolve(uri); };
-                provider.once('display_uri', handler);
-                setTimeout(() => { if (!capturedUri) resolve(''); }, 5000);
-            });
-
-            // Fire connect in background (waits for wallet approval)
-            provider.connect().then((accounts: any) => {
-                const addr = accounts?.[0];
-                if (addr) {
-                    (async () => {
-                        const bp = new BrowserProvider(provider);
-                        const sg = await bp.getSigner(addr);
-                        setSigner(sg); setManualAddress(addr); setManualWalletProvider(provider);
-                        setIsWalletConnect(true); localStorage.setItem('aimining_is_walletconnect', 'true');
-                        setHasSynced(true); setFinalAddress(addr); setFinalIsConnected(true);
-                        localStorage.setItem('aimining_manual_address', addr); localStorage.setItem('aimining_address', addr);
-                        walletConnectionsManager.saveConnection(addr, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
-                        setIsConnectModalOpen(false); setConnectingWallet(null); setActiveUri(null);
-                    })();
-                }
-            }).catch((err: any) => { console.warn('[TMA] WC connect failed:', err); setActiveUri(null); setConnectingWallet(null); });
-
-            // Wait for URI (fires within ~1 second)
-            const uri = await uriPromise;
-            setActiveUri(uri || null);
-            setActiveProvider(provider);
-            return uri || null;
-        } catch (err) {
-            console.error('[TMA] Fast WC init failed:', err);
-            return null;
-        }
-    };
+    // Fast URI generation for TMA — removed (unused after TMA dapp browser approach)
 
     useEffect(() => {
         if (isConnectModalOpen) {
