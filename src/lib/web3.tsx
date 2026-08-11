@@ -897,9 +897,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isTMA;
 
         // ============================================================
-        // TELEGRAM MINI APP — Open dapp in wallet's built-in browser
-        // This is the most reliable approach: wallet's injected provider
-        // handles everything, no WalletConnect relay issues
+        // TELEGRAM MINI APP — Use AppKit modal (handles deeplinks + reconnection)
         // ============================================================
         if (isTMA) {
             try {
@@ -908,16 +906,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 if (status === 'connected') return;
                 if (status === 'failed') return;
 
-                // Step 2: Open dapp in wallet's built-in browser (ALL wallets)
-                // The wallet injects its provider → auto-connects via ?autowallet param
+                // Step 2: Use AppKit's built-in connect modal
+                // AppKit handles WC deeplinks, reconnection, session management internally
                 setConnectingWallet(wallet);
                 setWalletType(wallet);
                 localStorage.setItem('aimining_wallet_type', wallet);
-
-                const dappUrl = window.location.origin + '?autowallet=' + wallet;
-                const dappLink = getWalletDappDeepLink(wallet, dappUrl);
-                console.log('[TMA] Opening wallet browser:', dappLink);
-                launchExternalLink(dappLink);
+                await open({ view: 'Connect' });
                 return;
             } catch (e) {
                 console.error("[TMA] Wallet click error:", e);
