@@ -853,7 +853,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 if (status === 'connected') return;
                 if (status === 'failed') return;
 
-                // Step 2: Wallet not injected → use WalletConnect via universal link
+                // Step 2: For Trust Wallet — open dapp in Trust Wallet's built-in browser
+                // Trust Wallet's WC deeplink (/wc?uri=...) doesn't work from Telegram
+                // but their dapp browser works perfectly with injected provider
+                if (wallet === 'trust') {
+                    const dappUrl = window.location.origin;
+                    const trustDappLink = `https://link.trustwallet.com/open_url?url=${encodeURIComponent(dappUrl)}`;
+                    launchExternalLink(trustDappLink);
+                    setConnectingWallet(wallet);
+                    setWalletType(wallet);
+                    localStorage.setItem('aimining_wallet_type', 'trust');
+                    return;
+                }
+
+                // Step 3: Wallet not injected → use WalletConnect via universal link
                 setConnectingWallet(wallet);
                 setWalletType(wallet);
                 localStorage.setItem('aimining_wallet_type', wallet);
@@ -1271,6 +1284,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         if (activeUri && connectingWallet) {
+            // Skip WC deeplink for Trust Wallet in TMA — handled separately via dapp browser
+            const isTMA = !!(window as any).Telegram?.WebApp;
+            if (isTMA && connectingWallet === 'trust') return;
+            
             const encoded = encodeURIComponent(activeUri);
             const link = getWalletConnectionLink(connectingWallet, encoded);
             if (link) {
@@ -1458,6 +1475,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 {activeUri ? (
                                     <button
                                         onClick={() => {
+                                             // For Trust Wallet in TMA, use dapp browser approach
+                                             const isTMA = !!(window as any).Telegram?.WebApp;
+                                             if (isTMA && connectingWallet === 'trust') {
+                                                 const dappUrl = window.location.origin;
+                                                 const trustDappLink = `https://link.trustwallet.com/open_url?url=${encodeURIComponent(dappUrl)}`;
+                                                 launchExternalLink(trustDappLink);
+                                                 return;
+                                             }
                                              const encoded = encodeURIComponent(activeUri);
                                              const link = getWalletConnectionLink(connectingWallet, encoded);
                                              if (link) {
