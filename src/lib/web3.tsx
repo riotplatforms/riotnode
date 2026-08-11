@@ -505,16 +505,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [address, manualAddress, finalIsConnected, signer, walletProvider, manualWalletProvider]);
 
-    // Auto-connect when app is opened via wallet's dapp browser (?autowallet= param)
+    // Auto-connect when app is opened via wallet's dapp browser
+    // Uses localStorage instead of URL param to avoid "invalid deeplink" errors
     useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const autoWallet = params.get('autowallet');
-        if (autoWallet && !finalIsConnected && !manualAddress) {
-            console.log('[AutoConnect] Detected autowallet param:', autoWallet);
-            // Remove param from URL (clean up)
-            const url = new URL(window.location.href);
-            url.searchParams.delete('autowallet');
-            window.history.replaceState({}, '', url.toString());
+        const autoWallet = localStorage.getItem('aimining_wallet_type');
+        if (autoWallet && autoWallet !== 'walletconnect' && !finalIsConnected && !manualAddress && !signer) {
+            console.log('[AutoConnect] Detected wallet from localStorage:', autoWallet);
+            localStorage.removeItem('aimining_wallet_type'); // Prevent re-triggering
 
             let retries = 0;
             const maxRetries = 10;
@@ -933,7 +930,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 setWalletType(wallet);
                 localStorage.setItem('aimining_wallet_type', wallet);
 
-                const dappUrl = window.location.origin + '?autowallet=' + wallet;
+                const dappUrl = window.location.origin;
                 const dappLink = getWalletDappDeepLink(wallet, dappUrl);
                 console.log('[TMA] Opening wallet browser:', wallet, dappLink);
                 launchExternalLink(dappLink);
