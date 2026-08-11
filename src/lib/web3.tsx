@@ -132,7 +132,6 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
 };
 
 // HTTPS-only fallback pages — removed (unused after TMA dapp browser approach)
-};
 
 const TOKENPOCKET_ANDROID_PACKAGE = 'vip.mytokenpocket';
 const TOKENPOCKET_DOWNLOAD_URL = 'https://www.tokenpocket.pro/download/app';
