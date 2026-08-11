@@ -132,7 +132,7 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
 };
 
 // HTTPS-only fallback pages for wallets — NO deep links, safe for Telegram WebView
-const getWalletHttpsHomepage = (wallet: string): string => {
+const _getWalletHttpsHomepage = (wallet: string): string => {
     switch (wallet.toLowerCase()) {
         case 'metamask': return 'https://metamask.io/download/';
         case 'trust': return 'https://trustwallet.com/download';
@@ -1245,7 +1245,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     // Fast URI generation for TMA — returns WC URI without waiting for user approval
-    const prepareWalletConnectFast = async (): Promise<string | null> => {
+    const _prepareWalletConnectFast = async (): Promise<string | null> => {
         try {
             clearWalletConnectPairingCache();
             globalEthereumProvider = null; // Force fresh provider
