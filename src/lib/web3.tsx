@@ -227,17 +227,28 @@ export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
     const isHttpLink = url.startsWith('http');
 
-    // In Telegram WebView, ONLY allow HTTPS links — block all custom schemes
+    // In Telegram WebView, use tg.openLink for HTTPS links
     if (tg?.openLink) {
         if (isHttpLink) {
             // CRITICAL: try_instant_view: false forces external browser
             // Without this, Telegram opens in its built-in browser which can't
             // handle wallet universal links → causes "invalid deeplink" error
-            tg.openLink(url, { try_instant_view: false });
+            console.log('[Web3] Opening link via tg.openLink:', url.substring(0, 80));
+            try {
+                tg.openLink(url, { try_instant_view: false });
+            } catch (e) {
+                console.warn('[Web3] tg.openLink failed, trying window.open:', e);
+                window.open(url, '_blank');
+            }
             return;
         }
-        // Block custom schemes (wc:, metamask://, trust://, etc.) in Telegram
-        console.warn('[Web3] Blocked non-HTTPS URL in TMA:', url.substring(0, 30) + '...');
+        // For custom schemes (wc:, etc.), try window.open which may trigger OS handler
+        console.log('[Web3] Opening custom scheme via window.open:', url.substring(0, 50));
+        try {
+            window.open(url, '_blank');
+        } catch (e) {
+            console.warn('[Web3] Custom scheme open failed:', e);
+        }
         return;
     }
 
@@ -1142,11 +1153,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const prepareWalletConnect = async () => {
-        if (isGeneratingUri) return;
+        if (isGeneratingUri) {
+            console.log('[Web3] prepareWalletConnect already running, skipping');
+            return;
+        }
         setIsGeneratingUri(true);
+        console.log('[Web3] prepareWalletConnect starting...');
         try {
             clearWalletConnectPairingCache();
             const provider = await getGlobalEthereumProvider();
+            console.log('[Web3] WC provider ready, setting up display_uri listener');
 
             // Intercept provider request for transaction redirects (fixes background execution freeze)
             if (!provider._isIntercepted) {
@@ -1204,7 +1220,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             try {
+                console.log('[Web3] Calling provider.connect()...');
                 await runWithTimeout('WalletConnect provider.connect', provider.connect(), 20000);
+                console.log('[Web3] provider.connect() completed. Accounts:', provider.accounts?.length);
                 const accounts = provider.accounts;
                 const connectedAddress = accounts?.[0];
                 if (connectedAddress) {
@@ -1252,11 +1270,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             prepareWalletConnect();
         } else {
             setConnectingWallet(null);
+            setIsGeneratingUri(false); // Reset guard so prepareWalletConnect can run again
             resetActiveConnection();
         }
     }, [isConnectModalOpen]);
 
     useEffect(() => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
         if (activeUri && connectingWallet) {
             const encoded = encodeURIComponent(activeUri);
             const link = getWalletConnectionLink(connectingWallet, encoded);
@@ -1264,12 +1284,30 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 console.log('[Web3] Opening WC deeplink for:', connectingWallet);
                 launchExternalLink(link);
             }
-        } else if (connectingWallet && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        } else if (connectingWallet && !isTMA && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            // Non-TMA mobile only: open dapp in wallet browser as fallback
             const dappUrl = getDappUrl();
             const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
             launchExternalLink(deepLink);
         }
     }, [activeUri, connectingWallet]);
+
+    // Timeout: if WC URI not generated within 15 seconds, reset and show error
+    useEffect(() => {
+        if (!connectingWallet || activeUri) return;
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        if (!isTMA) return;
+
+        const timer = setTimeout(() => {
+            if (connectingWallet && !activeUri) {
+                console.warn('[Web3] WC URI generation timeout. Resetting...');
+                setConnectingWallet(null);
+                setActiveUri(null);
+            }
+        }, 15000);
+
+        return () => clearTimeout(timer);
+    }, [connectingWallet, activeUri]);
 
     const disconnect = async () => {
         console.log("Starting disconnect process...");
