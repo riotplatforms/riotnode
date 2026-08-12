@@ -227,32 +227,37 @@ export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
     const isHttpLink = url.startsWith('http');
 
-    // In Telegram WebView, use tg.openLink for HTTPS links
-    if (tg?.openLink) {
-        if (isHttpLink) {
-            // CRITICAL: try_instant_view: false forces external browser
-            // Without this, Telegram opens in its built-in browser which can't
-            // handle wallet universal links → causes "invalid deeplink" error
-            console.log('[Web3] Opening link via tg.openLink:', url.substring(0, 80));
+    // In Telegram WebView
+    if (tg) {
+        if (isHttpLink && tg.openLink) {
+            console.log('[Web3] TMA: opening via tg.openLink:', url.substring(0, 80));
             try {
                 tg.openLink(url, { try_instant_view: false });
+                return;
             } catch (e) {
-                console.warn('[Web3] tg.openLink failed, trying window.open:', e);
-                window.open(url, '_blank');
+                console.warn('[Web3] tg.openLink failed:', e);
             }
-            return;
         }
-        // For custom schemes (wc:, etc.), try window.open which may trigger OS handler
-        console.log('[Web3] Opening custom scheme via window.open:', url.substring(0, 50));
+        // Fallback for TMA: anchor click (best for universal links)
         try {
-            window.open(url, '_blank');
+            const a = document.createElement('a');
+            a.href = url;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => document.body.removeChild(a), 100);
+            return;
         } catch (e) {
-            console.warn('[Web3] Custom scheme open failed:', e);
+            console.warn('[Web3] Anchor click failed:', e);
         }
+        // Last resort
+        try { window.open(url, '_blank'); return; } catch {}
         return;
     }
 
-    // Non-Telegram: try anchor element (works for deep links in normal browsers)
+    // Non-Telegram: try anchor element
     try {
         const anchor = document.createElement('a');
         anchor.href = url;
@@ -924,12 +929,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isTMA;
 
         // ============================================================
-        // TELEGRAM MINI APP — Use AppKit's built-in connection flow
-        // AppKit handles WalletConnect relay + deeplinks internally.
-        // Our custom WC flow fails because TMA blocks/slow WS connections.
+        // TELEGRAM MINI APP
+        // WC relay WebSocket blocked in Telegram WebView → use dapp browser.
+        // Open dapp in wallet's built-in browser → auto-connect via injected provider.
+        // Store address in URL so TMA can detect connection on return.
         // ============================================================
         if (isTMA) {
-            // Quick check: if injected provider is already available (user in wallet's dapp browser)
+            // Quick check: already in wallet's dapp browser with injected provider
             const eth = (window as any).ethereum;
             if (eth?.request) {
                 try {
@@ -938,18 +944,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 } catch (e) { console.warn('[TMA] Injected connect failed:', e); }
             }
 
-            // TMA: Close our modal and use AppKit's connection flow
-            // AppKit handles WC relay, URI generation, and deeplinks properly
-            console.log('[TMA] Opening AppKit connect for:', wallet);
+            // Open dapp in wallet's built-in browser
+            // The dapp auto-connects via injected provider (window.ethereum)
+            const dappUrl = window.location.origin;
+            const deepLink = getWalletDappDeepLink(wallet, dappUrl);
+            console.log('[TMA] Opening wallet browser:', wallet, deepLink);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            setIsConnectModalOpen(false);
-            try {
-                await open({ view: 'Connect' });
-            } catch (e) {
-                console.error('[TMA] AppKit connect failed:', e);
-            }
+            launchExternalLink(deepLink);
             return;
         }
 
@@ -1480,7 +1483,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 <div className="text-center px-6">
                                     <h4 className="text-[#FFD700] font-black uppercase text-[14px] tracking-[4px] mb-2">Connecting {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}</h4>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
-                                        {activeUri ? "Please approve the connection request in your wallet app." : "Initializing secure connection... Please wait."}
+                                        {activeUri
+                                            ? "Please approve the connection request in your wallet app."
+                                            : (window as any).Telegram?.WebApp
+                                                ? "Opening your wallet app... If nothing happens, tap the button below."
+                                                : "Initializing secure connection... Please wait."}
                                     </p>
                                 </div>
 
@@ -1497,6 +1504,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     >
                                         <span className="material-icons-round text-lg">rocket_launch</span>
                                         Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}
+                                    </button>
+                                ) : (window as any).Telegram?.WebApp ? (
+                                    <button
+                                        onClick={() => {
+                                             const dappUrl = window.location.origin;
+                                             const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
+                                             launchExternalLink(deepLink);
+                                        }}
+                                        className="mt-2 bg-[#FFD700] text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon cursor-pointer"
+                                    >
+                                        <span className="material-icons-round text-lg">open_in_new</span>
+                                        Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'} Browser
                                     </button>
                                 ) : (
                                     <div className="text-[10px] text-gray-600 font-black uppercase tracking-wider animate-pulse">Generating Link...</div>
