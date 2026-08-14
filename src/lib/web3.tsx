@@ -8,6 +8,8 @@ import metamaskLogo from '../assets/metamask.png';
 import safepalLogo from '../assets/safepal.png';
 import tpLogo from '../assets/tp.png';
 import trustLogo from '../assets/trust.png';
+import binanceLogo from '../assets/binance.png';
+import okxLogo from '../assets/okx.png';
 import { walletConnectionsManager } from './walletConnections';
 
 
@@ -1512,13 +1514,16 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 ) : (window as any).Telegram?.WebApp ? (() => {
                                      const dappUrl = window.location.origin;
                                      const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
+                                     const walletName = connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : connectingWallet === 'tokenpocket' ? 'TokenPocket' : connectingWallet === 'binance' ? 'Binance' : connectingWallet === 'okx' ? 'OKX' : connectingWallet;
                                      return (
                                          <a
                                              href={deepLink}
+                                             target="_blank"
+                                             rel="noopener noreferrer"
                                              className="mt-2 bg-[#FFD700] text-black px-8 py-4 rounded-[20px] inline-flex items-center gap-3 transition-all active:scale-95 no-underline font-black text-[11px] uppercase tracking-[2px] shadow-neon cursor-pointer"
                                          >
                                              <span className="material-icons-round text-lg">open_in_new</span>
-                                             Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}
+                                             Open {walletName}
                                          </a>
                                      );
                                 })() : (
@@ -1567,24 +1572,52 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                         <span className="font-bold text-white flex-1 text-left text-sm">TokenPocket</span>
                                         <span className="material-icons-round text-gray-600 text-lg">chevron_right</span>
                                     </button>
-                                </div>
 
-                                <div className="relative flex items-center gap-3 my-4">
-                                    <div className="flex-1 h-px bg-white/10"></div>
-                                    <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
-                                    <div className="flex-1 h-px bg-white/10"></div>
-                                </div>
-
-                                <div className="mb-6">
                                     <button
-                                        onClick={handleDirectConnect}
-                                        className="w-full flex items-center justify-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
+                                        onClick={() => handleWalletClick('binance')}
+                                        className="w-full flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
                                     >
-                                        <span className="material-icons-round text-xl text-gray-400">account_balance_wallet</span>
-                                        <span className="font-bold text-gray-300 text-sm">More Wallets</span>
+                                        <img src={binanceLogo} className="w-8 h-8 rounded-lg" alt="Binance" />
+                                        <span className="font-bold text-white flex-1 text-left text-sm">Binance Web3</span>
+                                        <span className="material-icons-round text-gray-600 text-lg">chevron_right</span>
                                     </button>
-                                    <p className="text-center text-[10px] text-gray-600 mt-3">Rainbow, Coinbase & 100+ wallets via WalletConnect</p>
+
+                                    <button
+                                        onClick={() => handleWalletClick('okx')}
+                                        className="w-full flex items-center gap-4 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
+                                    >
+                                        <img src={okxLogo} className="w-8 h-8 rounded-lg" alt="OKX" />
+                                        <span className="font-bold text-white flex-1 text-left text-sm">OKX Wallet</span>
+                                        <span className="material-icons-round text-gray-600 text-lg">chevron_right</span>
+                                    </button>
                                 </div>
+
+                                {/* Hide 'More Wallets' in TMA — AppKit/WC relay doesn't work in Telegram WebView */}
+                                {!(window as any).Telegram?.WebApp && (
+                                    <>
+                                        <div className="relative flex items-center gap-3 my-4">
+                                            <div className="flex-1 h-px bg-white/10"></div>
+                                            <span className="text-[10px] text-gray-600 font-bold uppercase tracking-widest">or</span>
+                                            <div className="flex-1 h-px bg-white/10"></div>
+                                        </div>
+
+                                        <div className="mb-6">
+                                            <button
+                                                onClick={handleDirectConnect}
+                                                className="w-full flex items-center justify-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
+                                            >
+                                                <span className="material-icons-round text-xl text-gray-400">account_balance_wallet</span>
+                                                <span className="font-bold text-gray-300 text-sm">More Wallets</span>
+                                            </button>
+                                            <p className="text-center text-[10px] text-gray-600 mt-3">Rainbow, Coinbase & 100+ wallets via WalletConnect</p>
+                                        </div>
+                                    </>
+                                )}
+                                {(window as any).Telegram?.WebApp && (
+                                    <p className="text-center text-[10px] text-gray-600 mt-2 mb-4 px-4">
+                                        Best experience in Telegram: Trust Wallet or SafePal
+                                    </p>
+                                )}
                             </>
                         )}
 
