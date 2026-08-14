@@ -342,6 +342,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [_isDisconnectModalOpen, _setIsDisconnectModalOpen] = useState(false);
     const [_tpLoading, setTpLoading] = useState(false);
     const [showTpFallback, setShowTpFallback] = useState(false);
+    const skipAutoConnectRef = React.useRef(false); // Prevent auto-reconnect after disconnect
 
     // Sync wallet type from AppKit walletInfo
     useEffect(() => {
@@ -508,6 +509,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Detect injected provider — no URL params or localStorage needed
     useEffect(() => {
         if (finalIsConnected || manualAddress || signer) return;
+        if (skipAutoConnectRef.current) return; // Skip if user just disconnected
 
         // Don't auto-connect if user just opened normally (not from wallet browser)
         // Only auto-connect if a wallet-specific provider is detected
@@ -716,6 +718,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+
+        // TMA: Open our custom modal (AppKit hangs because WC relay blocked in Telegram WebView)
+        if (isTMA) {
+            setConnectingWallet(null);
+            setIsConnectModalOpen(true);
+            return;
+        }
+
         try {
             clearWalletConnectPairingCache();
             setIsConnectModalOpen(false);
@@ -1030,6 +1041,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleDirectConnect = async () => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        if (isTMA) {
+            // In TMA, just keep our custom modal open (AppKit hangs)
+            return;
+        }
         try {
             setIsConnectModalOpen(false);
             clearWalletConnectPairingCache();
@@ -1057,6 +1073,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     // Auto-reconnect on boot & Init Raw Client
     useEffect(() => {
         const bootSync = async () => {
+            if (skipAutoConnectRef.current) return; // Skip if user just disconnected
             const params = new URLSearchParams(window.location.search);
             if (params.get('tpconnect') === '1') {
                 const status = await connectInjectedWallet('tokenpocket');
@@ -1301,6 +1318,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const disconnect = async () => {
         console.log("Starting disconnect process...");
         _setIsDisconnectModalOpen(false);
+        skipAutoConnectRef.current = true; // Block auto-reconnect
 
         try {
             // 1. AppKit Disconnect (with timeout)
