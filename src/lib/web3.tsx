@@ -1303,39 +1303,41 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         _setIsDisconnectModalOpen(false);
 
         try {
-            // 1. AppKit Disconnect
+            // 1. AppKit Disconnect (with timeout)
             try {
-                await appKitDisconnect();
+                const disconnectPromise = appKitDisconnect();
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+                await Promise.race([disconnectPromise, timeoutPromise]);
             } catch (e) {
-                console.warn("Native disconnect failed:", e);
+                console.warn("AppKit disconnect skipped:", e);
             }
 
             // 2. Manual Provider Disconnect
             if (manualWalletProvider && typeof manualWalletProvider.disconnect === 'function') {
-                try {
-                    await manualWalletProvider.disconnect();
-                } catch (e) {
-                    console.warn("Manual provider disconnect failed:", e);
-                }
+                try { await manualWalletProvider.disconnect(); } catch (e) { console.warn("Manual provider disconnect:", e); }
             }
 
-            // 3. Stale connections and cleanup are handled natively by the activeProvider disconnect above
+            // 3. Global WC Provider Disconnect
+            if (globalEthereumProvider && typeof globalEthereumProvider.disconnect === 'function') {
+                try { await globalEthereumProvider.disconnect(); } catch (e) {}
+            }
+            globalEthereumProvider = null;
+            globalEthereumProviderPromise = null;
 
-            // 4. Wipe only connection markers
+            // 4. Clear ALL wallet-related localStorage
             const keysToRemove = Object.keys(localStorage).filter(key =>
                 key.startsWith('wc@2') ||
-                key === 'aimining_address' ||
-                key === 'aimining_manual_address' ||
-                key === 'aimining_wallet_type' ||
-                key === 'aimining_is_walletconnect' ||
+                key.startsWith('aimining_') ||
                 key.includes('walletconnect') ||
+                key.includes('WALLETCONNECT') ||
                 key.includes('appkit') ||
-                key.includes('wcm@2')
+                key.includes('wcm@2') ||
+                key.includes('wallet_') ||
+                key.includes('wc_')
             );
-
             keysToRemove.forEach(key => localStorage.removeItem(key));
 
-            // 5. Reset State
+            // 5. Reset ALL state
             setManualAddress(null);
             setManualWalletProvider(null);
             setWalletType(null);
@@ -1344,19 +1346,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setFinalAddress(undefined);
             setFinalIsConnected(false);
             setIsWalletConnect(false);
+            setConnectingWallet(null);
+            setActiveUri(null);
+            setActiveProvider(null);
 
             console.log("Disconnect successful, reloading...");
-
-            // Clear all possible session storage as well
-            try { sessionStorage.clear(); } catch (e) { }
+            try { sessionStorage.clear(); } catch {}
 
             setTimeout(() => {
                 window.location.href = window.location.origin + '?disconnected=true';
-            }, 500);
+            }, 300);
         } catch (error) {
             console.error("Critical disconnect error:", error);
-            alert("Disconnect failed. Performing hard reset.");
             localStorage.clear();
+            sessionStorage.clear();
             window.location.reload();
         }
     };
