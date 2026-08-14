@@ -1614,9 +1614,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     </>
                                 )}
                                 {(window as any).Telegram?.WebApp && (
-                                    <p className="text-center text-[10px] text-gray-600 mt-2 mb-4 px-4">
-                                        Best experience in Telegram: Trust Wallet or SafePal
-                                    </p>
+                                    <div className="mt-2 mb-4 px-2">
+                                        <button
+                                            onClick={() => {
+                                                const url = window.location.origin;
+                                                navigator.clipboard.writeText(url).then(() => {
+                                                    alert('Link copied! Open your wallet app → paste this link in the dApp browser.');
+                                                }).catch(() => {
+                                                    prompt('Copy this link and open in your wallet\'s dApp browser:', url);
+                                                });
+                                            }}
+                                            className="w-full flex items-center justify-center gap-3 p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] cursor-pointer"
+                                        >
+                                            <span className="material-icons-round text-xl text-gray-400">content_copy</span>
+                                            <div className="flex-1 text-left">
+                                                <span className="font-bold text-gray-300 text-sm block">Other Wallets</span>
+                                                <span className="text-[10px] text-gray-600">Copy link → open in your wallet's dApp browser</span>
+                                            </div>
+                                        </button>
+                                    </div>
                                 )}
                             </>
                         )}
