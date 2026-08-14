@@ -225,54 +225,37 @@ const runWithTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs 
 
 export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
-    const isHttpLink = url.startsWith('http');
+    console.log('[Web3] launchExternalLink:', url.substring(0, 100));
 
-    // In Telegram WebView
+    // In Telegram WebView — try ALL methods
     if (tg) {
-        if (isHttpLink && tg.openLink) {
-            console.log('[Web3] TMA: opening via tg.openLink:', url.substring(0, 80));
+        // Method 1: tg.openLink (official Telegram API — external browser)
+        if (tg.openLink) {
             try {
                 tg.openLink(url, { try_instant_view: false });
+                console.log('[Web3] Used tg.openLink');
                 return;
-            } catch (e) {
-                console.warn('[Web3] tg.openLink failed:', e);
-            }
+            } catch (e) { console.warn('[Web3] tg.openLink error:', e); }
         }
-        // Fallback for TMA: anchor click (best for universal links)
+        // Method 2: window.open
         try {
-            const a = document.createElement('a');
-            a.href = url;
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => document.body.removeChild(a), 100);
+            window.open(url, '_blank');
+            console.log('[Web3] Used window.open');
             return;
-        } catch (e) {
-            console.warn('[Web3] Anchor click failed:', e);
-        }
-        // Last resort
-        try { window.open(url, '_blank'); return; } catch {}
+        } catch (e) { console.warn('[Web3] window.open error:', e); }
+        // Method 3: location.href (OS intercepts universal links)
+        try { window.location.href = url; return; } catch {}
         return;
     }
 
-    // Non-Telegram: try anchor element
+    // Non-Telegram
     try {
         const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.target = '_blank';
-        anchor.rel = 'noopener noreferrer';
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
+        anchor.href = url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
+        document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor);
     } catch (e) {
         console.warn("[Web3] Link launch fallback:", e);
-        try {
-            window.open(url, '_blank');
-        } catch (err2) {
-            console.error("[Web3] All link launch methods failed:", err2);
-        }
+        try { window.open(url, '_blank'); } catch {}
     }
 };
 
@@ -948,11 +931,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             // The dapp auto-connects via injected provider (window.ethereum)
             const dappUrl = window.location.origin;
             const deepLink = getWalletDappDeepLink(wallet, dappUrl);
-            console.log('[TMA] Opening wallet browser:', wallet, deepLink);
+            console.log('[TMA] Wallet deeplink:', wallet, deepLink);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            launchExternalLink(deepLink);
+            // Don't auto-open — let user tap the button (more reliable for universal links in TMA)
             return;
         }
 
@@ -1505,19 +1488,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                         <span className="material-icons-round text-lg">rocket_launch</span>
                                         Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}
                                     </button>
-                                ) : (window as any).Telegram?.WebApp ? (
-                                    <button
-                                        onClick={() => {
-                                             const dappUrl = window.location.origin;
-                                             const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
-                                             launchExternalLink(deepLink);
-                                        }}
-                                        className="mt-2 bg-[#FFD700] text-black px-8 py-4 rounded-[20px] flex items-center gap-3 transition-all active:scale-95 border-none font-black text-[11px] uppercase tracking-[2px] shadow-neon cursor-pointer"
-                                    >
-                                        <span className="material-icons-round text-lg">open_in_new</span>
-                                        Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'} Browser
-                                    </button>
-                                ) : (
+                                ) : (window as any).Telegram?.WebApp ? (() => {
+                                     const dappUrl = window.location.origin;
+                                     const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
+                                     return (
+                                         <a
+                                             href={deepLink}
+                                             className="mt-2 bg-[#FFD700] text-black px-8 py-4 rounded-[20px] inline-flex items-center gap-3 transition-all active:scale-95 no-underline font-black text-[11px] uppercase tracking-[2px] shadow-neon cursor-pointer"
+                                         >
+                                             <span className="material-icons-round text-lg">open_in_new</span>
+                                             Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}
+                                         </a>
+                                     );
+                                })() : (
                                     <div className="text-[10px] text-gray-600 font-black uppercase tracking-wider animate-pulse">Generating Link...</div>
                                 )}
                             </div>
