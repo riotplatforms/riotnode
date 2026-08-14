@@ -124,7 +124,7 @@ const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: s
         case 'safepal':
             return `https://link.safepal.io/open_url?url=${url}`;
         case 'tokenpocket':
-            return `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl, chain: 'BSC', source: 'Riot Mining Platform' }))}`;
+            return `https://tokenpocket.pro/dapp?url=${url}`;
         case 'binance':
             return `https://app.binance.com/cedefi/dapp?url=${url}`;
         case 'okx':
@@ -231,7 +231,13 @@ export const launchExternalLink = (url: string) => {
 
     // In Telegram WebView — try ALL methods
     if (tg) {
-        // Method 1: tg.openLink (official Telegram API — external browser)
+        // Method 1: window.open (best for universal links — opens in system browser)
+        try {
+            const w = window.open(url, '_blank');
+            if (w) { console.log('[Web3] Used window.open'); return; }
+        } catch (e) { console.warn('[Web3] window.open error:', e); }
+
+        // Method 2: tg.openLink (Telegram API — external browser)
         if (tg.openLink) {
             try {
                 tg.openLink(url, { try_instant_view: false });
@@ -239,13 +245,8 @@ export const launchExternalLink = (url: string) => {
                 return;
             } catch (e) { console.warn('[Web3] tg.openLink error:', e); }
         }
-        // Method 2: window.open
-        try {
-            window.open(url, '_blank');
-            console.log('[Web3] Used window.open');
-            return;
-        } catch (e) { console.warn('[Web3] window.open error:', e); }
-        // Method 3: location.href (OS intercepts universal links)
+
+        // Method 3: location.href (OS may intercept universal link)
         try { window.location.href = url; return; } catch {}
         return;
     }
@@ -941,14 +942,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             // Open dapp in wallet's built-in browser
-            // The dapp auto-connects via injected provider (window.ethereum)
             const dappUrl = window.location.origin;
             const deepLink = getWalletDappDeepLink(wallet, dappUrl);
             console.log('[TMA] Wallet deeplink:', wallet, deepLink);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            // Don't auto-open — let user tap the button (more reliable for universal links in TMA)
+            // Open deeplink immediately via tg.openLink / window.open / location.href
+            launchExternalLink(deepLink);
             return;
         }
 
