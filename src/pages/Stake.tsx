@@ -576,13 +576,9 @@ const Stake: React.FC = () => {
             }
 
             // skipApproval=true because handleBuy already handled approval above
-            // In TMA: Alert user that stake TX will be sent to wallet for signing
-            if (isTMA) {
-                try {
-                    const tg = (window as any).Telegram?.WebApp;
-                    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-                } catch {}
-            }
+            const finalAmountNum = parseFloat(finalAmount);
+            showAlert(`DEBUG: Staking ${finalAmount} USDT (extra-fund=${id === 'extra-fund'}). Please wait...`);
+            
             const tx = await stake(finalAmount, refAddress, true);
 
             // In TMA: tx is already sent to blockchain via wallet.
