@@ -952,15 +952,25 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 } catch (e) { console.warn('[TMA] Injected connect failed:', e); }
             }
 
-            // Open dapp in wallet's built-in browser
-            const dappUrl = window.location.origin;
-            const deepLink = getWalletDappDeepLink(wallet, dappUrl);
-            console.log('[TMA] Wallet deeplink:', wallet, deepLink);
+            // MetaMask & TokenPocket → open in dapp browser (need injected provider)
+            const needsDappBrowser = ['metamask', 'tokenpocket'].includes(wallet);
+            if (needsDappBrowser) {
+                const dappUrl = window.location.origin;
+                const deepLink = getWalletDappDeepLink(wallet, dappUrl);
+                console.log('[TMA] Opening in dapp browser:', wallet, deepLink);
+                setConnectingWallet(wallet);
+                setWalletType(wallet);
+                localStorage.setItem('aimining_wallet_type', wallet);
+                launchExternalLink(deepLink);
+                return;
+            }
+
+            // Trust, SafePal, Binance, OKX, Bitget → WalletConnect directly in Telegram
+            console.log('[TMA] Connecting via WalletConnect in Telegram:', wallet);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            // Open deeplink immediately via tg.openLink / window.open / location.href
-            launchExternalLink(deepLink);
+            setIsConnectModalOpen(true); // This triggers prepareWalletConnect() → generates WC URI → opens wallet app
             return;
         }
 
