@@ -14,58 +14,21 @@ const ERC20_ABI = [
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
-    // Always try to redirect to wallet app for TX signing in TMA
+    // For WalletConnect: TX request goes via WC relay → wallet app shows approval notification automatically.
+    // Do NOT redirect to wallet website — it opens the landing page, not the approval screen.
+    // Instead, alert the user to check their wallet app.
     try {
-        let walletType = localStorage.getItem('aimining_wallet_type') || '';
         const tg = (window as any).Telegram?.WebApp;
-        // Detect wallet from WC session if type is generic
-        if (walletType === 'walletconnect' || walletType === 'unknown' || !walletType) {
-            const wcPeer = (window as any).__wcPeerName || '';
-            if (wcPeer.includes('metamask') || wcPeer.includes('MetaMask')) walletType = 'metamask';
-            else if (wcPeer.includes('trust') || wcPeer.includes('Trust')) walletType = 'trust';
-            else if (wcPeer.includes('safepal') || wcPeer.includes('SafePal')) walletType = 'safepal';
-            else if (wcPeer.includes('tokenpocket') || wcPeer.includes('TokenPocket')) walletType = 'tokenpocket';
-            else if (wcPeer.includes('binance') || wcPeer.includes('Binance')) walletType = 'binance';
-            else if (wcPeer.includes('okx') || wcPeer.includes('OKX')) walletType = 'okx';
-            else if (wcPeer.includes('bitget') || wcPeer.includes('Bitget')) walletType = 'bitget';
-            // Also try from WC provider session
-            else {
-                try {
-                    const stored = localStorage.getItem('aimining_last_wc_peer') || '';
-                    if (stored.includes('metamask')) walletType = 'metamask';
-                    else if (stored.includes('trust')) walletType = 'trust';
-                    else if (stored.includes('safepal')) walletType = 'safepal';
-                    else if (stored.includes('binance')) walletType = 'binance';
-                    else if (stored.includes('okx')) walletType = 'okx';
-                    else { walletType = 'metamask'; } // Default fallback
-                } catch { walletType = 'metamask'; }
-            }
+        if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+        // Show Telegram popup so user knows to check wallet app
+        if (tg?.showPopup) {
+            tg.showPopup({ title: 'Transaction', message: `Please open your wallet app to approve: ${label}`, buttons: [{ type: 'default', text: 'OK' }] });
         }
-        if (tg && walletType) {
-            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()] || WALLET_REDIRECT_LINKS['metamask'];
-            if (redirectUrl) {
-                console.log(`[useStaking] Opening ${walletType} for TX signing (${label})`);
-                setTimeout(() => {
-                    if (tg.openLink) { tg.openLink(redirectUrl, { try_instant_view: false }); }
-                    else { window.open(redirectUrl, '_blank'); }
-                }, 300);
-            }
-        }
-    } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
+    } catch (e) { console.warn('[useStaking] Alert failed:', e); }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out. Please open your wallet app and approve the transaction.`)), timeoutMs); });
     try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }
-};
-
-const WALLET_REDIRECT_LINKS: Record<string, string> = {
-    metamask: 'https://metamask.app.link/',
-    trust: 'https://link.trustwallet.com/',
-    safepal: 'https://link.safepal.io/',
-    tokenpocket: 'https://tpsa.app/',
-    binance: 'https://app.binance.com/',
-    okx: 'https://www.okx.com/',
-    bitget: 'https://share.bwb.site/',
 };
 
 const waitForSigner = async (getSignerFn: () => Promise<any>, maxAttempts?: number, delayMs = 500): Promise<any> => {
