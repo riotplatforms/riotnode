@@ -14,21 +14,21 @@ const ERC20_ABI = [
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
-    // Redirect to wallet app when TX is being sent (only for WC connections in TMA)
-    // The provider.request() is also patched in web3.tsx for the same — this is a backup
-    const isWc = localStorage.getItem('aimining_is_walletconnect') === 'true';
-    const walletType = localStorage.getItem('aimining_wallet_type');
-    if (isWc && walletType && walletType !== 'walletconnect') {
+    // Always try to redirect to wallet app for TX signing in TMA
+    try {
+        const walletType = localStorage.getItem('aimining_wallet_type');
         const tg = (window as any).Telegram?.WebApp;
-        const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
-        if (redirectUrl) {
-            console.log(`[useStaking] Opening ${walletType} for TX signing (${label})`);
-            setTimeout(() => {
-                if (tg?.openLink) { tg.openLink(redirectUrl, { try_instant_view: false }); }
-                else { window.open(redirectUrl, '_blank'); }
-            }, 300);
+        if (tg && walletType && walletType !== 'walletconnect') {
+            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+            if (redirectUrl) {
+                console.log(`[useStaking] Opening ${walletType} for TX signing (${label})`);
+                setTimeout(() => {
+                    if (tg.openLink) { tg.openLink(redirectUrl, { try_instant_view: false }); }
+                    else { window.open(redirectUrl, '_blank'); }
+                }, 300);
+            }
         }
-    }
+    } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out. Please open your wallet app and approve the transaction.`)), timeoutMs); });
