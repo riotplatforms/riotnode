@@ -570,6 +570,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     if (isWc || isAppKit) {
                         setIsWalletConnect(true);
                         localStorage.setItem('aimining_is_walletconnect', 'true');
+                        // Store WC peer name for redirect detection
+                        try {
+                            const session = currentProvider?.session || currentProvider?.provider?.session;
+                            const peerName = session?.peer?.metadata?.name || '';
+                            if (peerName) {
+                                (window as any).__wcPeerName = peerName;
+                                localStorage.setItem('aimining_last_wc_peer', peerName);
+                            }
+                        } catch {}
                     }
 
                     // Intercept provider request for transaction redirects (fixes background execution freeze)

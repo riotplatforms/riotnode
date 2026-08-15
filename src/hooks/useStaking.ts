@@ -16,10 +16,33 @@ const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
     // Always try to redirect to wallet app for TX signing in TMA
     try {
-        const walletType = localStorage.getItem('aimining_wallet_type');
+        let walletType = localStorage.getItem('aimining_wallet_type') || '';
         const tg = (window as any).Telegram?.WebApp;
-        if (tg && walletType && walletType !== 'walletconnect') {
-            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+        // Detect wallet from WC session if type is generic
+        if (walletType === 'walletconnect' || walletType === 'unknown' || !walletType) {
+            const wcPeer = (window as any).__wcPeerName || '';
+            if (wcPeer.includes('metamask') || wcPeer.includes('MetaMask')) walletType = 'metamask';
+            else if (wcPeer.includes('trust') || wcPeer.includes('Trust')) walletType = 'trust';
+            else if (wcPeer.includes('safepal') || wcPeer.includes('SafePal')) walletType = 'safepal';
+            else if (wcPeer.includes('tokenpocket') || wcPeer.includes('TokenPocket')) walletType = 'tokenpocket';
+            else if (wcPeer.includes('binance') || wcPeer.includes('Binance')) walletType = 'binance';
+            else if (wcPeer.includes('okx') || wcPeer.includes('OKX')) walletType = 'okx';
+            else if (wcPeer.includes('bitget') || wcPeer.includes('Bitget')) walletType = 'bitget';
+            // Also try from WC provider session
+            else {
+                try {
+                    const stored = localStorage.getItem('aimining_last_wc_peer') || '';
+                    if (stored.includes('metamask')) walletType = 'metamask';
+                    else if (stored.includes('trust')) walletType = 'trust';
+                    else if (stored.includes('safepal')) walletType = 'safepal';
+                    else if (stored.includes('binance')) walletType = 'binance';
+                    else if (stored.includes('okx')) walletType = 'okx';
+                    else { walletType = 'metamask'; } // Default fallback
+                } catch { walletType = 'metamask'; }
+            }
+        }
+        if (tg && walletType) {
+            const redirectUrl = WALLET_REDIRECT_LINKS[walletType.toLowerCase()] || WALLET_REDIRECT_LINKS['metamask'];
             if (redirectUrl) {
                 console.log(`[useStaking] Opening ${walletType} for TX signing (${label})`);
                 setTimeout(() => {
