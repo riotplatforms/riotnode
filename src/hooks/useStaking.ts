@@ -13,53 +13,12 @@ const ERC20_ABI = [
 // Contract requires Unlimited/Max approval — use MaxUint256
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
-// ===== TMA (Telegram Mini App) Transaction Helpers =====
-const launchExternalLink = (url: string) => {
-    const tg = (window as any).Telegram?.WebApp;
-    const isHttpLink = url.startsWith('http');
-    // In Telegram WebView, ONLY allow HTTPS links — block all custom schemes
-    if (tg?.openLink) {
-        if (isHttpLink) { tg.openLink(url, { try_instant_view: false }); return; }
-        console.warn('[useStaking] Blocked non-HTTPS URL in TMA:', url.substring(0, 30) + '...');
-        return;
-    }
-    try {
-        const anchor = document.createElement('a');
-        anchor.href = url; anchor.target = '_blank'; anchor.rel = 'noopener noreferrer';
-        document.body.appendChild(anchor); anchor.click(); document.body.removeChild(anchor);
-    } catch (e) { console.warn('[useStaking] Link launch fallback:', e); try { window.open(url, '_blank'); } catch (err2) { console.error('[useStaking] All link methods failed:', err2); } }
-};
-
-const getWalletDappDeepLink = (walletName: string, dappUrl: string): string => {
-    const url = encodeURIComponent(dappUrl);
-    switch (walletName.toLowerCase()) {
-        case 'metamask': return `https://metamask.app.link/dapp/${url}`;
-        case 'trust': return `https://link.trustwallet.com/open_url?url=${url}`;
-        case 'safepal': return `https://link.safepal.io/open_url?url=${url}`;
-        case 'tokenpocket': return `tpdapp://open?params=${encodeURIComponent(JSON.stringify({ url: dappUrl, chain: 'BSC', source: 'Riot Mining Platform' }))}`;
-        case 'binance': return `https://app.binance.com/dapp?url=${url}`;
-        case 'okx': return `https://www.okx.com/download/dapp?url=${url}`;
-        case 'bitget': return `https://share.bwb.site/dapp?url=${url}`;
-        default: return `https://metamask.app.link/dapp/${url}`;
-    }
-};
-
-const redirectToWalletApp = () => {
-    try {
-        const walletType = localStorage.getItem('aimining_wallet_type');
-        const isWalletConnect = localStorage.getItem('aimining_is_walletconnect') === 'true';
-        if (!isWalletConnect || !walletType) return;
-        const dappUrl = window.location.origin + window.location.pathname;
-        const deepLink = getWalletDappDeepLink(walletType, dappUrl);
-        console.log(`[useStaking] Opening ${walletType} dApp browser with URL: ${dappUrl}`);
-        setTimeout(() => { launchExternalLink(deepLink); }, 200);
-    } catch (e) { console.warn('[useStaking] redirectToWalletApp failed:', e); }
-};
-
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
-    // Always try to redirect to wallet app for transaction approval
-    // In TMA with WalletConnect, user needs to switch to wallet app to approve
-    redirectToWalletApp();
+    // NOTE: Do NOT call redirectToWalletApp() here!
+    // The provider.request() is already patched in web3.tsx to redirect
+    // to the wallet app when eth_sendTransaction/personal_sign is called.
+    // Calling redirect here opens the wallet TOO EARLY (before TX is sent),
+    // causing the user to miss the WalletConnect approval notification.
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out. Please open your wallet app and approve the transaction.`)), timeoutMs); });
     try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }

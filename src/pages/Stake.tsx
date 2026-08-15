@@ -528,6 +528,16 @@ const Stake: React.FC = () => {
             const APPROVAL_THRESHOLD = MaxUint256 / 2n;
             if (currentAllowance < APPROVAL_THRESHOLD) {
                 console.log("[Stake] Unlimited approval required. Requesting MaxUint256 approval.");
+                // In TMA: Alert user that wallet will open for approval
+                if (isTMA) {
+                    try {
+                        const tg = (window as any).Telegram?.WebApp;
+                        if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
+                        if (tg?.showAlert) {
+                            showAlert("Please approve the USDT spending limit in your wallet app. The app will open automatically.");
+                        }
+                    } catch {}
+                }
                 const approvalTx = await approve();
 
                 if (approvalTx && typeof approvalTx.wait === 'function') {
@@ -566,6 +576,13 @@ const Stake: React.FC = () => {
             }
 
             // skipApproval=true because handleBuy already handled approval above
+            // In TMA: Alert user that stake TX will be sent to wallet for signing
+            if (isTMA) {
+                try {
+                    const tg = (window as any).Telegram?.WebApp;
+                    if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+                } catch {}
+            }
             const tx = await stake(finalAmount, refAddress, true);
 
             // In TMA: tx is already sent to blockchain via wallet.
