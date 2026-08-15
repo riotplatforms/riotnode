@@ -565,7 +565,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (currentAddress && currentProvider) {
                 try {
                     const isWc = checkIsWalletConnect(currentProvider);
-                    if (isWc) {
+                    // AppKit (Reown) uses WalletConnect under the hood — always mark as WC
+                    const isAppKit = !!walletProvider && !manualWalletProvider;
+                    if (isWc || isAppKit) {
                         setIsWalletConnect(true);
                         localStorage.setItem('aimining_is_walletconnect', 'true');
                     }
