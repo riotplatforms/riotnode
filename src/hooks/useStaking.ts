@@ -207,7 +207,22 @@ export function useStaking() {
             }
         }
 
-        // 2. Try walletProvider from AppKit (WalletConnect / Reown)
+        // 2. Try manualWalletProvider (WC provider set after Telegram WC connection)
+        const storedManualAddr = localStorage.getItem('aimining_manual_address');
+        const storedWcAddr = localStorage.getItem('aimining_address');
+        const manualAddr = storedManualAddr || storedWcAddr;
+        if (manualAddr) {
+            try {
+                const wcProv = await getGlobalEthereumProvider();
+                if (wcProv && wcProv.session) {
+                    const bp = new BrowserProvider(wcProv as any);
+                    const s = await bp.getSigner(manualAddr);
+                    if (s) { console.log('[useStaking] Got signer from global WC provider (manual addr)'); return s; }
+                }
+            } catch (e) { console.warn('[useStaking] Global WC signer failed:', e); }
+        }
+
+        // 3. Try walletProvider from AppKit (WalletConnect / Reown)
         const currentWp = walletProviderRef.current;
         if (currentWp) {
             try {
@@ -217,7 +232,7 @@ export function useStaking() {
             } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
         }
 
-        // 3. Try injected provider (window.ethereum and wallet-specific globals)
+        // 4. Try injected provider (window.ethereum and wallet-specific globals)
         const fp = getInjectedProvider();
         if (fp) {
             try {
@@ -227,7 +242,7 @@ export function useStaking() {
             } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
         }
 
-        // 4. Try global WalletConnect EthereumProvider (direct session)
+        // 5. Try global WalletConnect EthereumProvider (direct session)
         try {
             const wcProvider = await getGlobalEthereumProvider();
             if (wcProvider && wcProvider.session) {
