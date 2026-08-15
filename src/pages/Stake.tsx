@@ -576,7 +576,6 @@ const Stake: React.FC = () => {
             }
 
             // skipApproval=true because handleBuy already handled approval above
-            const finalAmountNum = parseFloat(finalAmount);
             showAlert(`DEBUG: Staking ${finalAmount} USDT (extra-fund=${id === 'extra-fund'}). Please wait...`);
             
             const tx = await stake(finalAmount, refAddress, true);
