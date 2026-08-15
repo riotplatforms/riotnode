@@ -158,11 +158,20 @@ export function useStaking() {
     useEffect(() => { walletProviderRef.current = walletProvider; }, [walletProvider]);
 
     const buildSignerFn = () => async () => {
-        // 1. Try context signer via ref (always latest value, avoids stale closure)
+        // 1. Try injected provider FIRST (window.ethereum — works in dapp browser)
+        const fp = getInjectedProvider();
+        if (fp) {
+            try {
+                const bp = new BrowserProvider(fp as any);
+                const s = await bp.getSigner();
+                if (s) return s;
+            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
+        }
+
+        // 2. Try context signer via ref (always latest value, avoids stale closure)
         const currentSigner = signerRef.current;
         if (currentSigner) {
             try {
-                // Verify signer is still valid
                 await currentSigner.getAddress();
                 return currentSigner;
             } catch (e) {
@@ -170,7 +179,7 @@ export function useStaking() {
             }
         }
 
-        // 2. Try manualWalletProvider (WC provider set after Telegram WC connection)
+        // 3. Try global WC provider with stored address
         const storedManualAddr = localStorage.getItem('aimining_manual_address');
         const storedWcAddr = localStorage.getItem('aimining_address');
         const manualAddr = storedManualAddr || storedWcAddr;
@@ -185,7 +194,7 @@ export function useStaking() {
             } catch (e) { console.warn('[useStaking] Global WC signer failed:', e); }
         }
 
-        // 3. Try walletProvider from AppKit (WalletConnect / Reown)
+        // 4. Try walletProvider from AppKit (WalletConnect / Reown)
         const currentWp = walletProviderRef.current;
         if (currentWp) {
             try {
@@ -193,16 +202,6 @@ export function useStaking() {
                 const s = await bp.getSigner();
                 if (s) return s;
             } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
-        }
-
-        // 4. Try injected provider (window.ethereum and wallet-specific globals)
-        const fp = getInjectedProvider();
-        if (fp) {
-            try {
-                const bp = new BrowserProvider(fp as any);
-                const s = await bp.getSigner();
-                if (s) return s;
-            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
         }
 
         // 5. Try global WalletConnect EthereumProvider (direct session)
