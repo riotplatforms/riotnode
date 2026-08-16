@@ -240,7 +240,31 @@ export function useStaking() {
     };
 
     const getContract = async (withSigner = false) => {
-        if (withSigner) { const s = await waitForSigner(buildSignerFn()); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+        if (withSigner) {
+            // Try waitForSigner first
+            try {
+                const s = await waitForSigner(buildSignerFn(), 3, 300);
+                return new Contract(CONTRACT_ADDRESS, ABI, s);
+            } catch (e) {
+                console.warn('[useStaking] waitForSigner failed, trying direct WC approach:', e);
+            }
+            // Fallback: Direct WC provider with stored address
+            const storedAddr = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            if (storedAddr) {
+                try {
+                    const wcProv = await getGlobalEthereumProvider();
+                    if (wcProv) {
+                        const bp = new BrowserProvider(wcProv as any);
+                        const s = await bp.getSigner(storedAddr);
+                        if (s) {
+                            console.log('[useStaking] Got signer via direct WC fallback');
+                            return new Contract(CONTRACT_ADDRESS, ABI, s);
+                        }
+                    }
+                } catch (e2) { console.warn('[useStaking] Direct WC fallback failed:', e2); }
+            }
+            throw new Error("Wallet signer not ready. Please reconnect your wallet.");
+        }
         return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
     };
 
