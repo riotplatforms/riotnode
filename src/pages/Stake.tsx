@@ -576,8 +576,6 @@ const Stake: React.FC = () => {
             }
 
             // skipApproval=true because handleBuy already handled approval above
-            showAlert(`DEBUG: Staking ${finalAmount} USDT (extra-fund=${id === 'extra-fund'}). Please wait...`);
-            
             const tx = await stake(finalAmount, refAddress, true);
 
             // In TMA: tx is already sent to blockchain via wallet.

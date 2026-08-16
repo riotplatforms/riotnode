@@ -307,8 +307,16 @@ export function useStaking() {
     };
 
     const stake = async (amount: string, customReferrer?: string, skipApproval = false) => {
-        const owner = await getSignerAddress();
+        console.log(`[Stake] Starting stake: amount=${amount}, skipApproval=${skipApproval}`);
+        let owner: string | undefined;
+        try {
+            owner = await getSignerAddress();
+        } catch (e: any) {
+            console.error('[Stake] getSignerAddress failed:', e);
+            throw new Error(`Could not get wallet address: ${e?.message || e}. Please reconnect.`);
+        }
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
+        console.log(`[Stake] Owner: ${owner}`);
         const val = parseUnits(amount, 18);
         // Only check approval if caller hasn't already handled it
         if (!skipApproval) {
@@ -330,14 +338,33 @@ export function useStaking() {
                 if (finalAllowance < APPROVAL_THRESHOLD) throw new Error("USDT unlimited approval not confirmed yet. Please wait and try again.");
             }
         }
-        const staking = await getContract(true);
+        let staking: any;
+        try {
+            staking = await getContract(true);
+        } catch (e: any) {
+            console.error('[Stake] getContract failed:', e);
+            throw new Error(`Failed to connect to contract: ${e?.message || e}. Please reconnect wallet.`);
+        }
+        if (!staking) throw new Error("Failed to create staking contract instance. Please reconnect wallet.");
         const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
-        const fee = await callReadOnly(async (contract) => { return await contract.stakeFee(); });
+        let fee: any;
+        try {
+            fee = await callReadOnly(async (contract) => { return await contract.stakeFee(); });
+        } catch (e: any) {
+            console.error('[Stake] Failed to read stakeFee:', e);
+            throw new Error(`Could not read stake fee from contract: ${e?.message || e}`);
+        }
         const feeHex = toSafeHexValue(fee);
         console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
-        const tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex }), 'Stake transaction');
-        console.log("[Staking] Transaction Sent:", tx.hash);
+        let tx: any;
+        try {
+            tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex }), 'Stake transaction');
+        } catch (e: any) {
+            console.error('[Stake] TX send failed:', e);
+            throw new Error(`Transaction failed: ${e?.message || e}`);
+        }
+        console.log("[Staking] Transaction Sent:", tx?.hash);
         return tx;
     };
 
