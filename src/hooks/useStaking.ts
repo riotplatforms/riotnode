@@ -252,7 +252,10 @@ export function useStaking() {
             const storedAddr = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
             if (storedAddr) {
                 try {
-                    const wcProv = await getGlobalEthereumProvider();
+                    alert('DEBUG-3.5: Trying direct WC fallback...');
+                    const wcProvPromise = getGlobalEthereumProvider();
+                    const wcProvTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+                    const wcProv = await Promise.race([wcProvPromise, wcProvTimeout]);
                     if (wcProv) {
                         const bp = new BrowserProvider(wcProv as any);
                         const s = await bp.getSigner(storedAddr);
@@ -261,6 +264,7 @@ export function useStaking() {
                             return new Contract(CONTRACT_ADDRESS, ABI, s);
                         }
                     }
+                    alert('DEBUG-3.5: WC provider returned null or no signer');
                 } catch (e2) { console.warn('[useStaking] Direct WC fallback failed:', e2); }
             }
             throw new Error("Wallet signer not ready. Please reconnect your wallet.");
