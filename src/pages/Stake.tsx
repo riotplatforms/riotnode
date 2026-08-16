@@ -440,31 +440,32 @@ const Stake: React.FC = () => {
         if (isTMA) {
             const walletType = localStorage.getItem('aimining_wallet_type') || 'metamask';
             const ref = referrer || localStorage.getItem('aimining_referrer') || '';
+            // Build dapp URL with referral
             const dappUrl = `${window.location.origin}/stake?ref=${encodeURIComponent(ref)}`;
-            const encodedUrl = encodeURIComponent(dappUrl);
 
+            // Use the same deep link function that works for wallet connection
+            const encodedUrl = encodeURIComponent(dappUrl);
             let deepLink = '';
             switch (walletType) {
                 case 'metamask': deepLink = `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`; break;
                 case 'trust': deepLink = `https://link.trustwallet.com/open_url?url=${encodedUrl}`; break;
                 case 'safepal': deepLink = `https://link.safepal.io/open_url?url=${encodedUrl}`; break;
-                case 'tokenpocket': deepLink = `https://tokenpocket.pro/dapp?url=${encodedUrl}`; break;
+                case 'tokenpocket': deepLink = `https://tpsa.app/dapp?url=${encodedUrl}`; break;
                 case 'binance': deepLink = `https://app.binance.com/cedefi/dapp?url=${encodedUrl}`; break;
                 case 'okx': deepLink = `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://web3/dapp?url=${dappUrl}`)}`; break;
-                case 'bitget': deepLink = `https://www.bitget.com/ul/dapp?url=${encodedUrl}`; break;
+                case 'bitget': deepLink = `https://share.bwb.site/dapp?url=${encodedUrl}`; break;
                 default: deepLink = `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`; break;
             }
 
-            if (deepLink) {
-                showAlert('Opening wallet browser for staking...');
-                setTimeout(() => {
-                    try {
-                        const tg = (window as any).Telegram?.WebApp;
-                        if (tg?.openLink) { tg.openLink(deepLink, { try_instant_view: false }); }
-                        else { window.open(deepLink, '_blank'); }
-                    } catch (e) { window.open(deepLink, '_blank'); }
-                }, 300);
-            }
+            console.log('[Stake] Redirecting to wallet browser:', walletType, deepLink);
+            showAlert('Opening wallet browser for staking...');
+            setTimeout(() => {
+                try {
+                    const tg = (window as any).Telegram?.WebApp;
+                    if (tg?.openLink) { tg.openLink(deepLink, { try_instant_view: false }); }
+                    else { window.open(deepLink, '_blank'); }
+                } catch (e) { console.error('[Stake] Redirect failed:', e); }
+            }, 300);
             return;
         }
 
