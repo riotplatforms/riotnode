@@ -342,7 +342,14 @@ export function useStaking() {
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
         console.log(`[Stake] Owner: ${owner}`);
         alert(`DEBUG-2: Owner=${owner}`);
-        const val = parseUnits(amount, 18);
+        let val: any;
+        try {
+            val = parseUnits(amount, 18);
+            alert(`DEBUG-2.5: val=${val.toString()}, skipApproval=${skipApproval}`);
+        } catch (parseErr: any) {
+            alert(`DEBUG-2.5-ERR: parseUnits failed for "${amount}": ${parseErr?.message}`);
+            throw parseErr;
+        }
         // Only check approval if caller hasn't already handled it
         if (!skipApproval) {
             const currentAllowanceStr = await getAllowance(owner);
