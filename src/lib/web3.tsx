@@ -502,6 +502,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         document.addEventListener('visibilitychange', handleVisibility);
         window.addEventListener('focus', handleVisibility);
+        // Run immediately on mount to restore WC session after page refresh
+        handleVisibility();
         return () => {
             document.removeEventListener('visibilitychange', handleVisibility);
             window.removeEventListener('focus', handleVisibility);
