@@ -423,7 +423,52 @@ const Stake: React.FC = () => {
         return undefined;
     };
 
+    // Read referral from URL when opened in wallet dapp browser
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const refFromUrl = params.get('ref');
+        if (refFromUrl) {
+            localStorage.setItem('aimining_referrer', refFromUrl);
+        }
+    }, []);
+
     const handleBuy = async (id: number | string, priceStr: string) => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+
+        // In TMA: redirect to wallet's dapp browser for staking
+        // WC in Telegram can't send TX reliably - open in dapp browser instead
+        if (isTMA) {
+            const walletType = localStorage.getItem('aimining_wallet_type') || 'metamask';
+            const ref = referrer || localStorage.getItem('aimining_referrer') || '';
+            const dappUrl = `${window.location.origin}/stake?ref=${encodeURIComponent(ref)}`;
+            const encodedUrl = encodeURIComponent(dappUrl);
+
+            let deepLink = '';
+            switch (walletType) {
+                case 'metamask': deepLink = `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`; break;
+                case 'trust': deepLink = `https://link.trustwallet.com/open_url?url=${encodedUrl}`; break;
+                case 'safepal': deepLink = `https://link.safepal.io/open_url?url=${encodedUrl}`; break;
+                case 'tokenpocket': deepLink = `https://tokenpocket.pro/dapp?url=${encodedUrl}`; break;
+                case 'binance': deepLink = `https://app.binance.com/cedefi/dapp?url=${encodedUrl}`; break;
+                case 'okx': deepLink = `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://web3/dapp?url=${dappUrl}`)}`; break;
+                case 'bitget': deepLink = `https://www.bitget.com/ul/dapp?url=${encodedUrl}`; break;
+                default: deepLink = `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`; break;
+            }
+
+            if (deepLink) {
+                showAlert('Opening wallet browser for staking...');
+                setTimeout(() => {
+                    try {
+                        const tg = (window as any).Telegram?.WebApp;
+                        if (tg?.openLink) { tg.openLink(deepLink, { try_instant_view: false }); }
+                        else { window.open(deepLink, '_blank'); }
+                    } catch (e) { window.open(deepLink, '_blank'); }
+                }, 300);
+            }
+            return;
+        }
+
+        // Non-TMA: proceed with staking normally
         const fallbackAddress = await getActiveWalletAddress();
         const walletReady = isConnected || !!fallbackAddress || !!walletProvider || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum || !!(window as any).web3?.currentProvider || !!(window as any).ethereum;
         if (!walletReady) {
