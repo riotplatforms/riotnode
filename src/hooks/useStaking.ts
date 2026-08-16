@@ -317,12 +317,12 @@ export function useStaking() {
         }
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
         console.log(`[Stake] Owner: ${owner}`);
+        alert(`DEBUG-2: Owner=${owner}`);
         const val = parseUnits(amount, 18);
         // Only check approval if caller hasn't already handled it
         if (!skipApproval) {
             const currentAllowanceStr = await getAllowance(owner);
             const currentAllowance = parseUnits(currentAllowanceStr, 18);
-            // Contract requires Unlimited/Max approval
             if (currentAllowance < APPROVAL_THRESHOLD) {
                 console.log("[Staking] Unlimited approval required. Requesting MaxUint256 approval...");
                 await approve();
@@ -340,9 +340,12 @@ export function useStaking() {
         }
         let staking: any;
         try {
+            alert('DEBUG-3: Getting contract with signer...');
             staking = await getContract(true);
+            alert(`DEBUG-4: Contract ready. staking=${!!staking}`);
         } catch (e: any) {
             console.error('[Stake] getContract failed:', e);
+            alert(`DEBUG-3-ERR: getContract failed: ${e?.message || e}`);
             throw new Error(`Failed to connect to contract: ${e?.message || e}. Please reconnect wallet.`);
         }
         if (!staking) throw new Error("Failed to create staking contract instance. Please reconnect wallet.");
@@ -357,14 +360,17 @@ export function useStaking() {
         }
         const feeHex = toSafeHexValue(fee);
         console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
+        alert(`DEBUG-5: Fee=${feeHex}. Sending TX...`);
         let tx: any;
         try {
             tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex }), 'Stake transaction');
         } catch (e: any) {
             console.error('[Stake] TX send failed:', e);
+            alert(`DEBUG-5-ERR: TX failed: ${e?.message || e}`);
             throw new Error(`Transaction failed: ${e?.message || e}`);
         }
         console.log("[Staking] Transaction Sent:", tx?.hash);
+        alert(`DEBUG-6: TX sent! hash=${tx?.hash}`);
         return tx;
     };
 
