@@ -250,6 +250,7 @@ export function useStaking() {
             }
             // Fallback: Direct WC provider with stored address
             const storedAddr = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            alert(`DEBUG-3.5: storedAddr=${storedAddr || 'NULL'}, isWalletConnect=${localStorage.getItem('aimining_is_walletconnect')}`);
             if (storedAddr) {
                 try {
                     alert('DEBUG-3.5: Trying direct WC fallback...');
