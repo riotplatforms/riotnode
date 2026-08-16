@@ -576,7 +576,15 @@ const Stake: React.FC = () => {
             }
 
             // skipApproval=true because handleBuy already handled approval above
-            const tx = await stake(finalAmount, refAddress, true);
+            alert(`DEBUG-1: About to stake ${finalAmount} USDT. refAddress=${refAddress}`);
+            let tx: any;
+            try {
+                tx = await stake(finalAmount, refAddress, true);
+                alert(`DEBUG-2: stake() returned. tx=${tx ? tx.hash : 'null'}`);
+            } catch (stakeErr: any) {
+                alert(`DEBUG-ERROR: stake() threw: ${stakeErr?.message || stakeErr}`);
+                throw stakeErr;
+            }
 
             // In TMA: tx is already sent to blockchain via wallet.
             // Don't block on tx.wait() which hangs after wallet redirect.
