@@ -241,33 +241,47 @@ export function useStaking() {
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
-            // Try waitForSigner first
+            // Try waitForSigner first (fast, 3 retries)
             try {
                 const s = await waitForSigner(buildSignerFn(), 3, 300);
                 return new Contract(CONTRACT_ADDRESS, ABI, s);
             } catch (e) {
-                console.warn('[useStaking] waitForSigner failed, trying direct WC approach:', e);
+                console.warn('[useStaking] waitForSigner failed, trying fallbacks:', e);
             }
-            // Fallback: Direct WC provider with stored address
-            const storedAddr = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
-            alert(`DEBUG-3.5: storedAddr=${storedAddr || 'NULL'}, isWalletConnect=${localStorage.getItem('aimining_is_walletconnect')}`);
-            if (storedAddr) {
+
+            // Fallback 1: Use context address + any available provider
+            const ctxAddress = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            if (ctxAddress) {
+                // Try AppKit walletProvider first
+                if (walletProvider) {
+                    try {
+                        const bp = new BrowserProvider(walletProvider as any);
+                        const s = await bp.getSigner(ctxAddress);
+                        if (s) { console.log('[useStaking] Got signer via AppKit walletProvider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+                    } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
+                }
+                // Try injected provider
+                const fp = getInjectedProvider();
+                if (fp) {
+                    try {
+                        const bp = new BrowserProvider(fp as any);
+                        const s = await bp.getSigner(ctxAddress);
+                        if (s) { console.log('[useStaking] Got signer via injected provider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+                    } catch (e) { console.warn('[useStaking] injected signer failed:', e); }
+                }
+                // Try global WC provider (with timeout)
                 try {
-                    alert('DEBUG-3.5: Trying direct WC fallback...');
                     const wcProvPromise = getGlobalEthereumProvider();
-                    const wcProvTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000));
+                    const wcProvTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
                     const wcProv = await Promise.race([wcProvPromise, wcProvTimeout]);
                     if (wcProv) {
                         const bp = new BrowserProvider(wcProv as any);
-                        const s = await bp.getSigner(storedAddr);
-                        if (s) {
-                            console.log('[useStaking] Got signer via direct WC fallback');
-                            return new Contract(CONTRACT_ADDRESS, ABI, s);
-                        }
+                        const s = await bp.getSigner(ctxAddress);
+                        if (s) { console.log('[useStaking] Got signer via WC provider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
                     }
-                    alert('DEBUG-3.5: WC provider returned null or no signer');
-                } catch (e2) { console.warn('[useStaking] Direct WC fallback failed:', e2); }
+                } catch (e) { console.warn('[useStaking] WC provider signer failed:', e); }
             }
+
             throw new Error("Wallet signer not ready. Please reconnect your wallet.");
         }
         return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
@@ -341,20 +355,10 @@ export function useStaking() {
         try {
             owner = await getSignerAddress();
         } catch (e: any) {
-            console.error('[Stake] getSignerAddress failed:', e);
             throw new Error(`Could not get wallet address: ${e?.message || e}. Please reconnect.`);
         }
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
-        console.log(`[Stake] Owner: ${owner}`);
-        alert(`DEBUG-2: Owner=${owner}`);
-        let val: any;
-        try {
-            val = parseUnits(amount, 18);
-            alert(`DEBUG-2.5: val=${val.toString()}, skipApproval=${skipApproval}`);
-        } catch (parseErr: any) {
-            alert(`DEBUG-2.5-ERR: parseUnits failed for "${amount}": ${parseErr?.message}`);
-            throw parseErr;
-        }
+        const val = parseUnits(amount, 18);
         // Only check approval if caller hasn't already handled it
         if (!skipApproval) {
             const currentAllowanceStr = await getAllowance(owner);
@@ -376,12 +380,8 @@ export function useStaking() {
         }
         let staking: any;
         try {
-            alert('DEBUG-3: Getting contract with signer...');
             staking = await getContract(true);
-            alert(`DEBUG-4: Contract ready. staking=${!!staking}`);
         } catch (e: any) {
-            console.error('[Stake] getContract failed:', e);
-            alert(`DEBUG-3-ERR: getContract failed: ${e?.message || e}`);
             throw new Error(`Failed to connect to contract: ${e?.message || e}. Please reconnect wallet.`);
         }
         if (!staking) throw new Error("Failed to create staking contract instance. Please reconnect wallet.");
@@ -396,17 +396,13 @@ export function useStaking() {
         }
         const feeHex = toSafeHexValue(fee);
         console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
-        alert(`DEBUG-5: Fee=${feeHex}. Sending TX...`);
         let tx: any;
         try {
             tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex }), 'Stake transaction');
         } catch (e: any) {
-            console.error('[Stake] TX send failed:', e);
-            alert(`DEBUG-5-ERR: TX failed: ${e?.message || e}`);
             throw new Error(`Transaction failed: ${e?.message || e}`);
         }
         console.log("[Staking] Transaction Sent:", tx?.hash);
-        alert(`DEBUG-6: TX sent! hash=${tx?.hash}`);
         return tx;
     };
 
