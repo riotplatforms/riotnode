@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '../lib/web3';
+import { useWallet, launchExternalLink } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { BrowserProvider, formatUnits, parseUnits, MaxUint256 } from 'ethers';
@@ -460,11 +460,7 @@ const Stake: React.FC = () => {
             console.log('[Stake] Redirecting to wallet browser:', walletType, deepLink);
             showAlert('Opening wallet browser for staking...');
             setTimeout(() => {
-                try {
-                    const tg = (window as any).Telegram?.WebApp;
-                    if (tg?.openLink) { tg.openLink(deepLink, { try_instant_view: false }); }
-                    else { window.open(deepLink, '_blank'); }
-                } catch (e) { console.error('[Stake] Redirect failed:', e); }
+                launchExternalLink(deepLink);
             }, 300);
             return;
         }
