@@ -241,35 +241,38 @@ export function useStaking() {
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
-            // Try waitForSigner first (fast, 3 retries)
-            try {
-                const s = await waitForSigner(buildSignerFn(), 3, 300);
-                return new Contract(CONTRACT_ADDRESS, ABI, s);
-            } catch (e) {
-                console.warn('[useStaking] waitForSigner failed, trying fallbacks:', e);
+            // Method 1: Use context signer directly (set by prepareWalletConnect)
+            const ctxSigner = signerRef.current;
+            if (ctxSigner) {
+                try {
+                    await ctxSigner.getAddress();
+                    console.log('[useStaking] Using context signer');
+                    return new Contract(CONTRACT_ADDRESS, ABI, ctxSigner);
+                } catch (e) { console.warn('[useStaking] Context signer invalid:', e); }
             }
 
-            // Fallback 1: Use context address + any available provider
+            // Method 2: Use context address + AppKit walletProvider
             const ctxAddress = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            if (ctxAddress && walletProvider) {
+                try {
+                    const bp = new BrowserProvider(walletProvider as any);
+                    const s = await bp.getSigner(ctxAddress);
+                    if (s) { console.log('[useStaking] Got signer via AppKit walletProvider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+                } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
+            }
+
+            // Method 3: Use context address + injected provider
+            const fp = getInjectedProvider();
+            if (fp && ctxAddress) {
+                try {
+                    const bp = new BrowserProvider(fp as any);
+                    const s = await bp.getSigner(ctxAddress);
+                    if (s) { console.log('[useStaking] Got signer via injected provider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+                } catch (e) { console.warn('[useStaking] injected signer failed:', e); }
+            }
+
+            // Method 4: Use context address + global WC provider (with timeout)
             if (ctxAddress) {
-                // Try AppKit walletProvider first
-                if (walletProvider) {
-                    try {
-                        const bp = new BrowserProvider(walletProvider as any);
-                        const s = await bp.getSigner(ctxAddress);
-                        if (s) { console.log('[useStaking] Got signer via AppKit walletProvider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
-                    } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
-                }
-                // Try injected provider
-                const fp = getInjectedProvider();
-                if (fp) {
-                    try {
-                        const bp = new BrowserProvider(fp as any);
-                        const s = await bp.getSigner(ctxAddress);
-                        if (s) { console.log('[useStaking] Got signer via injected provider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
-                    } catch (e) { console.warn('[useStaking] injected signer failed:', e); }
-                }
-                // Try global WC provider (with timeout)
                 try {
                     const wcProvPromise = getGlobalEthereumProvider();
                     const wcProvTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
@@ -281,6 +284,12 @@ export function useStaking() {
                     }
                 } catch (e) { console.warn('[useStaking] WC provider signer failed:', e); }
             }
+
+            // Method 5: Try waitForSigner with buildSignerFn (retries)
+            try {
+                const s = await waitForSigner(buildSignerFn(), 5, 500);
+                return new Contract(CONTRACT_ADDRESS, ABI, s);
+            } catch (e) { console.warn('[useStaking] waitForSigner failed:', e); }
 
             throw new Error("Wallet signer not ready. Please reconnect your wallet.");
         }
