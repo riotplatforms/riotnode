@@ -434,10 +434,12 @@ const Stake: React.FC = () => {
 
     const handleBuy = async (id: number | string, priceStr: string) => {
         const isTMA = !!(window as any).Telegram?.WebApp;
+        const eth = (window as any).ethereum;
+        const isInsideDAppBrowser = !!(eth?.request); // Already in wallet's DApp browser
 
-        // In TMA: redirect to wallet's dapp browser for staking
-        // WC in Telegram can't send TX reliably - open in dapp browser instead
-        if (isTMA) {
+        // In TMA: only redirect to wallet dapp browser if NOT already inside one
+        // If already in DApp browser (window.ethereum exists), stake directly!
+        if (isTMA && !isInsideDAppBrowser) {
             const walletType = localStorage.getItem('aimining_wallet_type') || 'metamask';
             const ref = referrer || localStorage.getItem('aimining_referrer') || '';
             // Build dapp URL with referral
