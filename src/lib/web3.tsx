@@ -945,8 +945,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         // Store address in URL so TMA can detect connection on return.
         // ============================================================
         if (isTMA) {
-            // Check: already in wallet's dapp browser with injected provider
-            // MUST try injected first for ALL wallets — prevents redirect loop
+            // Step 1: If already in wallet DApp browser with injected provider, use it directly
             const eth = (window as any).ethereum;
             if (eth?.request) {
                 try {
@@ -956,15 +955,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 } catch (e) { console.warn('[TMA] Injected connect failed:', e); }
             }
 
-            // No injected provider — need to open wallet's DApp browser
-            // All wallets need DApp browser for injected provider in TMA
-            const dappUrl = window.location.origin;
-            const deepLink = getWalletDappDeepLink(wallet, dappUrl);
-            console.log('[TMA] No injected provider, opening in dapp browser:', wallet, deepLink);
+            // Step 2: Try WalletConnect relay (works in most TMA WebViews)
+            // Open modal + set connecting wallet → triggers prepareWalletConnect()
+            console.log('[TMA] No injected provider, trying WalletConnect for:', wallet);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            launchExternalLink(deepLink);
+            setIsConnectModalOpen(true); // This triggers prepareWalletConnect() → WC URI generation
             return;
         }
 
@@ -1309,11 +1306,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     useEffect(() => {
         const isTMA = !!(window as any).Telegram?.WebApp;
         if (activeUri && connectingWallet) {
-            const encoded = encodeURIComponent(activeUri);
-            const link = getWalletConnectionLink(connectingWallet, encoded);
-            if (link) {
-                console.log('[Web3] Opening WC deeplink for:', connectingWallet);
-                launchExternalLink(link);
+            if (isTMA) {
+                // In TMA: Don't auto-redirect — show "Open Wallet" button in the modal
+                // User taps the button when ready to switch to wallet app
+                console.log('[Web3] WC URI ready, showing "Open Wallet" button in modal for:', connectingWallet);
+            } else {
+                // Non-TMA: auto-open wallet deep link
+                const encoded = encodeURIComponent(activeUri);
+                const link = getWalletConnectionLink(connectingWallet, encoded);
+                if (link) {
+                    console.log('[Web3] Opening WC deeplink for:', connectingWallet);
+                    launchExternalLink(link);
+                }
             }
         } else if (connectingWallet && !isTMA && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
             // Non-TMA mobile only: open dapp in wallet browser as fallback
@@ -1323,7 +1327,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     }, [activeUri, connectingWallet]);
 
-    // Timeout: if WC URI not generated within 15 seconds, reset and show error
+    // Timeout: if WC URI not generated within 20 seconds, reset and show error
     useEffect(() => {
         if (!connectingWallet || activeUri) return;
         const isTMA = !!(window as any).Telegram?.WebApp;
@@ -1331,11 +1335,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         const timer = setTimeout(() => {
             if (connectingWallet && !activeUri) {
-                console.warn('[Web3] WC URI generation timeout. Resetting...');
-                setConnectingWallet(null);
-                setActiveUri(null);
+                console.warn('[Web3] WC URI generation timeout (20s). Showing fallback...');
+                // Don't reset — let the user see the "Open Wallet" button as fallback
             }
-        }, 15000);
+        }, 20000);
 
         return () => clearTimeout(timer);
     }, [connectingWallet, activeUri]);
