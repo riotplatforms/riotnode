@@ -1074,6 +1074,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const openInWalletBrowser = (type: 'safepal' | 'tokenpocket') => {
+        // Don't redirect if already inside a wallet's DApp browser
+        const eth = (window as any).ethereum;
+        if (eth?.request) {
+            console.log('[Wallet] Already in DApp browser, skipping openInWalletBrowser redirect');
+            return;
+        }
+
         const dappUrl = getDappUrl(type === 'tokenpocket');
 
         if (type === 'safepal') {
