@@ -945,34 +945,26 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         // Store address in URL so TMA can detect connection on return.
         // ============================================================
         if (isTMA) {
-            // Quick check: already in wallet's dapp browser with injected provider
+            // Check: already in wallet's dapp browser with injected provider
+            // MUST try injected first for ALL wallets — prevents redirect loop
             const eth = (window as any).ethereum;
             if (eth?.request) {
                 try {
+                    console.log('[TMA] Injected provider detected, trying direct connect for:', wallet);
                     const status = await connectInjectedWallet(wallet);
                     if (status === 'connected') return;
                 } catch (e) { console.warn('[TMA] Injected connect failed:', e); }
             }
 
-            // MetaMask & TokenPocket → open in dapp browser (need injected provider)
-            const needsDappBrowser = ['metamask', 'tokenpocket'].includes(wallet);
-            if (needsDappBrowser) {
-                const dappUrl = window.location.origin;
-                const deepLink = getWalletDappDeepLink(wallet, dappUrl);
-                console.log('[TMA] Opening in dapp browser:', wallet, deepLink);
-                setConnectingWallet(wallet);
-                setWalletType(wallet);
-                localStorage.setItem('aimining_wallet_type', wallet);
-                launchExternalLink(deepLink);
-                return;
-            }
-
-            // Trust, SafePal, Binance, OKX, Bitget → WalletConnect directly in Telegram
-            console.log('[TMA] Connecting via WalletConnect in Telegram:', wallet);
+            // No injected provider — need to open wallet's DApp browser
+            // All wallets need DApp browser for injected provider in TMA
+            const dappUrl = window.location.origin;
+            const deepLink = getWalletDappDeepLink(wallet, dappUrl);
+            console.log('[TMA] No injected provider, opening in dapp browser:', wallet, deepLink);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            setIsConnectModalOpen(true); // This triggers prepareWalletConnect() → generates WC URI → opens wallet app
+            launchExternalLink(deepLink);
             return;
         }
 
