@@ -433,128 +433,16 @@ const Stake: React.FC = () => {
     }, []);
 
     const handleBuy = async (id: number | string, priceStr: string) => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-        const eth = (window as any).ethereum;
-        const isInsideDAppBrowser = !!(eth?.request); // Already in wallet's DApp browser
-
-        // In TMA: only redirect to wallet dapp browser if NOT already inside one
-        // If already in DApp browser (window.ethereum exists), stake directly!
-        if (isTMA && !isInsideDAppBrowser) {
-            const walletType = localStorage.getItem('aimining_wallet_type') || 'metamask';
-            const ref = referrer || localStorage.getItem('aimining_referrer') || '';
-            // Build dapp URL with referral
-            const dappUrl = `${window.location.origin}/stake?ref=${encodeURIComponent(ref)}`;
-
-            // Use the same deep link function that works for wallet connection
-            const encodedUrl = encodeURIComponent(dappUrl);
-            let deepLink = '';
-            switch (walletType) {
-                case 'metamask': deepLink = `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`; break;
-                case 'trust': deepLink = `https://link.trustwallet.com/open_url?url=${encodedUrl}`; break;
-                case 'safepal': deepLink = `https://link.safepal.io/open_url?url=${encodedUrl}`; break;
-                case 'tokenpocket': deepLink = `https://tpsa.app/dapp?url=${encodedUrl}`; break;
-                case 'binance': deepLink = `https://app.binance.com/cedefi/dapp?url=${encodedUrl}`; break;
-                case 'okx': deepLink = `https://www.okx.com/download?deeplink=${encodeURIComponent(`okx://web3/dapp?url=${dappUrl}`)}`; break;
-                case 'bitget': deepLink = `https://share.bwb.site/dapp?url=${encodedUrl}`; break;
-                default: deepLink = `https://metamask.app.link/dapp/${dappUrl.replace(/^https?:\/\//, '')}`; break;
-            }
-
-            console.log('[Stake] Redirecting to wallet browser:', walletType, deepLink);
-            showAlert('Opening wallet browser for staking...');
-            setTimeout(() => {
-                launchExternalLink(deepLink);
-            }, 300);
-            return;
-        }
-
-        // Inside DApp browser: ensure wallet is authorized before proceeding
-        if (isInsideDAppBrowser) {
-            try {
-                // eth_requestAccounts triggers wallet popup if not yet authorized
-                const accounts = await eth.request({ method: 'eth_requestAccounts' });
-                if (!accounts || accounts.length === 0) {
-                    showAlert('Please unlock your wallet and try again.');
-                    return;
-                }
-                // Save address for getActiveWalletAddress() and other hooks
-                const connectedAddr = accounts[0];
-                localStorage.setItem('aimining_manual_address', connectedAddr);
-                localStorage.setItem('aimining_address', connectedAddr);
-                localStorage.setItem('aimining_is_walletconnect', 'false');
-                // Also ensure BSC chain
-                try {
-                    const chainId = await eth.request({ method: 'eth_chainId' });
-                    if (parseInt(chainId, 16) !== 56) {
-                        try {
-                            await eth.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
-                        } catch (switchErr: any) {
-                            if (switchErr?.code === 4902) {
-                                await eth.request({
-                                    method: 'wallet_addEthereumChain',
-                                    params: [{
-                                        chainId: '0x38',
-                                        chainName: 'BNB Smart Chain',
-                                        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
-                                        rpcUrls: ['https://bsc-rpc.publicnode.com'],
-                                        blockExplorerUrls: ['https://bscscan.com'],
-                                    }],
-                                });
-                            }
-                        }
-                    }
-                } catch (chainErr) {
-                    console.warn('[Stake] Chain check/switch failed:', chainErr);
-                }
-            } catch (reqErr: any) {
-                console.warn('[Stake] eth_requestAccounts failed:', reqErr);
-                if (reqErr?.code === 4001 || reqErr?.message?.includes('rejected')) {
-                    showAlert('Wallet connection was rejected. Please approve the connection request.');
-                } else {
-                    showAlert('Could not connect to wallet. Please try again.');
-                }
-                return;
-            }
-        }
-
-        // Non-TMA / Inside DApp browser: proceed with staking normally
+        // Step 1: Ensure wallet is connected (WalletConnect in TMA)
         const fallbackAddress = await getActiveWalletAddress();
-        const walletReady = isConnected || !!fallbackAddress || !!walletProvider || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum || !!(window as any).web3?.currentProvider || !!(window as any).ethereum;
-        if (!walletReady) {
-            localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
-            // If inside DApp browser, don't redirect — this shouldn't happen since window.ethereum exists
-            if (isInsideDAppBrowser) {
-                showAlert('Wallet not ready. Please unlock your wallet and try again.');
-            } else {
-                const tg = (window as any).Telegram?.WebApp;
-                if (tg && typeof openInWalletBrowser === 'function') {
-                    openInWalletBrowser('tokenpocket');
-                    showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
-                } else {
-                    connect();
-                }
-            }
-            return;
-        }
-
         if (!fallbackAddress) {
+            // Not connected — open AppKit connect modal (WalletConnect)
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
-            // If inside DApp browser, don't redirect — show error instead
-            if (isInsideDAppBrowser) {
-                showAlert('Could not detect wallet address. Please ensure your wallet is unlocked and connected, then try again.');
-            } else {
-                const tg = (window as any).Telegram?.WebApp;
-                if (tg && typeof openInWalletBrowser === 'function') {
-                    openInWalletBrowser('tokenpocket');
-                    showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
-                } else {
-                    connect();
-                }
-            }
+            connect(); // Opens WalletConnect modal — user connects via wallet app
             return;
         }
 
         if (loading) return;
-
         setLoading(id);
 
         // Safety timeout: clear loading after 45 seconds no matter what
