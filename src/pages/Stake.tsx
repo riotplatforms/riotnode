@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet, launchExternalLink } from '../lib/web3';
+import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { BrowserProvider, formatUnits, parseUnits, MaxUint256 } from 'ethers';
@@ -19,7 +19,7 @@ const getTierRate = (val: number) => {
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, signer, walletProvider, openInWalletBrowser, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, signer, walletProvider, miningStats, setMiningStats } = useWallet();
     const { stake, approve, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
@@ -611,15 +611,8 @@ const Stake: React.FC = () => {
 
     const handleWithdraw = async (index: number) => {
         const fallbackAddress = await getActiveWalletAddress();
-        const walletReady = fallbackAddress || walletProvider || (window as any).tokenpocket?.ethereum || (window as any).safepal?.ethereum || (window as any).web3?.currentProvider;
-        if (!walletReady) {
-            const tg = (window as any).Telegram?.WebApp;
-            if (tg && typeof openInWalletBrowser === 'function') {
-                openInWalletBrowser('tokenpocket');
-                showAlert('Open this DApp in your wallet\'s dApp browser (e.g. TokenPocket) and try again.');
-            } else {
-                connect();
-            }
+        if (!fallbackAddress) {
+            connect(); // Opens WalletConnect modal
             return;
         }
         setLoading(`withdraw-${index}`);
