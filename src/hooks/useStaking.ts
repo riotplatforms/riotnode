@@ -13,10 +13,9 @@ const ERC20_ABI = [
 // Contract requires Unlimited/Max approval — use MaxUint256
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
-const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 60000): Promise<T> => {
+const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 120000): Promise<T> => {
     // For WalletConnect: TX request goes via WC relay → wallet app shows approval notification automatically.
-    // Do NOT redirect to wallet website — it opens the landing page, not the approval screen.
-    // Instead, alert the user to check their wallet app.
+    // Alert the user to check their wallet app.
     try {
         const tg = (window as any).Telegram?.WebApp;
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
@@ -27,7 +26,7 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
     } catch (e) { console.warn('[useStaking] Alert failed:', e); }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out. Please open your wallet app and approve the transaction.`)), timeoutMs); });
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please open your wallet app and check for pending approvals.`)), timeoutMs); });
     try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }
 };
 

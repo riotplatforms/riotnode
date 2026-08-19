@@ -445,11 +445,12 @@ const Stake: React.FC = () => {
         if (loading) return;
         setLoading(id);
 
-        // Safety timeout: clear loading after 45 seconds no matter what
+        // Safety timeout: clear loading after 3 minutes (approve + stake can take time)
         const safetyTimer = setTimeout(() => {
-            console.warn('[Stake] Safety timeout: clearing loading state after 45s');
+            console.warn('[Stake] Safety timeout: clearing loading state after 180s');
             setLoading(null);
-        }, 45000);
+            showAlert('Transaction is taking too long. Please check your wallet app for pending approvals, then try again.');
+        }, 180000);
 
         try {
             const cleanedPriceStr = (typeof priceStr === 'string') ? priceStr.replace(/[^0-9.]/g, '') : String(priceStr || '0').replace(/[^0-9.]/g, '');
@@ -524,9 +525,7 @@ const Stake: React.FC = () => {
                     try {
                         const tg = (window as any).Telegram?.WebApp;
                         if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning');
-                        if (tg?.showAlert) {
-                            showAlert("Please approve the USDT spending limit in your wallet app. The app will open automatically.");
-                        }
+                        showAlert("Please check your wallet app to approve the USDT spending limit. You'll need to approve 2 transactions (approval + stake).");
                     } catch {}
                 }
                 const approvalTx = await approve();
