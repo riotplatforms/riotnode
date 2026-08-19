@@ -510,11 +510,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         };
     }, [address, manualAddress, finalIsConnected, signer, walletProvider, manualWalletProvider]);
 
-    // Auto-connect when app is opened inside a wallet's built-in browser
-    // Detect injected provider — no URL params or localStorage needed
+    // Auto-connect when app is opened inside a wallet's built-in browser (NOT in TMA)
     useEffect(() => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        if (isTMA) return; // Skip auto-connect in TMA — use WalletConnect instead
         if (finalIsConnected || manualAddress || signer) return;
-        if (skipAutoConnectRef.current) return; // Skip if user just disconnected
+        if (skipAutoConnectRef.current) return;
 
         // Don't auto-connect if user just opened normally (not from wallet browser)
         // Only auto-connect if a wallet-specific provider is detected
@@ -934,34 +935,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleWalletClick = async (wallet: string) => {
-        const isWcMobileWallet = ["metamask", "trust", "safepal", "binance", "okx", "bitget", "tokenpocket"].includes(wallet);
         const isTMA = !!(window as any).Telegram?.WebApp;
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || isTMA;
 
-        // ============================================================
-        // TELEGRAM MINI APP
-        // WC relay WebSocket blocked in Telegram WebView → use dapp browser.
-        // Open dapp in wallet's built-in browser → auto-connect via injected provider.
-        // Store address in URL so TMA can detect connection on return.
-        // ============================================================
+        // TELEGRAM MINI APP: Everything via WalletConnect — no DApp browser redirect
         if (isTMA) {
-            // Step 1: If already in wallet DApp browser with injected provider, use it directly
-            const eth = (window as any).ethereum;
-            if (eth?.request) {
-                try {
-                    console.log('[TMA] Injected provider detected, trying direct connect for:', wallet);
-                    const status = await connectInjectedWallet(wallet);
-                    if (status === 'connected') return;
-                } catch (e) { console.warn('[TMA] Injected connect failed:', e); }
-            }
-
-            // Step 2: Try WalletConnect relay (works in most TMA WebViews)
-            // Open modal + set connecting wallet → triggers prepareWalletConnect()
-            console.log('[TMA] No injected provider, trying WalletConnect for:', wallet);
+            console.log('[TMA] Connecting via WalletConnect for:', wallet);
             setConnectingWallet(wallet);
             setWalletType(wallet);
             localStorage.setItem('aimining_wallet_type', wallet);
-            setIsConnectModalOpen(true); // This triggers prepareWalletConnect() → WC URI generation
+            setIsConnectModalOpen(true); // Triggers prepareWalletConnect() → WC URI → modal with "Open Wallet" button
             return;
         }
 
@@ -1070,26 +1052,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const openInWalletBrowser = (type: 'safepal' | 'tokenpocket') => {
-        // Don't redirect if already inside a wallet's DApp browser
-        const eth = (window as any).ethereum;
-        if (eth?.request) {
-            console.log('[Wallet] Already in DApp browser, skipping openInWalletBrowser redirect');
-            return;
-        }
-
-        const dappUrl = getDappUrl(type === 'tokenpocket');
-
-        if (type === 'safepal') {
-            const url = `https://link.safepal.io/open_url?url=${encodeURIComponent(dappUrl)}`;
-            launchExternalLink(url);
-            return;
-        }
-
-        if (type === 'tokenpocket') {
-            openTokenPocketApp(true);
-            return;
-        }
+    const openInWalletBrowser = (_type: 'safepal' | 'tokenpocket') => {
+        // Disabled — everything works inside Telegram Mini App via WalletConnect
+        console.log('[Wallet] openInWalletBrowser disabled — use WalletConnect in TMA');
     };
 
     // Auto-reconnect on boot & Init Raw Client
@@ -1537,23 +1502,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                         <span className="material-icons-round text-lg">rocket_launch</span>
                                         Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}
                                     </button>
-                                ) : (window as any).Telegram?.WebApp ? (() => {
-                                     const dappUrl = window.location.origin;
-                                     const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
-                                     const walletName = connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : connectingWallet === 'tokenpocket' ? 'TokenPocket' : connectingWallet === 'binance' ? 'Binance' : connectingWallet === 'okx' ? 'OKX' : connectingWallet;
-                                     return (
-                                         <a
-                                             href={deepLink}
-                                             target="_blank"
-                                             rel="noopener noreferrer"
-                                             className="mt-2 bg-[#FFD700] text-black px-8 py-4 rounded-[20px] inline-flex items-center gap-3 transition-all active:scale-95 no-underline font-black text-[11px] uppercase tracking-[2px] shadow-neon cursor-pointer"
-                                         >
-                                             <span className="material-icons-round text-lg">open_in_new</span>
-                                             Open {walletName}
-                                         </a>
-                                     );
-                                })() : (
-                                    <div className="text-[10px] text-gray-600 font-black uppercase tracking-wider animate-pulse">Generating Link...</div>
+                                ) : (
+                                    // WC URI not ready yet — show loading state, NO DApp browser redirect
+                                    <div className="flex flex-col items-center gap-3 mt-2">
+                                        <div className="w-6 h-6 border-2 border-[#FFD700]/30 border-t-[#FFD700] rounded-full animate-spin"></div>
+                                        <div className="text-[10px] text-gray-500 font-black uppercase tracking-wider">
+                                            Generating secure connection link...
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                         )}
