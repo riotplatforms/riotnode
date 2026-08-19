@@ -789,7 +789,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const connect = async () => {
         try {
-            clearWalletConnectPairingCache();
+            // Do NOT clear WalletConnect pairing cache here — it destroys valid sessions
+            // and prevents AppKit from restoring existing connections.
+            // Session cleanup is handled properly in the disconnect() function.
             await open({ view: 'Connect' });
         } catch (err) {
             console.warn("[Web3] AppKit connect failed:", err);
@@ -1059,7 +1061,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setIsGeneratingUri(true);
         console.log('[Web3] prepareWalletConnect starting...');
         try {
-            clearWalletConnectPairingCache();
+            // Only clear stale WC cache if no valid session exists
+            const existingProvider = globalEthereumProvider;
+            if (!existingProvider?.session) {
+                clearWalletConnectPairingCache();
+            }
             const provider = await getGlobalEthereumProvider();
             console.log('[Web3] WC provider ready, setting up display_uri listener');
 

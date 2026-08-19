@@ -608,6 +608,34 @@ const Stake: React.FC = () => {
         }
     };
 
+    // Auto-resume pending upgrade after wallet connects (refs to avoid stale closures)
+    const handleBuyRef = React.useRef<(id: number | string, priceStr: string) => Promise<void>>();
+    handleBuyRef.current = handleBuy;
+    const loadingRef = React.useRef(loading);
+    loadingRef.current = loading;
+
+    useEffect(() => {
+        if (!isConnected || !address) return;
+        const pending = localStorage.getItem('pending_upgrade');
+        if (!pending) return;
+        try {
+            const { id, priceStr } = JSON.parse(pending);
+            if (id && priceStr && !loadingRef.current) {
+                console.log('[Stake] Auto-resuming pending upgrade after wallet connect:', id);
+                // Small delay to ensure signer is synced
+                const timer = setTimeout(() => {
+                    if (!loadingRef.current && handleBuyRef.current) {
+                        handleBuyRef.current(id, priceStr);
+                    }
+                }, 2000);
+                return () => clearTimeout(timer);
+            }
+        } catch (e) {
+            console.warn('[Stake] Failed to parse pending_upgrade:', e);
+            localStorage.removeItem('pending_upgrade');
+        }
+    }, [isConnected, address]);
+
     const handleWithdraw = async (index: number) => {
         const fallbackAddress = await getActiveWalletAddress();
         if (!fallbackAddress) {
