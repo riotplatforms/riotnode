@@ -270,14 +270,7 @@ if (!appKitInitialized) {
         adapters: [new EthersAdapter()],
         networks: [bsc],
         defaultNetwork: bsc,
-        metadata: {
-            ...metadata,
-            redirect: {
-                // Prevent wallet from opening DApp in its browser after connection
-                universal: undefined,
-                native: undefined
-            }
-        },
+        metadata,
         projectId,
         allWallets: 'SHOW',
         featuredWalletIds: [
