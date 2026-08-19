@@ -735,57 +735,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-
-        // TMA: Open our custom modal (AppKit hangs because WC relay blocked in Telegram WebView)
-        if (isTMA) {
-            setConnectingWallet(null);
-            setIsConnectModalOpen(true);
-            return;
-        }
-
         try {
             clearWalletConnectPairingCache();
             setIsConnectModalOpen(false);
-
-            // Use AppKit's connect modal — already properly configured with WalletConnect + all wallets
-            await open({ view: 'Connect' });
+            await open({ view: 'Connect' }); // AppKit handles WC + all wallets
         } catch (err) {
-            console.warn("[Web3] Connect modal failed, trying direct WalletConnect:", err);
-            // Fallback: try raw WalletConnect provider
-            try {
-                const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
-                const wcProvider = await EthereumProvider.init({
-                    projectId: 'ec457184730a7f1e24bbe58a393f442b',
-                    metadata,
-                    showQrModal: true,
-                    chains: [56],
-                    methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
-                    events: ["accountsChanged", "chainChanged"],
-                    rpcMap: { 56: 'https://bsc-rpc.publicnode.com' },
-                });
-
-                await wcProvider.connect();
-
-                const accounts = wcProvider.accounts;
-                if (accounts?.[0]) {
-                    const bp = new BrowserProvider(wcProvider);
-                    const sg = await bp.getSigner(accounts[0]);
-                    setSigner(sg);
-                    setManualAddress(accounts[0]);
-                    setManualWalletProvider(wcProvider);
-                    setIsWalletConnect(true);
-                    localStorage.setItem('aimining_is_walletconnect', 'true');
-                    setHasSynced(true);
-                    setFinalAddress(accounts[0]);
-                    setFinalIsConnected(true);
-                    localStorage.setItem('aimining_manual_address', accounts[0]);
-                    localStorage.setItem('aimining_address', accounts[0]);
-                    walletConnectionsManager.saveConnection(accounts[0], 'walletconnect');
-                }
-            } catch (fallbackErr) {
-                console.error("[Web3] All connect methods failed:", fallbackErr);
-            }
+            console.warn("[Web3] AppKit connect failed, opening custom modal:", err);
+            // Fallback: custom modal with manual WC
+            setConnectingWallet(null);
+            setIsConnectModalOpen(true);
         }
     };
 
@@ -934,121 +892,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const handleWalletClick = async (wallet: string) => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-
-        // TELEGRAM MINI APP: Everything via WalletConnect — no DApp browser redirect
-        if (isTMA) {
-            console.log('[TMA] Connecting via WalletConnect for:', wallet);
-            setConnectingWallet(wallet);
-            setWalletType(wallet);
-            localStorage.setItem('aimining_wallet_type', wallet);
-            setIsConnectModalOpen(true); // Triggers prepareWalletConnect() → WC URI → modal with "Open Wallet" button
-            return;
-        }
-
-        // ============================================================
-        // NON-TELEGRAM (regular browser) — original flow
-        // ============================================================
-
-        // IMMEDIATE FAST-TRACK: TokenPocket (Direct App to DApp Browser)
-        if (wallet === "tokenpocket") {
-            setTpLoading(true);
-            setShowTpFallback(false);
-
-            const status = await connectInjectedWallet('tokenpocket');
-            if (status === 'connected') {
-                return;
-            }
-
-            if (status === 'failed') {
-                setTpLoading(false);
-                return; // User cancelled or failed, do not redirect
-            }
-
-            // Otherwise 'not_installed'
-            if (isMobile) {
-                clearWalletConnectPairingCache();
-                openInWalletBrowser('tokenpocket');
-
-                setTimeout(() => {
-                    setShowTpFallback(true);
-                    setTpLoading(false);
-                }, 2500);
-            } else {
-                // On desktop, fallback to AppKit
-                setTpLoading(false);
-                setIsConnectModalOpen(false);
-                await open({ view: 'Connect' });
-            }
-
-            return;
-        }
-
+    const handleWalletClick = async (_wallet: string) => {
+        // All wallets via AppKit — handles WalletConnect + injected providers
+        setIsConnectModalOpen(false);
         try {
-            if (isWcMobileWallet) {
-                const status = await connectInjectedWallet(wallet);
-                if (status === 'connected') {
-                    return;
-                }
-
-                if (status === 'failed') {
-                    return; // User rejected or switch chain rejected, do not redirect
-                }
-
-                // If not installed (status === 'not_installed')
-                if (isMobile) {
-                    setConnectingWallet(wallet);
-                    setWalletType(wallet);
-                    localStorage.setItem('aimining_wallet_type', wallet);
-
-                    const dappUrl = getDappUrl();
-                    const deepLink = getWalletDappDeepLink(wallet, dappUrl);
-
-                    if (activeUri) {
-                        const encoded = encodeURIComponent(activeUri);
-                        const link = getWalletConnectionLink(wallet, encoded);
-                        if (link) {
-                            launchExternalLink(link);
-                            return;
-                        }
-                    }
-
-                    launchExternalLink(deepLink);
-                } else {
-                    // On desktop, open general AppKit connection modal so they can scan the QR code
-                    setIsConnectModalOpen(false);
-                    await open({ view: 'Connect' });
-                }
-                return;
-            }
-
-            // Fallback to AppKit if it is not a deep link wallet
-            setIsConnectModalOpen(false);
             await open({ view: 'Connect' });
-        } catch (e) {
-            console.error("Injected/WalletConnect failed, fallback to AppKit", e);
-            try {
-                setIsConnectModalOpen(false);
-                await open({ view: 'Connect' });
-            } catch (err) {
-                console.error("AppKit fallback failed:", err);
-            }
+        } catch (err) {
+            console.warn("[Web3] AppKit open failed:", err);
+            // Fallback: custom modal
+            setIsConnectModalOpen(true);
         }
     };
 
     const handleDirectConnect = async () => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-        if (isTMA) {
-            // In TMA, just keep our custom modal open (AppKit hangs)
-            return;
-        }
+        setIsConnectModalOpen(false);
         try {
-            setIsConnectModalOpen(false);
-            clearWalletConnectPairingCache();
             await open({ view: 'Connect' });
         } catch (err) {
-            console.warn("[Web3] Connect modal failed:", err);
+            console.warn("[Web3] Connect failed:", err);
         }
     };
 
