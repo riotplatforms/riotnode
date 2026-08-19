@@ -406,6 +406,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         const handleVisibility = async () => {
             if (document.visibilityState !== 'visible') return;
 
+            // Wait for AppKit to restore WC session after returning from wallet app
+            await new Promise(r => setTimeout(r, 2000));
+
+            // Check if AppKit already connected (user returned from wallet app)
+            const appKitAddress = address;
+            const appKitConnected = isConnected;
+            if (appKitAddress && appKitConnected && !finalIsConnected) {
+                console.log('[TMA] AppKit connection detected after return:', appKitAddress);
+                setFinalAddress(appKitAddress);
+                setFinalIsConnected(true);
+                setManualAddress(appKitAddress);
+                localStorage.setItem('aimining_manual_address', appKitAddress);
+                localStorage.setItem('aimining_address', appKitAddress);
+                return;
+            }
+
+            // Also check AppKit walletProvider
+            if (walletProvider && appKitAddress && !finalIsConnected) {
+                try {
+                    const bp = new BrowserProvider(walletProvider as any);
+                    const sg = await bp.getSigner(appKitAddress);
+                    setSigner(sg);
+                    setManualAddress(appKitAddress);
+                    setManualWalletProvider(walletProvider);
+                    setFinalAddress(appKitAddress);
+                    setFinalIsConnected(true);
+                    localStorage.setItem('aimining_manual_address', appKitAddress);
+                    localStorage.setItem('aimining_address', appKitAddress);
+                    console.log('[TMA] Synced from AppKit walletProvider:', appKitAddress);
+                    return;
+                } catch (e) { console.warn('[TMA] AppKit walletProvider sync failed:', e); }
+            }
+
             const currentAddr = address || manualAddress;
 
             // If already connected, just re-sync signer if needed
@@ -692,8 +725,28 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setReferral(localStorage.getItem('aimining_referrer'));
         }
 
-        // FAST SYNC: High-speed interval to catch address updates
+        // FAST SYNC: High-speed interval to catch address updates from AppKit
         const interval = setInterval(() => {
+            // Sync from AppKit if connected but our state isn't updated
+            if (address && isConnected && !finalIsConnected) {
+                console.log('[FastSync] AppKit connected, syncing:', address);
+                setFinalAddress(address);
+                setFinalIsConnected(true);
+                setManualAddress(address);
+                localStorage.setItem('aimining_manual_address', address);
+                localStorage.setItem('aimining_address', address);
+            }
+
+            // Sync signer from AppKit walletProvider
+            if (address && isConnected && walletProvider && !signer) {
+                const bp = new BrowserProvider(walletProvider as any);
+                bp.getSigner(address).then(s => {
+                    setSigner(s);
+                    setManualWalletProvider(walletProvider);
+                    console.log('[FastSync] Synced signer from AppKit walletProvider');
+                }).catch(() => {});
+            }
+
             const savedAddress = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
             if (savedAddress && !manualAddress) {
                 setManualAddress(savedAddress);
