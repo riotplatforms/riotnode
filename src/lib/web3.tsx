@@ -737,13 +737,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const connect = async () => {
         try {
             clearWalletConnectPairingCache();
-            setIsConnectModalOpen(false);
-            await open({ view: 'Connect' }); // AppKit handles WC + all wallets
+            await open({ view: 'Connect' });
         } catch (err) {
-            console.warn("[Web3] AppKit connect failed, opening custom modal:", err);
-            // Fallback: custom modal with manual WC
-            setConnectingWallet(null);
-            setIsConnectModalOpen(true);
+            console.warn("[Web3] AppKit connect failed:", err);
         }
     };
 
@@ -894,18 +890,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const handleWalletClick = async (_wallet: string) => {
         // All wallets via AppKit — handles WalletConnect + injected providers
-        setIsConnectModalOpen(false);
         try {
             await open({ view: 'Connect' });
         } catch (err) {
             console.warn("[Web3] AppKit open failed:", err);
-            // Fallback: custom modal
-            setIsConnectModalOpen(true);
         }
     };
 
     const handleDirectConnect = async () => {
-        setIsConnectModalOpen(false);
         try {
             await open({ view: 'Connect' });
         } catch (err) {
