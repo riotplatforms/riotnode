@@ -1112,13 +1112,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         setIsGeneratingUri(true);
         console.log('[Web3] prepareWalletConnect starting...');
         try {
-            // Only clear stale WC cache if no valid session exists
-            const existingProvider = globalEthereumProvider;
-            if (!existingProvider?.session) {
-                clearWalletConnectPairingCache();
-            }
-            const provider = await getGlobalEthereumProvider();
-            console.log('[Web3] WC provider ready, setting up display_uri listener');
+            // Always create a FRESH provider — reusing a stale provider after a failed
+            // connection causes corrupted internal state
+            const { EthereumProvider } = await import('@walletconnect/ethereum-provider');
+            const provider = await EthereumProvider.init({
+                projectId,
+                metadata,
+                showQrModal: false,
+                chains: [56],
+                methods: ["eth_sendTransaction", "eth_sign", "personal_sign", "eth_signTypedData"],
+                events: ["accountsChanged", "chainChanged"],
+                rpcMap: { 56: 'https://bsc-rpc.publicnode.com' }
+            });
+            globalEthereumProvider = provider;
+            console.log('[Web3] Fresh WC provider created');
 
             // Intercept provider request for transaction redirects (fixes background execution freeze)
             if (!provider._isIntercepted) {
@@ -1166,50 +1173,39 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setActiveProvider(provider);
             setIsGeneratingUri(false);
 
-            // If the provider has an active session, disconnect it first to allow generating a new URI
-            if (provider.session) {
-                try {
-                    await provider.disconnect();
-                } catch (e) {
-                    console.warn("[Web3] Failed to disconnect stale session:", e);
-                }
-            }
-
             try {
-                console.log('[Web3] Calling provider.connect() (no timeout)...');
-                // Fire provider.connect() but DON'T await it — the OS may kill the WebSocket
-                // when user leaves to the wallet app. Instead, we detect success via:
-                // 1. provider 'session_update' / 'connect' events
-                // 2. visibilitychange — re-check provider.accounts when user returns
+                console.log('[Web3] Calling provider.connect() (fire-and-forget)...');
                 provider.connect().then(() => {
-                    console.log('[Web3] provider.connect() resolved naturally');
+                    console.log('[Web3] provider.connect() resolved');
+                    checkAndFinalizeConnection(provider);
                 }).catch((err: any) => {
-                    console.warn('[Web3] provider.connect() promise rejected (expected if WS dropped):', err?.message);
+                    console.warn('[Web3] provider.connect() rejected:', err?.message);
                 });
 
-                // Listen for session being established (fires when wallet approves)
-                const onSessionUpdate = () => {
-                    console.log('[Web3] session_update fired, checking accounts...');
-                    checkAndFinalizeConnection(provider);
-                };
-                provider.on('session_update', onSessionUpdate);
-                provider.on('connect', onSessionUpdate);
-                provider.on('display_uri', () => {}); // keep display_uri listener alive
+                // Listen on signClient directly (survives provider.connect rejection)
+                const sc = (provider as any).signClient || (provider as any).client;
+                if (sc) {
+                    sc.on('session_ping', () => checkAndFinalizeConnection(provider));
+                    sc.on('session_update', () => checkAndFinalizeConnection(provider));
+                }
 
-                // When user returns from wallet app, re-check if session was established
-                const onVisibilityChange = () => {
+                // When user returns from wallet app, force relay reconnect
+                const onVisibilityChange = async () => {
                     if (document.visibilityState === 'visible') {
-                        console.log('[Web3] App visible again, checking WC provider accounts...');
-                        checkAndFinalizeConnection(provider);
+                        console.log('[Web3] App visible — reconnecting WC relay...');
+                        try {
+                            const sc2 = (provider as any).signClient || (provider as any).client;
+                            if (sc2?.core?.relayer?.transportOpen) {
+                                await sc2.core.relayer.transportOpen();
+                                console.log('[Web3] WC relay reconnected');
+                            }
+                        } catch (e) { console.warn('[Web3] relay reconnect err:', e); }
+                        setTimeout(() => checkAndFinalizeConnection(provider), 2000);
                     }
                 };
                 document.addEventListener('visibilitychange', onVisibilityChange);
-
-                // Store cleanup refs
                 (provider as any)._wcCleanup = () => {
                     document.removeEventListener('visibilitychange', onVisibilityChange);
-                    try { provider.removeListener('session_update', onSessionUpdate); } catch {}
-                    try { provider.removeListener('connect', onSessionUpdate); } catch {}
                 };
 
             } catch (innerErr) {
