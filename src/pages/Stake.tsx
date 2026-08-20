@@ -609,7 +609,7 @@ const Stake: React.FC = () => {
     };
 
     // Auto-resume pending upgrade after wallet connects (refs to avoid stale closures)
-    const handleBuyRef = React.useRef<(id: number | string, priceStr: string) => Promise<void>>();
+    const handleBuyRef = React.useRef<((id: number | string, priceStr: string) => Promise<void>) | null>(null);
     handleBuyRef.current = handleBuy;
     const loadingRef = React.useRef(loading);
     loadingRef.current = loading;

@@ -96,6 +96,7 @@ const getRedirectLinkForProvider = (provider: any): string | null => {
 };
 
 const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {
+    // encodedUri = encodeURIComponent(activeUri) — standard WC v2 deep link format
     if (!walletName || typeof walletName !== 'string') {
         return `https://metamask.app.link/wc?uri=${encodedUri}`;
     }
@@ -104,9 +105,9 @@ const getWalletConnectionLink = (walletName: string | null | undefined, encodedU
         case 'trust': return `https://link.trustwallet.com/wc?uri=${encodedUri}`;
         case 'safepal': return `https://link.safepal.io/wc?uri=${encodedUri}`;
         case 'tokenpocket': return `https://tpsa.app/wc?uri=${encodedUri}`;
-        case 'binance': return `https://app.binance.com/wc?uri=${encodedUri}`;
-        case 'okx': return `https://www.okx.com/download/wc?uri=${encodedUri}`;
-        case 'bitget': return `https://share.bwb.site/wc?uri=${encodedUri}`;
+        case 'binance': return `https://app.binance.com/cedefi/wc?uri=${encodedUri}`;
+        case 'okx': return `https://www.okx.com/ul/wc?uri=${encodedUri}`;
+        case 'bitget': return `https://bkcode.vip/wc?uri=${encodedUri}`;
         default: return `https://metamask.app.link/wc?uri=${encodedUri}`;
     }
 };
@@ -227,17 +228,11 @@ const runWithTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs 
 
 export const launchExternalLink = (url: string) => {
     const tg = (window as any).Telegram?.WebApp;
-    console.log('[Web3] launchExternalLink:', url.substring(0, 100));
+    console.log('[Web3] launchExternalLink:', url.substring(0, 120));
 
-    // In Telegram WebView — try ALL methods
+    // In Telegram WebView — prefer tg.openLink for deep links (window.open is unreliable in WebView)
     if (tg) {
-        // Method 1: window.open (best for universal links — opens in system browser)
-        try {
-            const w = window.open(url, '_blank');
-            if (w) { console.log('[Web3] Used window.open'); return; }
-        } catch (e) { console.warn('[Web3] window.open error:', e); }
-
-        // Method 2: tg.openLink (Telegram API — external browser)
+        // Method 1: tg.openLink (Telegram API — most reliable for deep links in TMA)
         if (tg.openLink) {
             try {
                 tg.openLink(url, { try_instant_view: false });
@@ -245,6 +240,12 @@ export const launchExternalLink = (url: string) => {
                 return;
             } catch (e) { console.warn('[Web3] tg.openLink error:', e); }
         }
+
+        // Method 2: window.open (fallback)
+        try {
+            const w = window.open(url, '_blank');
+            if (w) { console.log('[Web3] Used window.open'); return; }
+        } catch (e) { console.warn('[Web3] window.open error:', e); }
 
         // Method 3: location.href (OS may intercept universal link)
         try { window.location.href = url; return; } catch {}
@@ -788,26 +789,15 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
-        try {
-            // Do NOT clear WalletConnect pairing cache here — it destroys valid sessions
-            // and prevents AppKit from restoring existing connections.
-            // Session cleanup is handled properly in the disconnect() function.
-            await open({ view: 'Connect' });
-        } catch (err) {
-            console.warn("[Web3] AppKit connect failed:", err);
-        }
+        // Open our custom wallet picker modal which uses WalletConnect directly
+        // (AppKit's built-in deep link handling can produce invalid URLs in Telegram WebView)
+        setIsConnectModalOpen(true);
     };
 
     const connectInjectedWallet = async (preferredWallet?: string): Promise<'connected' | 'not_installed' | 'failed'> => {
-        // Wait for window.ethereum to be injected (wallet may inject after page load)
+        // NOTE: Only call this when window.ethereum is already available (checked by caller)
+        // The 7.5s wait loop has been removed since it blocks the UI unnecessarily
         let ethereum = (window as any).ethereum;
-        if (!ethereum && preferredWallet) {
-            for (let i = 0; i < 15; i++) {
-                await new Promise(r => setTimeout(r, 500));
-                ethereum = (window as any).ethereum;
-                if (ethereum) break;
-            }
-        }
         let injectedProvider = null;
 
         if (preferredWallet === 'tokenpocket') {
@@ -943,13 +933,24 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const handleWalletClick = async (_wallet: string) => {
-        // All wallets via AppKit — handles WalletConnect + injected providers
-        try {
-            await open({ view: 'Connect' });
-        } catch (err) {
-            console.warn("[Web3] AppKit open failed:", err);
+    const handleWalletClick = async (wallet: string) => {
+        // 1. Quick check: are we inside a wallet dApp browser? (window.ethereum is injected synchronously)
+        const ethereum = (window as any).ethereum;
+        if (ethereum) {
+            setConnectingWallet(wallet);
+            const result = await connectInjectedWallet(wallet);
+            if (result === 'connected') {
+                console.log(`[Web3] ${wallet} connected via injection`);
+                return;
+            }
         }
+
+        // 2. Not in wallet browser (Telegram WebView, normal browser, etc.)
+        //    Keep modal open, set connecting wallet — prepareWalletConnect() is already running
+        //    from the useEffect that fires when isConnectModalOpen became true.
+        //    When the WC URI is ready (activeUri), the modal will show the "Open Wallet" button.
+        console.log(`[Web3] ${wallet}: no injected provider, using WalletConnect flow`);
+        setConnectingWallet(wallet);
     };
 
     const handleDirectConnect = async () => {
@@ -1041,6 +1042,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     const resetActiveConnection = async () => {
         if (activeProvider) {
+            // Cleanup WC event listeners (visibilitychange, session_update, etc.)
+            if (activeProvider._wcCleanup) {
+                try { activeProvider._wcCleanup(); } catch {}
+            }
             try {
                 if (typeof activeProvider.disconnect === 'function') {
                     await activeProvider.disconnect();
@@ -1051,6 +1056,52 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setActiveProvider(null);
             setActiveUri(null);
         }
+    };
+
+    // Helper: check if WC provider has accounts and finalize connection
+    const checkAndFinalizeConnection = async (provider: any, retries = 3): Promise<boolean> => {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                // Check both .accounts and .session for connected state
+                const accounts = provider.accounts || (provider.session?.namespaces?.eip155?.accounts?.map((a: string) => a.split(':').pop()) ?? []);
+                console.log(`[Web3] checkAndFinalizeConnection attempt ${attempt}/${retries} — accounts:`, accounts?.length, 'connected:', provider.connected);
+
+                if (accounts && accounts.length > 0) {
+                    const connectedAddress = accounts[0];
+                    const browserProvider = new BrowserProvider(provider);
+                    const s = await browserProvider.getSigner(connectedAddress);
+                    setSigner(s);
+                    setManualAddress(connectedAddress);
+                    setManualWalletProvider(provider);
+                    setIsWalletConnect(true);
+                    localStorage.setItem('aimining_is_walletconnect', 'true');
+                    setHasSynced(true);
+                    setFinalAddress(connectedAddress);
+                    setFinalIsConnected(true);
+                    localStorage.setItem('aimining_manual_address', connectedAddress);
+                    localStorage.setItem('aimining_address', connectedAddress);
+                    walletConnectionsManager.saveConnection(connectedAddress, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
+                    setIsConnectModalOpen(false);
+                    setConnectingWallet(null);
+                    setActiveUri(null);
+
+                    // Cleanup WC event listeners
+                    if (provider._wcCleanup) provider._wcCleanup();
+                    console.log('[Web3] WalletConnect connection finalized for:', connectedAddress);
+                    return true;
+                }
+
+                // Wait before retry (give WebSocket time to reconnect)
+                if (attempt < retries) {
+                    console.log(`[Web3] No accounts yet, waiting 2s before retry...`);
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            } catch (err) {
+                console.warn(`[Web3] checkAndFinalizeConnection attempt ${attempt} error:`, err);
+                if (attempt < retries) await new Promise(r => setTimeout(r, 2000));
+            }
+        }
+        return false;
     };
 
     const prepareWalletConnect = async () => {
@@ -1125,37 +1176,44 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
 
             try {
-                console.log('[Web3] Calling provider.connect()...');
-                await runWithTimeout('WalletConnect provider.connect', provider.connect(), 20000);
-                console.log('[Web3] provider.connect() completed. Accounts:', provider.accounts?.length);
-                const accounts = provider.accounts;
-                const connectedAddress = accounts?.[0];
-                if (connectedAddress) {
-                    const browserProvider = new BrowserProvider(provider);
-                    const s = await browserProvider.getSigner(connectedAddress);
-                    setSigner(s);
-                    setManualAddress(connectedAddress);
-                    setManualWalletProvider(provider);
-                    setIsWalletConnect(true);
-                    localStorage.setItem('aimining_is_walletconnect', 'true');
-                    setHasSynced(true);
-                    setFinalAddress(connectedAddress);
-                    setFinalIsConnected(true);
-                    localStorage.setItem('aimining_manual_address', connectedAddress);
-                    localStorage.setItem('aimining_address', connectedAddress);
-                    walletConnectionsManager.saveConnection(connectedAddress, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
-                    setIsConnectModalOpen(false);
-                    setConnectingWallet(null);
-                } else {
-                    setActiveUri(null);
-                    setActiveProvider(null);
-                    setConnectingWallet(null);
-                }
-            } catch (err: any) {
-                console.warn("[Web3] Pre-connect error or closed:", err);
-                setActiveUri(null);
-                setActiveProvider(null);
-                setConnectingWallet(null);
+                console.log('[Web3] Calling provider.connect() (no timeout)...');
+                // Fire provider.connect() but DON'T await it — the OS may kill the WebSocket
+                // when user leaves to the wallet app. Instead, we detect success via:
+                // 1. provider 'session_update' / 'connect' events
+                // 2. visibilitychange — re-check provider.accounts when user returns
+                provider.connect().then(() => {
+                    console.log('[Web3] provider.connect() resolved naturally');
+                }).catch((err: any) => {
+                    console.warn('[Web3] provider.connect() promise rejected (expected if WS dropped):', err?.message);
+                });
+
+                // Listen for session being established (fires when wallet approves)
+                const onSessionUpdate = () => {
+                    console.log('[Web3] session_update fired, checking accounts...');
+                    checkAndFinalizeConnection(provider);
+                };
+                provider.on('session_update', onSessionUpdate);
+                provider.on('connect', onSessionUpdate);
+                provider.on('display_uri', () => {}); // keep display_uri listener alive
+
+                // When user returns from wallet app, re-check if session was established
+                const onVisibilityChange = () => {
+                    if (document.visibilityState === 'visible') {
+                        console.log('[Web3] App visible again, checking WC provider accounts...');
+                        checkAndFinalizeConnection(provider);
+                    }
+                };
+                document.addEventListener('visibilitychange', onVisibilityChange);
+
+                // Store cleanup refs
+                (provider as any)._wcCleanup = () => {
+                    document.removeEventListener('visibilitychange', onVisibilityChange);
+                    try { provider.removeListener('session_update', onSessionUpdate); } catch {}
+                    try { provider.removeListener('connect', onSessionUpdate); } catch {}
+                };
+
+            } catch (innerErr) {
+                console.warn("[Web3] Inner connect setup error:", innerErr);
             } finally {
                 setIsGeneratingUri(false);
             }
