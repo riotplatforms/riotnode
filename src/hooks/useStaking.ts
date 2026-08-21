@@ -15,18 +15,41 @@ const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 120000): Promise<T> => {
     // For WalletConnect: TX request goes via WC relay → wallet app shows approval notification automatically.
-    // Alert the user to check their wallet app.
+    // But in Telegram WebView, user needs to be redirected to the wallet app to approve.
     try {
         const tg = (window as any).Telegram?.WebApp;
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-        // Show Telegram popup so user knows to check wallet app
+
+        // Auto-redirect to wallet app so user can approve the transaction
+        const walletType = localStorage.getItem('aimining_wallet_type') || 'metamask';
+        const walletLinks: Record<string, string> = {
+            metamask: 'https://metamask.app.link/',
+            trust: 'https://link.trustwallet.com/',
+            safepal: 'https://link.safepal.io/',
+            tokenpocket: 'https://tpsa.app/',
+            binance: 'https://app.binance.com/',
+            okx: 'https://www.okx.com/',
+        };
+        const redirectUrl = walletLinks[walletType] || walletLinks.metamask;
+        console.log(`[useStaking] Redirecting to ${walletType} for: ${label}`);
+        // Use a small delay so the TX request is sent first, then redirect
+        setTimeout(() => {
+            try {
+                if (tg?.openLink) {
+                    tg.openLink(redirectUrl, { try_instant_view: false });
+                } else {
+                    window.open(redirectUrl, '_blank');
+                }
+            } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
+        }, 500);
+
         if (tg?.showPopup) {
-            tg.showPopup({ title: 'Transaction', message: `Please open your wallet app to approve: ${label}`, buttons: [{ type: 'default', text: 'OK' }] });
+            tg.showPopup({ title: 'Transaction', message: `Please approve: ${label} in your wallet app.`, buttons: [{ type: 'default', text: 'OK' }] });
         }
     } catch (e) { console.warn('[useStaking] Alert failed:', e); }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please open your wallet app and check for pending approvals.`)), timeoutMs); });
+    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please check your wallet app for pending approvals.`)), timeoutMs); });
     try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }
 };
 
