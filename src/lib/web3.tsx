@@ -1137,7 +1137,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             console.log('[Web3] Fresh WC provider created');
 
             // Intercept provider request for transaction redirects (fixes background execution freeze)
-            if (!provider._isIntercepted) {
+            if (!(provider as any)._isIntercepted) {
                 const originalRequest = provider.request.bind(provider);
                 (provider as any).request = async (args: any) => {
                     const method = args?.method;
@@ -1160,7 +1160,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     }
                     return originalRequest(args);
                 };
-                provider._isIntercepted = true;
+                (provider as any)._isIntercepted = true;
             }
 
             // Remove existing listener safely using stored reference
