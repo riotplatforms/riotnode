@@ -789,9 +789,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
-        // Open our custom wallet picker modal which uses WalletConnect directly
-        // (AppKit's built-in deep link handling can produce invalid URLs in Telegram WebView)
-        setIsConnectModalOpen(true);
+        try {
+            // Use AppKit — it handles WalletConnect, QR codes, deep links, relay reconnection natively
+            await open({ view: 'Connect' });
+        } catch (err) {
+            console.warn("[Web3] AppKit open failed, using custom modal:", err);
+            setIsConnectModalOpen(true);
+        }
     };
 
     const connectInjectedWallet = async (preferredWallet?: string): Promise<'connected' | 'not_installed' | 'failed'> => {
@@ -934,7 +938,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleWalletClick = async (wallet: string) => {
-        // 1. Quick check: are we inside a wallet dApp browser? (window.ethereum is injected synchronously)
+        // 1. Quick check: are we inside a wallet dApp browser?
         const ethereum = (window as any).ethereum;
         if (ethereum) {
             setConnectingWallet(wallet);
@@ -945,12 +949,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
-        // 2. Not in wallet browser (Telegram WebView, normal browser, etc.)
-        //    Keep modal open, set connecting wallet — prepareWalletConnect() is already running
-        //    from the useEffect that fires when isConnectModalOpen became true.
-        //    When the WC URI is ready (activeUri), the modal will show the "Open Wallet" button.
-        console.log(`[Web3] ${wallet}: no injected provider, using WalletConnect flow`);
-        setConnectingWallet(wallet);
+        // 2. Not in wallet browser — use AppKit which handles WalletConnect natively
+        console.log(`[Web3] ${wallet}: no injected provider, opening AppKit`);
+        try {
+            setIsConnectModalOpen(false);
+            await open({ view: 'Connect' });
+        } catch (err) {
+            console.warn("[Web3] AppKit failed:", err);
+            // Fallback: keep custom modal for manual WalletConnect
+            setIsConnectModalOpen(true);
+            setConnectingWallet(wallet);
+        }
     };
 
     const handleDirectConnect = async () => {
