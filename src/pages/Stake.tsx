@@ -433,30 +433,45 @@ const Stake: React.FC = () => {
     }, []);
 
     const handleBuy = async (id: number | string, priceStr: string) => {
+        console.log(`[Stake] handleBuy called: id=${id}, price=${priceStr}`);
         // Step 1: Ensure wallet is connected (WalletConnect in TMA)
-        const fallbackAddress = await getActiveWalletAddress();
+        let fallbackAddress: string | undefined;
+        try {
+            fallbackAddress = await Promise.race([
+                getActiveWalletAddress(),
+                new Promise<undefined>((_, reject) => setTimeout(() => reject(new Error('Wallet address lookup timed out')), 10000))
+            ]);
+        } catch (e: any) {
+            console.warn('[Stake] getActiveWalletAddress failed:', e);
+            showAlert('Could not detect wallet. Please reconnect and try again.');
+            return;
+        }
         if (!fallbackAddress) {
             // Not connected — open AppKit connect modal (WalletConnect)
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
             connect(); // Opens WalletConnect modal — user connects via wallet app
             return;
         }
+        console.log(`[Stake] Wallet address: ${fallbackAddress}`);
 
         if (loading) return;
         setLoading(id);
 
-        // Safety timeout: clear loading after 3 minutes (approve + stake can take time)
+        // Safety timeout: clear loading after 90 seconds (approve + stake shouldn't take longer)
         const safetyTimer = setTimeout(() => {
-            console.warn('[Stake] Safety timeout: clearing loading state after 180s');
+            console.warn('[Stake] Safety timeout: clearing loading state after 90s');
             setLoading(null);
-            showAlert('Transaction is taking too long. Please check your wallet app for pending approvals, then try again.');
-        }, 180000);
+            showAlert('Transaction is taking too long. Please check your wallet app for any pending approvals, then try again. If the issue persists, reconnect your wallet.');
+        }, 90000);
 
         try {
             const cleanedPriceStr = (typeof priceStr === 'string') ? priceStr.replace(/[^0-9.]/g, '') : String(priceStr || '0').replace(/[^0-9.]/g, '');
             localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr: cleanedPriceStr }));
 
+            // Step 2: Check balance
+            console.log('[Stake] Step 2: Checking balance...');
             const balanceStr = await getWalletBalance(fallbackAddress);
+            console.log(`[Stake] Balance: ${balanceStr}`);
             if (balanceStr === null) {
                 throw new Error("Could not check wallet balance due to network issues. Try again.");
             }
@@ -512,9 +527,12 @@ const Stake: React.FC = () => {
 
             const finalAmount = formatUnits(priceBigInt, 18);
 
+            // Step 3: Check allowance and approve if needed
+            console.log('[Stake] Step 3: Checking allowance...');
             const currentAllowanceStr = await getAllowance(fallbackAddress);
             const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
             const isTMA = !!(window as any).Telegram?.WebApp;
+            console.log(`[Stake] Current allowance: ${currentAllowanceStr}, Threshold needed: unlimited`);
 
             // Contract requires Unlimited/Max approval (MaxUint256)
             const APPROVAL_THRESHOLD = MaxUint256 / 2n;
@@ -565,8 +583,11 @@ const Stake: React.FC = () => {
                 }
             }
 
+            // Step 4: Call stake function
+            console.log('[Stake] Step 4: Calling stake function...');
             // skipApproval=true because handleBuy already handled approval above
             const tx = await stake(finalAmount, refAddress, true);
+            console.log('[Stake] Stake TX sent:', tx?.hash);
 
             // In TMA: tx is already sent to blockchain via wallet.
             // Don't block on tx.wait() which hangs after wallet redirect.
@@ -590,6 +611,7 @@ const Stake: React.FC = () => {
             showAlert(`Success: Staked ${formatUnits(priceBigInt, 18)} USDT and upgraded mining node!`);
             await updateStakes();
         } catch (err: any) {
+            console.error('[Stake] handleBuy error:', err?.message || err);
             const msg = parseEthersError(err);
             const needsRetry = msg && (
                 msg.includes('wallet') || msg.includes('connection') ||

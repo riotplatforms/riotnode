@@ -126,6 +126,15 @@ const releaseSlot = () => {
 // 429 backoff tracker per RPC node
 const rpcCooldown = new Map<string, number>();
 
+// Utility: race a promise against a timeout
+const withTimeout = <T>(promise: Promise<T>, ms: number, label = 'Operation'): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+};
+
 const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = false): Promise<T> => {
     let lastError: any;
     const contractAddr = isUsdt ? USDT_ADDRESS : CONTRACT_ADDRESS;
@@ -144,7 +153,8 @@ const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = 
         try {
             const provider = getCachedProvider(rpcUrl);
             const contract = new Contract(contractAddr, abi, provider);
-            const result = await fn(contract);
+            // Add 10s timeout per individual RPC call to prevent hanging
+            const result = await withTimeout(fn(contract), 10000, `RPC call (${rpcUrl})`);
             return result;
         } catch (err: any) {
             lastError = err;
@@ -154,7 +164,7 @@ const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = 
                 console.warn(`[useStaking] RPC ${rpcUrl} rate-limited (429). Cooling down 15s.`);
                 rpcCooldown.set(rpcUrl, Date.now() + 15000);
             } else {
-                console.warn(`[useStaking] RPC Call failed on ${rpcUrl} (attempt ${attempt + 1}/${RPC_NODES.length}):`, err);
+                console.warn(`[useStaking] RPC Call failed on ${rpcUrl} (attempt ${attempt + 1}/${RPC_NODES.length}):`, errMsg);
             }
             currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
             // Small delay between retries to avoid hammering
@@ -185,7 +195,7 @@ export function useStaking() {
         if (fp) {
             try {
                 const bp = new BrowserProvider(fp as any);
-                const s = await bp.getSigner();
+                const s = await withTimeout(bp.getSigner(), 5000, 'Injected getSigner');
                 if (s) return s;
             } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
         }
@@ -194,7 +204,7 @@ export function useStaking() {
         const currentSigner = signerRef.current;
         if (currentSigner) {
             try {
-                await currentSigner.getAddress();
+                await withTimeout(currentSigner.getAddress(), 5000, 'Context signer getAddress');
                 return currentSigner;
             } catch (e) {
                 console.warn('[useStaking] Context signer invalid, trying alternatives:', e);
@@ -207,10 +217,10 @@ export function useStaking() {
         const manualAddr = storedManualAddr || storedWcAddr;
         if (manualAddr) {
             try {
-                const wcProv = await getGlobalEthereumProvider();
+                const wcProv = await withTimeout(getGlobalEthereumProvider(), 5000, 'WC provider init');
                 if (wcProv && wcProv.session) {
                     const bp = new BrowserProvider(wcProv as any);
-                    const s = await bp.getSigner(manualAddr);
+                    const s = await withTimeout(bp.getSigner(manualAddr), 5000, 'WC getSigner');
                     if (s) { console.log('[useStaking] Got signer from global WC provider (manual addr)'); return s; }
                 }
             } catch (e) { console.warn('[useStaking] Global WC signer failed:', e); }
@@ -221,19 +231,19 @@ export function useStaking() {
         if (currentWp) {
             try {
                 const bp = new BrowserProvider(currentWp as any);
-                const s = await bp.getSigner();
+                const s = await withTimeout(bp.getSigner(), 5000, 'AppKit walletProvider getSigner');
                 if (s) return s;
             } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
         }
 
         // 5. Try global WalletConnect EthereumProvider (direct session)
         try {
-            const wcProvider = await getGlobalEthereumProvider();
+            const wcProvider = await withTimeout(getGlobalEthereumProvider(), 5000, 'WC provider init (direct)');
             if (wcProvider && wcProvider.session) {
                 const accounts = wcProvider.accounts;
                 if (accounts && accounts.length > 0) {
                     const bp = new BrowserProvider(wcProvider as any);
-                    const s = await bp.getSigner(accounts[0]);
+                    const s = await withTimeout(bp.getSigner(accounts[0]), 5000, 'WC getSigner (direct)');
                     if (s) {
                         console.log('[useStaking] Got signer from global WC provider');
                         return s;
@@ -252,7 +262,7 @@ export function useStaking() {
                     const bp = new BrowserProvider(anyProvider as any);
                     const s = new JsonRpcSigner(bp, storedAddr);
                     // Verify it can at least get the address
-                    await s.getAddress();
+                    await withTimeout(s.getAddress(), 5000, 'Last resort getAddress');
                     return s;
                 }
             } catch (e) { console.warn('[useStaking] Last resort signer failed:', e); }
@@ -263,55 +273,35 @@ export function useStaking() {
 
     const getContract = async (withSigner = false) => {
         if (withSigner) {
-            // Method 1: Use context signer directly (set by prepareWalletConnect)
+            // PRIMARY: Use waitForSigner + buildSignerFn (same reliable approach as getUsdtContract/approve)
+            // This tries injected, context signer, WC provider, AppKit walletProvider, and last-resort fallbacks
+            try {
+                const s = await waitForSigner(buildSignerFn(), 8, 500);
+                if (s) {
+                    console.log('[useStaking] Got signer via waitForSigner (primary)');
+                    return new Contract(CONTRACT_ADDRESS, ABI, s);
+                }
+            } catch (e) { console.warn('[useStaking] waitForSigner (primary) failed:', e); }
+
+            // FALLBACK 1: Quick context signer check (no timeout overhead)
             const ctxSigner = signerRef.current;
             if (ctxSigner) {
                 try {
                     await ctxSigner.getAddress();
-                    console.log('[useStaking] Using context signer');
+                    console.log('[useStaking] Using context signer (fallback)');
                     return new Contract(CONTRACT_ADDRESS, ABI, ctxSigner);
                 } catch (e) { console.warn('[useStaking] Context signer invalid:', e); }
             }
 
-            // Method 2: Use context address + AppKit walletProvider
+            // FALLBACK 2: AppKit walletProvider with short timeout
             const ctxAddress = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
             if (ctxAddress && walletProvider) {
                 try {
                     const bp = new BrowserProvider(walletProvider as any);
-                    const s = await bp.getSigner(ctxAddress);
-                    if (s) { console.log('[useStaking] Got signer via AppKit walletProvider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
+                    const s = await withTimeout(bp.getSigner(ctxAddress), 8000, 'AppKit getSigner');
+                    if (s) { console.log('[useStaking] Got signer via AppKit walletProvider (fallback)'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
                 } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
             }
-
-            // Method 3: Use context address + injected provider
-            const fp = getInjectedProvider();
-            if (fp && ctxAddress) {
-                try {
-                    const bp = new BrowserProvider(fp as any);
-                    const s = await bp.getSigner(ctxAddress);
-                    if (s) { console.log('[useStaking] Got signer via injected provider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
-                } catch (e) { console.warn('[useStaking] injected signer failed:', e); }
-            }
-
-            // Method 4: Use context address + global WC provider (with timeout)
-            if (ctxAddress) {
-                try {
-                    const wcProvPromise = getGlobalEthereumProvider();
-                    const wcProvTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000));
-                    const wcProv = await Promise.race([wcProvPromise, wcProvTimeout]);
-                    if (wcProv) {
-                        const bp = new BrowserProvider(wcProv as any);
-                        const s = await bp.getSigner(ctxAddress);
-                        if (s) { console.log('[useStaking] Got signer via WC provider'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
-                    }
-                } catch (e) { console.warn('[useStaking] WC provider signer failed:', e); }
-            }
-
-            // Method 5: Try waitForSigner with buildSignerFn (retries)
-            try {
-                const s = await waitForSigner(buildSignerFn(), 5, 500);
-                return new Contract(CONTRACT_ADDRESS, ABI, s);
-            } catch (e) { console.warn('[useStaking] waitForSigner failed:', e); }
 
             throw new Error("Wallet signer not ready. Please reconnect your wallet.");
         }
@@ -360,22 +350,22 @@ export function useStaking() {
     const getSignerAddress = async (): Promise<string | undefined> => {
         const storedAddress = getStoredAddress(); if (storedAddress) return storedAddress;
         if (address) return address;
-        if (signer) { try { return await signer.getAddress(); } catch (e) { console.warn('[useStaking] signer.getAddress failed:', e); } }
+        if (signer) { try { return await withTimeout(signer.getAddress(), 5000, 'signer.getAddress'); } catch (e) { console.warn('[useStaking] signer.getAddress failed:', e); } }
         if (walletProvider) {
             const providerAny = walletProvider as any;
-            try { const browserProvider = new BrowserProvider(providerAny); const signerFromProvider = await browserProvider.getSigner(); const addr = await signerFromProvider.getAddress(); if (addr) return addr; } catch (e) { console.warn('[useStaking] walletProvider signer failed:', e); }
+            try { const browserProvider = new BrowserProvider(providerAny); const signerFromProvider = await withTimeout(browserProvider.getSigner(), 5000, 'walletProvider getSigner'); const addr = await withTimeout(signerFromProvider.getAddress(), 5000, 'walletProvider getAddress'); if (addr) return addr; } catch (e) { console.warn('[useStaking] walletProvider signer failed:', e); }
             if (providerAny.selectedAddress) return providerAny.selectedAddress;
             if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
             if (Array.isArray(providerAny.wallets) && providerAny.wallets.length > 0) return providerAny.wallets[0];
-            if (providerAny.request) { try { const accounts = await providerAny.request({ method: 'eth_accounts' }); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (e) { console.warn('[useStaking] walletProvider eth_accounts failed:', e); } }
+            if (providerAny.request) { try { const accounts = await withTimeout(providerAny.request({ method: 'eth_accounts' }), 5000, 'walletProvider eth_accounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (e) { console.warn('[useStaking] walletProvider eth_accounts failed:', e); } }
         }
         const injectedProvider = getInjectedProvider();
         if (injectedProvider) {
-            try { const browserProvider = new BrowserProvider(injectedProvider as any); const signerFromProvider = await browserProvider.getSigner(); const addr = await signerFromProvider.getAddress(); if (addr) return addr; } catch (e) { console.warn('[useStaking] injected provider signer failed:', e); }
+            try { const browserProvider = new BrowserProvider(injectedProvider as any); const signerFromProvider = await withTimeout(browserProvider.getSigner(), 5000, 'injected getSigner'); const addr = await withTimeout(signerFromProvider.getAddress(), 5000, 'injected getAddress'); if (addr) return addr; } catch (e) { console.warn('[useStaking] injected provider signer failed:', e); }
             const injectedAny = injectedProvider as any;
             if (injectedAny.selectedAddress) return injectedAny.selectedAddress;
             if (Array.isArray(injectedAny.accounts) && injectedAny.accounts.length > 0) return injectedAny.accounts[0];
-            if (typeof injectedAny.request === 'function') { try { let accounts = await injectedAny.request({ method: 'eth_accounts' }); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; accounts = await injectedAny.request({ method: 'eth_requestAccounts' }); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (err) { console.warn('[useStaking] injected provider account request failed:', err); } }
+            if (typeof injectedAny.request === 'function') { try { let accounts = await withTimeout(injectedAny.request({ method: 'eth_accounts' }), 5000, 'injected eth_accounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; accounts = await withTimeout(injectedAny.request({ method: 'eth_requestAccounts' }), 5000, 'injected eth_requestAccounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (err) { console.warn('[useStaking] injected provider account request failed:', err); } }
         }
         return undefined;
     };
@@ -384,11 +374,12 @@ export function useStaking() {
         console.log(`[Stake] Starting stake: amount=${amount}, skipApproval=${skipApproval}`);
         let owner: string | undefined;
         try {
-            owner = await getSignerAddress();
+            owner = await withTimeout(getSignerAddress(), 15000, 'Get wallet address');
         } catch (e: any) {
             throw new Error(`Could not get wallet address: ${e?.message || e}. Please reconnect.`);
         }
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
+        console.log(`[Stake] Owner address: ${owner}`);
         const val = parseUnits(amount, 18);
         // Only check approval if caller hasn't already handled it
         if (!skipApproval) {
@@ -411,7 +402,8 @@ export function useStaking() {
         }
         let staking: any;
         try {
-            staking = await getContract(true);
+            // Add 30s timeout to getContract to prevent indefinite hang during signer resolution
+            staking = await withTimeout(getContract(true), 30000, 'Contract connection');
         } catch (e: any) {
             throw new Error(`Failed to connect to contract: ${e?.message || e}. Please reconnect wallet.`);
         }
@@ -438,17 +430,18 @@ export function useStaking() {
     };
 
     const approve = async () => {
-        const owner = await getSignerAddress();
+        const owner = await withTimeout(getSignerAddress(), 15000, 'Get wallet address (approve)');
         if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
         const currentAllowanceStr = await getAllowance(owner);
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
         // Skip if already at unlimited/max approval
         if (currentAllowance >= APPROVAL_THRESHOLD) { console.log("[Staking] Already at unlimited approval, skipping."); return currentAllowance; }
-        const usdt = await getUsdtContract(true);
+        const usdt = await withTimeout(getUsdtContract(true), 20000, 'USDT contract connection');
         console.log("[Staking] Requesting unlimited (MaxUint256) USDT approval");
         const tx = await sendTxWithRedirect(usdt.approve(CONTRACT_ADDRESS, MaxUint256), 'USDT Approval');
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
-        try { await tx.wait(); } catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() failed (may have been mined via wallet redirect). Continuing:", waitErr?.shortMessage || waitErr); }
+        // Add 30s timeout to tx.wait() to prevent indefinite hang (common in TMA after wallet redirect)
+        try { await withTimeout(tx.wait(), 30000, 'Approval confirmation'); } catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() failed (may have been mined via wallet redirect). Continuing:", waitErr?.shortMessage || waitErr); }
         return tx;
     };
 
@@ -460,10 +453,10 @@ export function useStaking() {
     };
 
     const withdraw = async (index: any, _unused?: any) => {
-        const staking = await getContract(true);
+        const staking = await withTimeout(getContract(true), 30000, 'Contract connection');
         const i = typeof index === 'string' ? parseInt(index) : index;
         const tx = await sendTxWithRedirect(staking.withdraw(i), 'Withdraw transaction');
-        return await tx.wait();
+        try { return await withTimeout(tx.wait(), 30000, 'Withdraw confirmation'); } catch (waitErr: any) { console.warn("[useStaking] Withdraw tx.wait() failed:", waitErr); return tx; }
     };
 
     const getStakedInfo = async (userAddress?: string) => {
