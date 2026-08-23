@@ -190,17 +190,10 @@ export function useStaking() {
     useEffect(() => { walletProviderRef.current = walletProvider; }, [walletProvider]);
 
     const buildSignerFn = () => async () => {
-        // 1. Try injected provider FIRST (window.ethereum — works in dapp browser)
-        const fp = getInjectedProvider();
-        if (fp) {
-            try {
-                const bp = new BrowserProvider(fp as any);
-                const s = await withTimeout(bp.getSigner(), 5000, 'Injected getSigner');
-                if (s) return s;
-            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
-        }
+        // Helper: get any stored address (context address or localStorage)
+        const getAnyAddress = () => address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
 
-        // 2. Try context signer via ref (always latest value, avoids stale closure)
+        // 1. Try context signer via ref (always latest value, avoids stale closure)
         const currentSigner = signerRef.current;
         if (currentSigner) {
             try {
@@ -211,57 +204,74 @@ export function useStaking() {
             }
         }
 
-        // 3. Try global WC provider with stored address
-        const storedManualAddr = localStorage.getItem('aimining_manual_address');
-        const storedWcAddr = localStorage.getItem('aimining_address');
-        const manualAddr = storedManualAddr || storedWcAddr;
+        // 2. Try AppKit walletProvider FIRST (most reliable in TMA — uses WalletConnect session)
+        //    Use JsonRpcSigner constructor with address to AVOID eth_requestAccounts call
+        //    (which hangs in TMA because wallet app isn't open)
+        const anyAddr = getAnyAddress();
+        const currentWp = walletProviderRef.current;
+        if (anyAddr && currentWp) {
+            try {
+                const bp = new BrowserProvider(currentWp as any);
+                // KEY FIX: Use JsonRpcSigner constructor instead of bp.getSigner()
+                // bp.getSigner() calls eth_requestAccounts which hangs in TMA
+                // JsonRpcSigner(bp, address) creates a signer WITHOUT calling the wallet
+                const s = new JsonRpcSigner(bp, anyAddr);
+                // Verify by getting the address (does NOT call wallet — uses cached provider info)
+                await withTimeout(s.getAddress(), 3000, 'JsonRpcSigner verify address');
+                console.log('[useStaking] Got signer from AppKit walletProvider');
+                return s;
+            } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
+        }
+
+        // 3. Try injected provider (window.ethereum — works in dapp browser)
+        const fp = getInjectedProvider();
+        if (fp) {
+            try {
+                const bp = new BrowserProvider(fp as any);
+                const s = anyAddr ? new JsonRpcSigner(bp, anyAddr) : await withTimeout(bp.getSigner(), 5000, 'Injected getSigner');
+                if (s) return s;
+            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
+        }
+
+        // 4. Try global WC provider with stored address
+        const manualAddr = localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
         if (manualAddr) {
             try {
                 const wcProv = await withTimeout(getGlobalEthereumProvider(), 5000, 'WC provider init');
                 if (wcProv && wcProv.session) {
                     const bp = new BrowserProvider(wcProv as any);
-                    const s = await withTimeout(bp.getSigner(manualAddr), 5000, 'WC getSigner');
-                    if (s) { console.log('[useStaking] Got signer from global WC provider (manual addr)'); return s; }
+                    // Use JsonRpcSigner constructor to avoid eth_requestAccounts
+                    const s = new JsonRpcSigner(bp, manualAddr);
+                    await withTimeout(s.getAddress(), 3000, 'WC JsonRpcSigner verify');
+                    console.log('[useStaking] Got signer from global WC provider');
+                    return s;
                 }
             } catch (e) { console.warn('[useStaking] Global WC signer failed:', e); }
         }
 
-        // 4. Try walletProvider from AppKit (WalletConnect / Reown)
-        const currentWp = walletProviderRef.current;
-        if (currentWp) {
-            try {
-                const bp = new BrowserProvider(currentWp as any);
-                const s = await withTimeout(bp.getSigner(), 5000, 'AppKit walletProvider getSigner');
-                if (s) return s;
-            } catch (e) { console.warn('[useStaking] walletProvider getSigner failed:', e); }
-        }
-
-        // 5. Try global WalletConnect EthereumProvider (direct session)
+        // 5. Try global WalletConnect EthereumProvider (direct session — accounts array)
         try {
             const wcProvider = await withTimeout(getGlobalEthereumProvider(), 5000, 'WC provider init (direct)');
             if (wcProvider && wcProvider.session) {
                 const accounts = wcProvider.accounts;
                 if (accounts && accounts.length > 0) {
                     const bp = new BrowserProvider(wcProvider as any);
-                    const s = await withTimeout(bp.getSigner(accounts[0]), 5000, 'WC getSigner (direct)');
-                    if (s) {
-                        console.log('[useStaking] Got signer from global WC provider');
-                        return s;
-                    }
+                    const s = new JsonRpcSigner(bp, accounts[0]);
+                    await withTimeout(s.getAddress(), 3000, 'WC direct JsonRpcSigner verify');
+                    console.log('[useStaking] Got signer from global WC provider (direct)');
+                    return s;
                 }
             }
         } catch (e) { console.warn('[useStaking] global WC provider getSigner failed:', e); }
 
-        // 5. Last resort: create signer from stored address + any available provider
+        // 6. Last resort: create signer from stored address + any available provider
         const storedAddr = getStoredAddress();
         if (storedAddr) {
             try {
-                // Try with injected provider first
                 const anyProvider = fp || (window as any).ethereum;
                 if (anyProvider) {
                     const bp = new BrowserProvider(anyProvider as any);
                     const s = new JsonRpcSigner(bp, storedAddr);
-                    // Verify it can at least get the address
                     await withTimeout(s.getAddress(), 5000, 'Last resort getAddress');
                     return s;
                 }
@@ -293,12 +303,14 @@ export function useStaking() {
                 } catch (e) { console.warn('[useStaking] Context signer invalid:', e); }
             }
 
-            // FALLBACK 2: AppKit walletProvider with short timeout
+            // FALLBACK 2: AppKit walletProvider with short timeout — use JsonRpcSigner to avoid eth_requestAccounts
             const ctxAddress = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
             if (ctxAddress && walletProvider) {
                 try {
                     const bp = new BrowserProvider(walletProvider as any);
-                    const s = await withTimeout(bp.getSigner(ctxAddress), 8000, 'AppKit getSigner');
+                    // KEY: JsonRpcSigner constructor bypasses eth_requestAccounts (which hangs in TMA)
+                    const s = new JsonRpcSigner(bp, ctxAddress);
+                    await withTimeout(s.getAddress(), 3000, 'JsonRpcSigner verify (fallback)');
                     if (s) { console.log('[useStaking] Got signer via AppKit walletProvider (fallback)'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
                 } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
             }
