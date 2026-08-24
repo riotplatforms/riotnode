@@ -20,19 +20,20 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
         const tg = (window as any).Telegram?.WebApp;
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
-        // Auto-redirect to wallet app so user can approve the transaction
+// Auto-redirect to wallet app so user can approve the transaction
         const redirectUrl = getWalletRedirectUrl();
-        console.log(`[useStaking] Redirecting for: ${label}`);
-        // Use a small delay so the TX request is sent first, then redirect
-        setTimeout(() => {
-            try {
-                if (tg?.openLink) {
-                    tg.openLink(redirectUrl, { try_instant_view: false });
-                } else {
-                    window.open(redirectUrl, '_blank');
-                }
-            } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
-        }, 500);
+        console.log(`[useStaking] Redirecting to wallet for: ${label}`);
+
+        // Redirect FIRST (0ms) â€” wallet opens, connects to WC relay,
+        // Redirect FIRST (0ms) — wallet opens, connects to WC relay,
+        // then the pending transaction request via WC relay arrives and wallet shows approval
+        if (tg?.openLink) {
+            tg.openLink(redirectUrl, { try_instant_view: false });
+        } else {
+            setTimeout(() => {
+                window.open(redirectUrl, '_blank');
+            }, 100);
+        }
 
         if (tg?.showPopup) {
             tg.showPopup({ title: 'Transaction', message: `Please approve: ${label} in your wallet app.`, buttons: [{ type: 'default', text: 'OK' }] });
