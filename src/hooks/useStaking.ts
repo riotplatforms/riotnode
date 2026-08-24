@@ -1,9 +1,9 @@
-import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
+import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString, Interface } from 'ethers';
 import { useRef, useEffect } from 'react';
 import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
-
+// Create Interface instances for encoding function data
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
     "function allowance(address owner, address spender) external view returns (uint256)",
@@ -11,6 +11,10 @@ const ERC20_ABI = [
 ];
 
 // Contract requires Unlimited/Max approval � use MaxUint256
+// Create Interface instances for encoding function data
+const CONTRACT_IFACE = new Interface(ABI);
+const ERC20_IFACE = new Interface(ERC20_ABI);
+
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 120000): Promise<T> => {
@@ -25,7 +29,7 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
         console.log(`[useStaking] Redirecting to wallet for: ${label}`);
 
         // Redirect FIRST (0ms) — wallet opens, connects to WC relay,
-        // Redirect FIRST (0ms) � wallet opens, connects to WC relay,
+        // Redirect FIRST (0ms) � wallet opens, connects to WC relay,
         // then the pending transaction request via WC relay arrives and wallet shows approval
         if (tg?.openLink) {
             tg.openLink(redirectUrl, { try_instant_view: false });
@@ -301,6 +305,64 @@ const buildSignerFn = () => {
         try { if (bn == null) return '0x0'; if (isHexString(String(bn))) return String(bn).toLowerCase(); const big = typeof bn === 'bigint' ? bn : BigInt(String(bn)); return toQuantity(big); }
         catch (e) { console.warn("[useStaking] toSafeHexValue fallback:", e); return '0x' + (BigInt(String(bn || 0))).toString(16); }
     };
+// ── Raw EIP-1193 provider for write transactions ──
+    // Bypasses all JsonRpcSigner/BrowserProvider complexity.
+    // Uses the AppKit walletProvider directly (EIP-1193 standard).
+    const getRawProvider = (): any => {
+        const globalWp = getGlobalAppKitProvider();
+        if (globalWp) return globalWp;
+        const ctxWp = (window as any).__globalAppKitProvider || walletProvider || walletProviderRef.current;
+        if (ctxWp) return ctxWp;
+        return null;
+    };
+
+    // Send a raw transaction via the EIP-1193 provider's request method.
+    // This is the MOST RELIABLE way to send transactions through WalletConnect in TMA.
+    const sendRawTx = async (txParams: any, label: string): Promise<any> => {
+        const provider = getRawProvider();
+        if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
+
+        const result = await sendTxWithRedirect(
+            provider.request({ method: 'eth_sendTransaction', params: [txParams] }),
+            label
+        );
+        return result;
+    };
+
+    // Encode a contract function call and send as raw transaction
+    const rawStakingTx = async (amount: bigint, referrer: string, feeHex: string): Promise<any> => {
+        const data = CONTRACT_IFACE.encodeFunctionData('stake', [amount, referrer]);
+        const anyAddr = getStoredAddress() || address;
+        if (!anyAddr) throw new Error("Wallet address not available");
+        return await sendRawTx({
+            from: anyAddr,
+            to: CONTRACT_ADDRESS,
+            data,
+            value: feeHex,
+        }, 'Stake transaction');
+    };
+
+    const rawApproveTx = async (): Promise<any> => {
+        const data = ERC20_IFACE.encodeFunctionData('approve', [CONTRACT_ADDRESS, MaxUint256]);
+        const anyAddr = getStoredAddress() || address;
+        if (!anyAddr) throw new Error("Wallet address not available");
+        return await sendRawTx({
+            from: anyAddr,
+            to: USDT_ADDRESS,
+            data,
+        }, 'USDT Approval');
+    };
+
+    const rawWithdrawTx = async (stakeIndex: number): Promise<any> => {
+        const data = CONTRACT_IFACE.encodeFunctionData('withdraw', [stakeIndex]);
+        const anyAddr = getStoredAddress() || address;
+        if (!anyAddr) throw new Error("Wallet address not available");
+        return await sendRawTx({
+            from: anyAddr,
+            to: CONTRACT_ADDRESS,
+            data,
+        }, 'Withdraw transaction');
+    };
 
     const getStoredAddress = (): string | undefined => {
         const storedAddress = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
@@ -389,7 +451,7 @@ const buildSignerFn = () => {
         console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
         let tx: any;
         try {
-            tx = await sendTxWithRedirect(staking.stake(val, refAddress, { value: feeHex }), 'Stake transaction');
+            tx = await sendTxWithRedirect(rawStakingTx(val, refAddress, feeHex), 'Stake transaction');
         } catch (e: any) {
             throw new Error(`Transaction failed: ${e?.message || e}`);
         }
@@ -423,7 +485,7 @@ const buildSignerFn = () => {
     const withdraw = async (index: any, _unused?: any) => {
         const staking = await withTimeout(getContract(true), 30000, 'Contract connection');
         const i = typeof index === 'string' ? parseInt(index) : index;
-        const tx = await sendTxWithRedirect(staking.withdraw(i), 'Withdraw transaction');
+        const tx = await sendTxWithRedirect(rawWithdrawTx(i), 'Withdraw transaction');
         try { return await withTimeout(tx.wait(), 30000, 'Withdraw confirmation'); } catch (waitErr: any) { console.warn("[useStaking] Withdraw tx.wait() failed:", waitErr); return tx; }
     };
 
@@ -569,5 +631,6 @@ const buildSignerFn = () => {
     };
 }
 // redeploy 07-08-2026 20:19:04.05  
+
 
 
