@@ -189,73 +189,61 @@ export function useStaking() {
     useEffect(() => { signerRef.current = signer; }, [signer]);
     useEffect(() => { walletProviderRef.current = walletProvider; }, [walletProvider]);
 
-    const buildSignerFn = () => async () => {
-        // Helper: get any stored address (context address or localStorage)
-        const getAnyAddress = () => address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
-        const anyAddr = getAnyAddress();
-        if (!anyAddr) return null;
+const buildSignerFn = () => {
+        // Track whether we've attempted WC session activation via eth_requestAccounts
+        let sessionPinged = false;
 
-        // ★ STEP 1: Try GLOBAL AppKit walletProvider (set globally via useEffect in WalletProvider)
-        //   This persists ACROSS page navigations unlike React context which can briefly null out
-        const globalWp = getGlobalAppKitProvider();
-        if (globalWp) {
-            try {
-                const bp = new BrowserProvider(globalWp);
-                const s = new JsonRpcSigner(bp, anyAddr);
-                await withTimeout(s.getAddress(), 3000, 'Global AppKit verify');
-                console.log('[useStaking] Got signer from GLOBAL AppKit walletProvider');
-                return s;
-            } catch (e) { console.warn('[useStaking] Global AppKit walletProvider signer failed:', e); }
-        }
+        return async () => {
+            const getAnyAddress = () => address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+            const anyAddr = getAnyAddress();
+            if (!anyAddr) return null;
 
-        // 2. Try context signer via ref
-        const currentSigner = signerRef.current;
-        if (currentSigner) {
-            try {
-                await withTimeout(currentSigner.getAddress(), 5000, 'Context signer getAddress');
-                return currentSigner;
-            } catch (e) {
-                console.warn('[useStaking] Context signer invalid, trying alternatives:', e);
+            // ★ STEP 1: Try GLOBAL AppKit walletProvider (persists across page navigations)
+            const globalWp = getGlobalAppKitProvider();
+            if (!globalWp) return null;
+
+            const bp = new BrowserProvider(globalWp);
+
+            // ★ First attempt: getSigner() WITHOUT address → sends eth_requestAccounts to WC relay
+            //   This activates/pings the WC session so subsequent eth_sendTransaction requests reach the wallet.
+            if (!sessionPinged) {
+                sessionPinged = true;
+                try {
+                    console.log('[useStaking] Pinging WC session via getSigner()...');
+                    const signer = await withTimeout(bp.getSigner(), 5000, 'WC session ping');
+                    const addr = await signer.getAddress();
+                    if (addr) { console.log('[useStaking] WC session alive, got signer from getSigner()'); return signer; }
+                } catch (e) {
+                    console.log('[useStaking] getSigner() timed out (expected in TMA). eth_requestAccounts sent to WC relay.');
+                }
             }
-        }
 
-        // 3. Try local walletProvider ref (AppKit React context — may be null on page transitions)
-        const currentWp = walletProviderRef.current;
-        if (currentWp) {
+            // ★ Create signer directly via JsonRpcSigner constructor
             try {
-                const bp = new BrowserProvider(currentWp);
                 const s = new JsonRpcSigner(bp, anyAddr);
-                await withTimeout(s.getAddress(), 3000, 'AppKit ref verify');
-                console.log('[useStaking] Got signer from AppKit walletProvider ref');
+                await withTimeout(s.getAddress(), 2000, 'JsonRpcSigner verify');
+                console.log('[useStaking] Got signer via JsonRpcSigner constructor');
                 return s;
-            } catch (e) { console.warn('[useStaking] AppKit walletProvider ref signer failed:', e); }
-        }
+            } catch (e) { console.warn('[useStaking] JsonRpcSigner creation failed:', e); }
 
-        // 4. Try global WC EthereumProvider (singleton — maintains independent session)
-        try {
-            const wcProv = await withTimeout(getGlobalEthereumProvider(), 5000, 'WC provider init');
-            if (wcProv) {
-                const bp = new BrowserProvider(wcProv);
-                const s = new JsonRpcSigner(bp, anyAddr);
-                await withTimeout(s.getAddress(), 3000, 'WC verify');
-                console.log('[useStaking] Got signer from global WC provider');
-                return s;
+            const currentSigner = signerRef.current;
+            if (currentSigner) {
+                try { await withTimeout(currentSigner.getAddress(), 5000, 'Context signer getAddress'); return currentSigner; }
+                catch (e) { console.warn('[useStaking] Context signer invalid:', e); }
             }
-        } catch (e) { console.warn('[useStaking] Global WC provider signer failed:', e); }
 
-        // 5. Try injected provider (window.ethereum — works in dapp browser)
-        const fp = getInjectedProvider();
-        if (fp) {
-            try {
-                const bp = new BrowserProvider(fp);
-                const s = new JsonRpcSigner(bp, anyAddr);
-                await withTimeout(s.getAddress(), 3000, 'Injected verify');
-                console.log('[useStaking] Got signer from injected provider');
-                return s;
-            } catch (e) { console.warn('[useStaking] injected getSigner failed:', e); }
-        }
+            const fp = getInjectedProvider();
+            if (fp) {
+                try {
+                    const bp2 = new BrowserProvider(fp);
+                    const s = new JsonRpcSigner(bp2, anyAddr);
+                    await withTimeout(s.getAddress(), 2000, 'injected verify');
+                    return s;
+                } catch (e) { console.warn('[useStaking] injected signer failed:', e); }
+            }
 
-        return null;
+            return null;
+        };
     };
     const getContract = async (withSigner = false) => {
         if (withSigner) {
@@ -589,4 +577,5 @@ export function useStaking() {
     };
 }
 // redeploy 07-08-2026 20:19:04.05  
+
 
