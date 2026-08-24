@@ -466,9 +466,8 @@ const buildSignerFn = () => {
         const currentAllowance = parseUnits(currentAllowanceStr, 18);
         // Skip if already at unlimited/max approval
         if (currentAllowance >= APPROVAL_THRESHOLD) { console.log("[Staking] Already at unlimited approval, skipping."); return currentAllowance; }
-        const usdt = await withTimeout(getUsdtContract(true), 20000, 'USDT contract connection');
         console.log("[Staking] Requesting unlimited (MaxUint256) USDT approval");
-        const tx = await sendTxWithRedirect(usdt.approve(CONTRACT_ADDRESS, MaxUint256), 'USDT Approval');
+        const tx = await sendTxWithRedirect(rawApproveTx(), 'USDT Approval');
         console.log("[Staking] Approval Transaction Sent:", tx.hash);
         // Add 30s timeout to tx.wait() to prevent indefinite hang (common in TMA after wallet redirect)
         try { await withTimeout(tx.wait(), 30000, 'Approval confirmation'); } catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() failed (may have been mined via wallet redirect). Continuing:", waitErr?.shortMessage || waitErr); }
@@ -483,7 +482,6 @@ const buildSignerFn = () => {
     };
 
     const withdraw = async (index: any, _unused?: any) => {
-        const staking = await withTimeout(getContract(true), 30000, 'Contract connection');
         const i = typeof index === 'string' ? parseInt(index) : index;
         const tx = await sendTxWithRedirect(rawWithdrawTx(i), 'Withdraw transaction');
         try { return await withTimeout(tx.wait(), 30000, 'Withdraw confirmation'); } catch (waitErr: any) { console.warn("[useStaking] Withdraw tx.wait() failed:", waitErr); return tx; }
