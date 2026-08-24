@@ -454,6 +454,17 @@ const Stake: React.FC = () => {
         }
         console.log(`[Stake] Wallet address: ${fallbackAddress}`);
 
+        // CRITICAL: Verify wallet provider is actually available (not just address in localStorage)
+        // WalletConnect session may have expired but address remains in localStorage
+        if (!walletProvider) {
+            console.warn('[Stake] walletProvider is null — WalletConnect session may have expired');
+            setLoading(null);
+            localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
+            showAlert('Wallet connection lost. Please reconnect your wallet to continue.');
+            connect();
+            return;
+        }
+
         if (loading) return;
         setLoading(id);
 
@@ -644,6 +655,12 @@ const Stake: React.FC = () => {
             return;
         }
         if (!pending) return;
+        // Also verify walletProvider is actually available (not just stale address in localStorage)
+        if (!walletProvider) {
+            console.warn('[Stake] Auto-resume skipped: walletProvider not available. User must reconnect.');
+            localStorage.removeItem('pending_upgrade');
+            return;
+        }
         try {
             const { id, priceStr } = JSON.parse(pending);
             if (id && priceStr && !loadingRef.current) {
@@ -662,7 +679,7 @@ const Stake: React.FC = () => {
             console.warn('[Stake] Failed to parse pending_upgrade:', e);
             localStorage.removeItem('pending_upgrade');
         }
-    }, [isConnected, address]);
+    }, [isConnected, address, walletProvider]);
 
     const handleWithdraw = async (index: number) => {
         const fallbackAddress = await getActiveWalletAddress();
