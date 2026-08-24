@@ -19,6 +19,9 @@ const projectId = 'ec457184730a7f1e24bbe58a393f442b';
 let globalEthereumProvider: any = null;
 let globalEthereumProviderPromise: Promise<any> | null = null;
 let activeDisplayUriCallback: ((uri: string) => void) | null = null;
+let globalAppKitProvider: any = null;
+export const setGlobalAppKitProvider = (p: any) => { globalAppKitProvider = p; };
+export const getGlobalAppKitProvider = () => globalAppKitProvider;
 
 export const getGlobalEthereumProvider = async () => {
     if (globalEthereumProvider) return globalEthereumProvider;
@@ -369,6 +372,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     }, [walletInfo]);
 
+// ✅ Sync walletProvider to global variable for cross-page access
+    useEffect(() => {
+        if (walletProvider) {
+            setGlobalAppKitProvider(walletProvider);
+            console.log('[Web3] Global AppKit provider updated');
+        }
+    }, [walletProvider]);
     // Background WalletConnect states
     const [activeUri, setActiveUri] = useState<string | null>(null);
     const [activeProvider, setActiveProvider] = useState<any>(null);
