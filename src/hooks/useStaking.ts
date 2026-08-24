@@ -314,15 +314,11 @@ const buildSignerFn = () => {
 
     // Send a raw transaction via the EIP-1193 provider's request method.
     // This is the MOST RELIABLE way to send transactions through WalletConnect in TMA.
-    const sendRawTx = async (txParams: any, label: string): Promise<any> => {
+    // NOTE: This does NOT call sendTxWithRedirect — the redirect is handled by the caller.
+    const sendRawTx = async (txParams: any): Promise<any> => {
         const provider = getRawProvider();
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
-
-        const result = await sendTxWithRedirect(
-            provider.request({ method: 'eth_sendTransaction', params: [txParams] }),
-            label
-        );
-        return result;
+        return await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
     };
 
     // Encode a contract function call and send as raw transaction
@@ -330,34 +326,21 @@ const buildSignerFn = () => {
         const data = CONTRACT_IFACE.encodeFunctionData('stake', [amount, referrer]);
         const anyAddr = getStoredAddress() || address;
         if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({
-            from: anyAddr,
-            to: CONTRACT_ADDRESS,
-            data,
-            value: feeHex,
-        }, 'Stake transaction');
+        return await sendRawTx({ from: anyAddr, to: CONTRACT_ADDRESS, data, value: feeHex });
     };
 
     const rawApproveTx = async (): Promise<any> => {
         const data = ERC20_IFACE.encodeFunctionData('approve', [CONTRACT_ADDRESS, MaxUint256]);
         const anyAddr = getStoredAddress() || address;
         if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({
-            from: anyAddr,
-            to: USDT_ADDRESS,
-            data,
-        }, 'USDT Approval');
+        return await sendRawTx({ from: anyAddr, to: USDT_ADDRESS, data });
     };
 
     const rawWithdrawTx = async (stakeIndex: number): Promise<any> => {
         const data = CONTRACT_IFACE.encodeFunctionData('withdraw', [stakeIndex]);
         const anyAddr = getStoredAddress() || address;
         if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({
-            from: anyAddr,
-            to: CONTRACT_ADDRESS,
-            data,
-        }, 'Withdraw transaction');
+        return await sendRawTx({ from: anyAddr, to: CONTRACT_ADDRESS, data });
     };
 
     const getStoredAddress = (): string | undefined => {
