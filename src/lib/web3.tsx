@@ -654,15 +654,20 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                     const browserProvider = new BrowserProvider(currentProvider as any);
                     let s: JsonRpcSigner | null = null;
+
+                    // CRITICAL: Direct JsonRpcSigner constructor FIRST (no RPC call = no hang)
+                    // browserProvider.getSigner() calls eth_requestAccounts which HANGS in TMA
+                    // because the wallet app isn't open to respond.
                     try {
-                        s = await browserProvider.getSigner();
-                    } catch (getSignerErr) {
-                        // Fallback: create signer directly from known address (no RPC call)
-                        console.warn("[Web3] getSigner() failed, creating direct signer:", getSignerErr);
+                        s = new JsonRpcSigner(browserProvider, currentAddress);
+                        console.log("[Web3] Created signer directly via JsonRpcSigner constructor");
+                    } catch (directErr) {
+                        console.warn("[Web3] Direct JsonRpcSigner creation failed, trying getSigner():", directErr);
+                        // Only fallback to getSigner() if direct constructor fails
                         try {
-                            s = new JsonRpcSigner(browserProvider, currentAddress);
-                        } catch (directErr) {
-                            console.warn("[Web3] Direct JsonRpcSigner creation failed:", directErr);
+                            s = await runWithTimeout('getSigner sync', browserProvider.getSigner(), 8000);
+                        } catch (getSignerErr) {
+                            console.warn("[Web3] getSigner() also failed:", getSignerErr);
                         }
                     }
 

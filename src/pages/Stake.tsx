@@ -613,16 +613,12 @@ const Stake: React.FC = () => {
         } catch (err: any) {
             console.error('[Stake] handleBuy error:', err?.message || err);
             const msg = parseEthersError(err);
-            const needsRetry = msg && (
-                msg.includes('wallet') || msg.includes('connection') ||
-                msg.includes('user rejected') || msg.includes('cancelled') ||
-                msg.includes('reconnect') || msg.includes('signer')
-            );
-            if (needsRetry) {
-                localStorage.setItem('pending_upgrade_fail_msg', msg);
-            } else {
-                localStorage.removeItem('pending_upgrade');
-            }
+
+            // ALWAYS clear pending_upgrade on error to prevent infinite auto-resume loop
+            localStorage.removeItem('pending_upgrade');
+            // Store fail msg so auto-resume useEffect knows last attempt failed
+            localStorage.setItem('pending_upgrade_fail_msg', msg || 'Unknown');
+
             showAlert(msg);
         } finally {
             clearTimeout(safetyTimer);
@@ -639,11 +635,21 @@ const Stake: React.FC = () => {
     useEffect(() => {
         if (!isConnected || !address) return;
         const pending = localStorage.getItem('pending_upgrade');
+        const prevFailed = localStorage.getItem('pending_upgrade_fail_msg');
+        // If previous attempt failed with error, don't auto-retry — user needs to manually click
+        if (prevFailed) {
+            console.log('[Stake] Previous upgrade failed, clearing fail msg. User must click manually.');
+            localStorage.removeItem('pending_upgrade_fail_msg');
+            localStorage.removeItem('pending_upgrade');
+            return;
+        }
         if (!pending) return;
         try {
             const { id, priceStr } = JSON.parse(pending);
             if (id && priceStr && !loadingRef.current) {
                 console.log('[Stake] Auto-resuming pending upgrade after wallet connect:', id);
+                // Clear the pending item BEFORE attempting, so if it fails again it won't loop
+                localStorage.removeItem('pending_upgrade');
                 // Small delay to ensure signer is synced
                 const timer = setTimeout(() => {
                     if (!loadingRef.current && handleBuyRef.current) {
