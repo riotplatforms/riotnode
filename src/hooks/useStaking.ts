@@ -1,6 +1,6 @@
 import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
 import { useRef, useEffect } from 'react';
-import { useWallet, getGlobalEthereumProvider, getGlobalAppKitProvider } from '../lib/web3';
+import { useWallet, getGlobalAppKitProvider } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 
