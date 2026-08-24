@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
-import { BrowserProvider, formatUnits, parseUnits, MaxUint256 } from 'ethers';
+import { BrowserProvider, JsonRpcSigner, formatUnits, parseUnits, MaxUint256 } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
@@ -367,7 +367,14 @@ const Stake: React.FC = () => {
         if (walletProvider) {
             try {
                 const browserProvider = new BrowserProvider(walletProvider as any);
-                const signerFromProvider = await browserProvider.getSigner();
+                // Use JsonRpcSigner constructor to avoid eth_requestAccounts hang
+                const storedAddr = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
+                if (storedAddr) {
+                    const s = new JsonRpcSigner(browserProvider, storedAddr);
+                    const addr = await s.getAddress();
+                    if (addr) return addr;
+                }
+                const signerFromProvider = await runWithTimeout('walletProvider getSigner', browserProvider.getSigner(), 5000);
                 const addressFromSigner = await signerFromProvider.getAddress();
                 if (addressFromSigner) return addressFromSigner;
             } catch (err) {
@@ -454,15 +461,10 @@ const Stake: React.FC = () => {
         }
         console.log(`[Stake] Wallet address: ${fallbackAddress}`);
 
-        // CRITICAL: Verify wallet provider is actually available (not just address in localStorage)
-        // WalletConnect session may have expired but address remains in localStorage
+        // walletProvider may be null here even when address is valid (AppKit render timing).
+        // Don't block — let getContract() fallback mechanisms handle it.
         if (!walletProvider) {
-            console.warn('[Stake] walletProvider is null — WalletConnect session may have expired');
-            setLoading(null);
-            localStorage.setItem('pending_upgrade', JSON.stringify({ id, priceStr }));
-            showAlert('Wallet connection lost. Please reconnect your wallet to continue.');
-            connect();
-            return;
+            console.log('[Stake] walletProvider is null but address exists — will use fallbacks in getContract()');
         }
 
         if (loading) return;
@@ -655,11 +657,10 @@ const Stake: React.FC = () => {
             return;
         }
         if (!pending) return;
-        // Also verify walletProvider is actually available (not just stale address in localStorage)
+        // walletProvider may be null temporarily during page transitions even when
+        // the WC session is valid. Don't block — getContract() will use fallbacks.
         if (!walletProvider) {
-            console.warn('[Stake] Auto-resume skipped: walletProvider not available. User must reconnect.');
-            localStorage.removeItem('pending_upgrade');
-            return;
+            console.log('[Stake] Auto-resume: walletProvider null but will try anyway (fallbacks in getContract)');
         }
         try {
             const { id, priceStr } = JSON.parse(pending);
