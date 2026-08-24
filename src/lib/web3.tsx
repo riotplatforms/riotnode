@@ -213,7 +213,7 @@ const clearWalletConnectPairingCache = () => {
     });
 };
 
-const runWithTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
+export const runWithTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs = 20000): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
         timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
