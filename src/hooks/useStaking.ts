@@ -296,10 +296,6 @@ const buildSignerFn = () => {
         return undefined;
     };
 
-    const getUsdtContract = async (withSigner = false) => {
-        if (withSigner) { const s = await waitForSigner(buildSignerFn()); return new Contract(USDT_ADDRESS, ERC20_ABI, s); }
-        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
-    };
 
     const toSafeHexValue = (bn: any): string => {
         try { if (bn == null) return '0x0'; if (isHexString(String(bn))) return String(bn).toLowerCase(); const big = typeof bn === 'bigint' ? bn : BigInt(String(bn)); return toQuantity(big); }
