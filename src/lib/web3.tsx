@@ -97,6 +97,34 @@ const getRedirectLinkForProvider = (provider: any): string | null => {
     }
     return null;
 };
+export const getWalletRedirectUrl = (): string => {
+    // Try to detect wallet type from WC session peer metadata first
+    let walletType = localStorage.getItem('aimining_wallet_type');
+    
+    // Try global AppKit provider to get session peer metadata
+    const globalWp = getGlobalAppKitProvider();
+    if (globalWp) {
+        const session = globalWp.session || globalWp.provider?.session;
+        if ((!walletType || walletType === 'walletconnect') && session?.peer?.metadata?.name) {
+            const peerName = session.peer.metadata.name.toLowerCase();
+            if (peerName.includes('metamask')) walletType = 'metamask';
+            else if (peerName.includes('trust')) walletType = 'trust';
+            else if (peerName.includes('safepal')) walletType = 'safepal';
+            else if (peerName.includes('tokenpocket')) walletType = 'tokenpocket';
+            else if (peerName.includes('binance')) walletType = 'binance';
+            else if (peerName.includes('okx')) walletType = 'okx';
+            else if (peerName.includes('bitget')) walletType = 'bitget';
+        }
+    }
+
+    if (walletType) {
+        const url = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
+        if (url) return url;
+    }
+
+    // Fallback to MetaMask
+    return WALLET_REDIRECT_LINKS.metamask;
+};
 
 const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {
     // encodedUri = encodeURIComponent(activeUri) — standard WC v2 deep link format
@@ -1662,3 +1690,4 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 export function Web3Provider({ children }: { children: React.ReactNode }) {
     return <WalletProvider>{children}</WalletProvider>;
 }
+

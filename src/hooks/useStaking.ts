@@ -1,6 +1,6 @@
 import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString } from 'ethers';
 import { useRef, useEffect } from 'react';
-import { useWallet, getGlobalAppKitProvider } from '../lib/web3';
+import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 
@@ -21,17 +21,8 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
         // Auto-redirect to wallet app so user can approve the transaction
-        const walletType = localStorage.getItem('aimining_wallet_type') || 'metamask';
-        const walletLinks: Record<string, string> = {
-            metamask: 'https://metamask.app.link/',
-            trust: 'https://link.trustwallet.com/',
-            safepal: 'https://link.safepal.io/',
-            tokenpocket: 'https://tpsa.app/',
-            binance: 'https://app.binance.com/',
-            okx: 'https://www.okx.com/',
-        };
-        const redirectUrl = walletLinks[walletType] || walletLinks.metamask;
-        console.log(`[useStaking] Redirecting to ${walletType} for: ${label}`);
+        const redirectUrl = getWalletRedirectUrl();
+        console.log(`[useStaking] Redirecting for: ${label}`);
         // Use a small delay so the TX request is sent first, then redirect
         setTimeout(() => {
             try {
