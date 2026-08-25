@@ -295,8 +295,6 @@ const Stake: React.FC = () => {
     // Effect 2: Global Ticker Sync
     useEffect(() => {
         if (miningStats.isLoaded) {
-            const walletBalance = parseFloat(miningStats.walletBalance || '0');
-            const totalStakedVal = parseFloat(miningStats.totalStaked || '0');
             setStats(prev => ({
                 ...prev,
                 totalStaked: miningStats.totalStaked,
