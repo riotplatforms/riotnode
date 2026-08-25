@@ -93,6 +93,7 @@ const Dashboard: React.FC = () => {
     }, [isConnected, address, signer]);
 
     const APPROVAL_THRESHOLD = MaxUint256 / 2n;
+    const hasEnoughAllowance = parseUnits(extraFundAllowance || '0', 18) >= APPROVAL_THRESHOLD;
 
     const handleExtraStake = async () => {
         const userAddress = address || (signer ? await signer.getAddress() : undefined);
@@ -540,7 +541,7 @@ const Dashboard: React.FC = () => {
                                 ? 'Processing...'
                                 : (parseFloat(extraFund) < 50
                                     ? 'Minimum 50 USDT Required'
-                                    : (parseFloat(extraFundAllowance) < APPROVAL_THRESHOLD
+                                    : (!hasEnoughAllowance
                                         ? 'Approve USDT'
                                         : 'Stake Extra Fund'))}
                         </button>
