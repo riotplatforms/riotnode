@@ -1121,36 +1121,6 @@ const Stake: React.FC = () => {
                     </section>
                 ) : (
                     <section className="grid grid-cols-1 gap-5">
-                        <div className="bg-[#111] rounded-[32px] p-5 border border-primary/20 flex flex-col gap-4 relative overflow-hidden shadow-glow">
-                            <div className="absolute top-0 right-0 p-5 opacity-10">
-                                <span className="material-icons-round text-7xl text-primary font-black">add_card</span>
-                            </div>
-                            <div className="relative z-10 flex items-start gap-4">
-                                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                                    <span className="material-icons-round text-primary text-3xl font-black">savings</span>
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Available Extra Fund</p>
-                                    <h3 className="text-2xl font-black text-white italic mt-1">{funds.extraFund} <span className="text-primary text-sm uppercase">USDT</span></h3>
-                                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-tight mt-1">Wallet: {funds.walletBalance} USDT | Active Stake: {stats.totalStaked} USDT</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => handleBuy('extra-fund', funds.extraFund)}
-                                disabled={loading === 'extra-fund'}
-                                className={`relative z-10 w-full py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-none ${parseFloat(funds.extraFund) >= 50
-                                    ? 'bg-primary text-black shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
-                                    : 'bg-white/5 text-gray-300 border border-white/5 cursor-pointer'
-                                    }`}
-                            >
-                                {loading === 'extra-fund' 
-                                    ? 'Processing...' 
-                                    : (parseFloat(funds.extraFund) >= 50 && parseFloat(allowance) < parseFloat(funds.extraFund)
-                                        ? 'Approve USDT' 
-                                        : 'Stake Extra Fund')}
-                            </button>
-                        </div>
-
                         {upgrades.map((item) => {
                             const colors = getColorClasses(item.color);
                             return (

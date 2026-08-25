@@ -4,7 +4,7 @@ import { useWallet } from '../lib/web3';
 import { useStaking } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { telegramConnectionsManager } from '../lib/telegramConnections';
-import { formatUnits, parseUnits } from 'ethers';
+import { formatUnits, parseUnits, MaxUint256 } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
@@ -22,7 +22,7 @@ const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed, approve, getAllowance } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -47,6 +47,99 @@ const Dashboard: React.FC = () => {
         networkStatus: 'Stable'
     });
     const isMiningActive = parseFloat(stats.miningPower) > 0;
+
+    const [extraFund, setExtraFund] = useState('0.00');
+    const [extraFundLoading, setExtraFundLoading] = useState(false);
+    const [extraFundAllowance, setExtraFundAllowance] = useState('0');
+
+    // Fetch extra fund data (wallet balance - active stakes)
+    const fetchExtraFundData = useCallback(async () => {
+        const userAddress = address || (signer ? await signer.getAddress() : undefined);
+        if (!userAddress) return;
+        try {
+            const balanceStr = await getWalletBalance(userAddress);
+            if (!balanceStr) return;
+            const balanceBigInt = parseUnits(balanceStr, 18);
+            const info = await getStakedInfo(userAddress);
+            let activeStakedBigInt = 0n;
+            if (info) {
+                for (let i = 0; i < info.stakeCount; i++) {
+                    const detail = await getStakeDetails(userAddress, i);
+                    if (detail && !detail.withdrawn) {
+                        const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
+                        const wasFlushed = isStakePermanentlyFlushed(userAddress, i);
+                        const isBalanceSufficient = finished || balanceBigInt >= activeStakedBigInt + detail.amount;
+                        if (isBalanceSufficient && wasFlushed) {
+                            clearPermanentStakeFlush(userAddress, i);
+                        }
+                        const isViolated = isStakePermanentlyFlushed(userAddress, i) || (!finished && balanceBigInt < activeStakedBigInt + detail.amount);
+                        if (!isViolated && !finished) {
+                            activeStakedBigInt += detail.amount;
+                        }
+                    }
+                }
+            }
+            const extra = balanceBigInt > activeStakedBigInt ? balanceBigInt - activeStakedBigInt : 0n;
+            setExtraFund(formatUnits(extra, 18));
+            const allowanceStr = await getAllowance(userAddress);
+            setExtraFundAllowance(allowanceStr || '0');
+        } catch (err) {
+            console.warn('[Dashboard] fetchExtraFundData error:', err);
+        }
+    }, [address, signer]);
+
+    useEffect(() => {
+        if (isConnected && address) fetchExtraFundData();
+    }, [isConnected, address, signer]);
+
+    const APPROVAL_THRESHOLD = MaxUint256 / 2n;
+
+    const handleExtraStake = async () => {
+        const userAddress = address || (signer ? await signer.getAddress() : undefined);
+        if (!userAddress || !isConnected) {
+            showAlert("Please connect your wallet first.");
+            await connect();
+            return;
+        }
+        const amount = parseFloat(extraFund);
+        if (amount < 50) {
+            showAlert("Minimum 50 USDT required to stake.");
+            return;
+        }
+        setExtraFundLoading(true);
+        try {
+            // Step 1: Approve if needed
+            const currentAllowance = parseUnits(extraFundAllowance || '0', 18);
+            if (currentAllowance < APPROVAL_THRESHOLD) {
+                showAlert("Please approve USDT spending in your wallet app.");
+                await approve();
+                // Poll for allowance confirmation
+                for (let p = 0; p < 15; p++) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    const polled = await getAllowance(userAddress);
+                    if (parseUnits(polled || '0', 18) >= APPROVAL_THRESHOLD) break;
+                }
+                const finalAllowance = await getAllowance(userAddress);
+                if (parseUnits(finalAllowance || '0', 18) < APPROVAL_THRESHOLD) {
+                    throw new Error("USDT approval not confirmed. Please try again.");
+                }
+            }
+            // Step 2: Stake
+            showAlert("Please approve the stake transaction in your wallet app.");
+            const tx = await stake(extraFund, undefined, true);
+            if (tx && typeof tx.wait === 'function') {
+                try { await tx.wait(); } catch (e) { console.warn('[Dashboard] tx.wait failed:', e); }
+            }
+            showAlert(`Success: Staked ${extraFund} USDT!`);
+            setExtraFund('0.00');
+            fetchExtraFundData();
+        } catch (err: any) {
+            console.error('[Dashboard] handleExtraStake error:', err);
+            showAlert(parseEthersError(err));
+        } finally {
+            setExtraFundLoading(false);
+        }
+    };
 
     // Auto-resume mining after connection
     useEffect(() => {
@@ -423,6 +516,36 @@ const Dashboard: React.FC = () => {
                     </div>
                 </div>
             </section>
+            {/* Extra Fund Stake Card */}
+            {isConnected && parseFloat(extraFund) > 0 && (
+                <section className="px-6 pb-2 w-full">
+                    <div className="bg-[#111] rounded-[28px] p-5 border border-primary/20 flex flex-col gap-3 relative overflow-hidden shadow-glow">
+                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                            <span className="material-icons-round text-6xl text-primary font-black">savings</span>
+                        </div>
+                        <div className="relative z-10">
+                            <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Available Extra Fund</p>
+                            <h3 className="text-xl font-black text-white italic mt-1">{parseFloat(extraFund).toFixed(2)} <span className="text-primary text-sm uppercase">USDT</span></h3>
+                        </div>
+                        <button
+                            onClick={handleExtraStake}
+                            disabled={extraFundLoading || parseFloat(extraFund) < 50}
+                            className={`relative z-10 w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-none ${
+                                parseFloat(extraFund) >= 50 && !extraFundLoading
+                                    ? 'bg-primary text-black shadow-glow hover:scale-[1.02] active:scale-[0.98] cursor-pointer'
+                                    : 'bg-white/5 text-gray-300 border border-white/5 cursor-pointer'
+                            }`}
+                        >
+                            {extraFundLoading
+                                ? 'Processing...'
+                                : (parseFloat(extraFundAllowance) < APPROVAL_THRESHOLD
+                                    ? 'Approve USDT'
+                                    : 'Stake Extra Fund')}
+                        </button>
+                    </div>
+                </section>
+            )}
+
             {/* Action Buttons & Bottom Stats */}
             <section className="px-6 pb-4 w-full flex flex-col gap-4">
                 {stats.miningPower === '0.0' ? (
