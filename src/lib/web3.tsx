@@ -346,6 +346,7 @@ interface WalletContextType {
     setIsConnectModalOpen: (open: boolean) => void;
     stakeNow: (amount: string) => Promise<void>;
     openInWalletBrowser: (type: 'safepal' | 'tokenpocket') => void;
+    manualWalletProvider: any;
     miningStats: any;
     setMiningStats: (stats: any) => void;
 }
@@ -1459,6 +1460,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             },
             stakeNow,
             openInWalletBrowser: openInWalletBrowser as any,
+            manualWalletProvider,
             miningStats,
             setMiningStats
         }}>
