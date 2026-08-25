@@ -18,31 +18,41 @@ const ERC20_IFACE = new Interface(ERC20_ABI);
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 120000): Promise<T> => {
-    // For WalletConnect: TX request goes via WC relay ? wallet app shows approval notification automatically.
-    // But in Telegram WebView, user needs to be redirected to the wallet app to approve.
+    const tg = (window as any).Telegram?.WebApp;
+    const isTMA = !!tg;
+
     try {
-        const tg = (window as any).Telegram?.WebApp;
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+    } catch (e) { /* ignore */ }
 
-// Auto-redirect to wallet app so user can approve the transaction
-        const redirectUrl = getWalletRedirectUrl();
-        console.log(`[useStaking] Redirecting to wallet for: ${label}`);
-
-        // Redirect FIRST (0ms) — wallet opens, connects to WC relay,
-        // Redirect FIRST (0ms) � wallet opens, connects to WC relay,
-        // then the pending transaction request via WC relay arrives and wallet shows approval
-        if (tg?.openLink) {
-            tg.openLink(redirectUrl, { try_instant_view: false });
-        } else {
+    if (isTMA) {
+        // ─── TMA (Telegram Mini App) mode ───
+        // DO NOT redirect to wallet app! Opening an external link suspends the TMA
+        // WebSocket and the WC relay connection drops. The tx request is already
+        // in-flight via WC relay — the wallet app will receive it as a push
+        // notification or when the user opens it. Keeping TMA active means the
+        // WebSocket stays connected so the wallet's approval response can reach us.
+        console.log(`[useStaking] TMA: tx sent via WC relay — waiting for wallet approval: ${label}`);
+        try {
+            if (tg?.showPopup) {
+                tg.showPopup({
+                    title: 'Approve Transaction',
+                    message: `A ${label} request has been sent to your wallet. Open your wallet app to approve it.`,
+                    buttons: [{ type: 'default', text: 'OK' }]
+                });
+            }
+        } catch (e) { /* ignore */ }
+    } else {
+        // ─── Non-TMA mode ───
+        // Redirect to wallet app so user can approve the transaction
+        try {
+            const redirectUrl = getWalletRedirectUrl();
+            console.log(`[useStaking] Redirecting to wallet for: ${label}`);
             setTimeout(() => {
                 window.open(redirectUrl, '_blank');
             }, 100);
-        }
-
-        if (tg?.showPopup) {
-            tg.showPopup({ title: 'Transaction', message: `Please approve: ${label} in your wallet app.`, buttons: [{ type: 'default', text: 'OK' }] });
-        }
-    } catch (e) { console.warn('[useStaking] Alert failed:', e); }
+        } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
+    }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please check your wallet app for pending approvals.`)), timeoutMs); });
