@@ -96,10 +96,12 @@ const Dashboard: React.FC = () => {
     const hasEnoughAllowance = parseUnits(extraFundAllowance || '0', 18) >= APPROVAL_THRESHOLD;
 
     const handleExtraStake = async () => {
-        const userAddress = address || (signer ? await signer.getAddress() : undefined);
-        if (!userAddress || !isConnected) {
+        // Get address from localStorage fallbacks (same as useStaking.getStoredAddress)
+        const storedAddr = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
+        const userAddress = address || storedAddr || (signer ? await signer.getAddress() : undefined);
+        if (!userAddress) {
             showAlert("Please connect your wallet first.");
-            await connect();
+            connect(); // fire-and-forget, don't await
             return;
         }
         const amount = parseFloat(extraFund);
@@ -107,6 +109,7 @@ const Dashboard: React.FC = () => {
             showAlert("Minimum 50 USDT required to stake.");
             return;
         }
+        console.log('[Dashboard] handleExtraStake: starting, address:', userAddress);
         setExtraFundLoading(true);
         try {
             // Step 1: Approve if needed
