@@ -25,34 +25,33 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
         if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
     } catch (e) { /* ignore */ }
 
-    if (isTMA) {
-        // ─── TMA (Telegram Mini App) mode ───
-        // DO NOT redirect to wallet app! Opening an external link suspends the TMA
-        // WebSocket and the WC relay connection drops. The tx request is already
-        // in-flight via WC relay — the wallet app will receive it as a push
-        // notification or when the user opens it. Keeping TMA active means the
-        // WebSocket stays connected so the wallet's approval response can reach us.
-        console.log(`[useStaking] TMA: tx sent via WC relay — waiting for wallet approval: ${label}`);
-        try {
+    // Redirect to wallet app so user can approve the transaction.
+    // The tx request is already in-flight via WC relay (txPromise was started
+    // before this function was called). Opening the wallet lets the user see
+    // and approve the pending request.
+    try {
+        if (isTMA) {
+            const redirectUrl = getWalletRedirectUrl();
+            console.log(`[useStaking] TMA: opening wallet for: ${label}`);
+            // Small delay to ensure tx request reaches WC relay before TMA WebView suspends
+            setTimeout(() => {
+                tg.openLink(redirectUrl, { try_instant_view: false });
+            }, 500);
             if (tg?.showPopup) {
                 tg.showPopup({
                     title: 'Approve Transaction',
-                    message: `A ${label} request has been sent to your wallet. Open your wallet app to approve it.`,
+                    message: `Opening your wallet to approve: ${label}`,
                     buttons: [{ type: 'default', text: 'OK' }]
                 });
             }
-        } catch (e) { /* ignore */ }
-    } else {
-        // ─── Non-TMA mode ───
-        // Redirect to wallet app so user can approve the transaction
-        try {
+        } else {
             const redirectUrl = getWalletRedirectUrl();
             console.log(`[useStaking] Redirecting to wallet for: ${label}`);
             setTimeout(() => {
                 window.open(redirectUrl, '_blank');
             }, 100);
-        } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
-    }
+        }
+    } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please check your wallet app for pending approvals.`)), timeoutMs); });
