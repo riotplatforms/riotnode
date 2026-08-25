@@ -96,12 +96,11 @@ const Dashboard: React.FC = () => {
     const hasEnoughAllowance = parseUnits(extraFundAllowance || '0', 18) >= APPROVAL_THRESHOLD;
 
     const handleExtraStake = async () => {
-        // Get address from localStorage fallbacks (same as useStaking.getStoredAddress)
         const storedAddr = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
         const userAddress = address || storedAddr || (signer ? await signer.getAddress() : undefined);
         if (!userAddress) {
             showAlert("Please connect your wallet first.");
-            connect(); // fire-and-forget, don't await
+            connect();
             return;
         }
         const amount = parseFloat(extraFund);
@@ -109,32 +108,50 @@ const Dashboard: React.FC = () => {
             showAlert("Minimum 50 USDT required to stake.");
             return;
         }
-        console.log('[Dashboard] handleExtraStake: starting, address:', userAddress);
+
         setExtraFundLoading(true);
         try {
-            // Step 1: Approve if needed
-            const currentAllowance = parseUnits(extraFundAllowance || '0', 18);
-            if (currentAllowance < APPROVAL_THRESHOLD) {
-                showAlert("Please approve USDT spending in your wallet app.");
+            // Step 1: Fresh allowance check from chain (not stale state)
+            console.log('[Dashboard] Checking fresh allowance from chain...');
+            const freshAllowanceStr = await getAllowance(userAddress);
+            const freshAllowance = parseUnits(freshAllowanceStr || '0', 18);
+            console.log('[Dashboard] Fresh allowance:', freshAllowanceStr);
+
+            if (freshAllowance < APPROVAL_THRESHOLD) {
+                // Need approval — call approve() which opens wallet
+                showAlert("Opening wallet for USDT approval...");
                 await approve();
-                // Poll for allowance confirmation
+                // Poll until confirmed (max 30s)
                 for (let p = 0; p < 15; p++) {
                     await new Promise(r => setTimeout(r, 2000));
                     const polled = await getAllowance(userAddress);
-                    if (parseUnits(polled || '0', 18) >= APPROVAL_THRESHOLD) break;
+                    console.log(`[Dashboard] Poll allowance attempt ${p + 1}:`, polled);
+                    if (parseUnits(polled || '0', 18) >= APPROVAL_THRESHOLD) {
+                        console.log('[Dashboard] Approval confirmed!');
+                        break;
+                    }
                 }
+                // Final check
                 const finalAllowance = await getAllowance(userAddress);
                 if (parseUnits(finalAllowance || '0', 18) < APPROVAL_THRESHOLD) {
                     throw new Error("USDT approval not confirmed. Please try again.");
                 }
+                setExtraFundAllowance(finalAllowance);
             }
-            // Step 2: Stake
-            showAlert("Please approve the stake transaction in your wallet app.");
+
+            // Step 2: Stake — this calls the smart contract, wallet must sign
+            console.log('[Dashboard] Starting stake transaction...');
+            showAlert("Opening wallet to confirm stake...");
             const tx = await stake(extraFund, undefined, true);
-            if (tx && typeof tx.wait === 'function') {
+            console.log('[Dashboard] Stake tx sent:', tx?.hash);
+
+            // Don't block on tx.wait() in TMA — it hangs after wallet redirect
+            const isTMA = !!(window as any).Telegram?.WebApp;
+            if (!isTMA && tx && typeof tx.wait === 'function') {
                 try { await tx.wait(); } catch (e) { console.warn('[Dashboard] tx.wait failed:', e); }
             }
-            showAlert(`Success: Staked ${extraFund} USDT!`);
+
+            showAlert(`Staked ${extraFund} USDT successfully!`);
             setExtraFund('0.00');
             fetchExtraFundData();
         } catch (err: any) {
