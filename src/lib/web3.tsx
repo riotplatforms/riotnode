@@ -832,6 +832,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+
+        if (isTMA) {
+            // In TMA — AppKit modal is unreliable in Telegram WebView (WebSocket relay issues).
+            // Go straight to the custom WalletConnect modal which generates a WC URI
+            // and shows an "Open Wallet" deep-link button.
+            console.log("[Web3] TMA detected — opening custom WalletConnect modal");
+            setIsConnectModalOpen(true);
+            return;
+        }
+
         try {
             // Use AppKit — it handles WalletConnect, QR codes, deep links, relay reconnection natively
             await open({ view: 'Connect' });
@@ -981,6 +992,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleWalletClick = async (wallet: string) => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+
         // 1. Quick check: are we inside a wallet dApp browser?
         const ethereum = (window as any).ethereum;
         if (ethereum) {
@@ -992,7 +1005,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             }
         }
 
-        // 2. Not in wallet browser — use AppKit which handles WalletConnect natively
+        // 2. In TMA — AppKit modal is unreliable in Telegram WebView (WebSocket relay issues).
+        //    Go straight to the custom WalletConnect flow that generates a WC URI
+        //    and shows an "Open Wallet" deep-link button.
+        if (isTMA) {
+            console.log(`[Web3] ${wallet}: TMA detected, opening custom WC modal`);
+            setConnectingWallet(wallet);
+            setIsConnectModalOpen(true);
+            return;
+        }
+
+        // 3. Not in wallet browser, not TMA — use AppKit which handles WalletConnect natively
         console.log(`[Web3] ${wallet}: no injected provider, opening AppKit`);
         try {
             setIsConnectModalOpen(false);
@@ -1006,6 +1029,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     };
 
     const handleDirectConnect = async () => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        if (isTMA) {
+            setIsConnectModalOpen(true);
+            return;
+        }
         try {
             await open({ view: 'Connect' });
         } catch (err) {
