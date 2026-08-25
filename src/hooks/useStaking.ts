@@ -175,7 +175,7 @@ const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = 
 };
 
 export function useStaking() {
-    const { address, isConnected, signer, walletProvider } = useWallet();
+    const { address, isConnected, signer, walletProvider, manualWalletProvider } = useWallet();
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
     // FIX: Use refs to avoid stale closure bug � buildSignerFn captures signer at render time,
@@ -309,6 +309,9 @@ const buildSignerFn = () => {
         if (globalWp) return globalWp;
         const ctxWp = (window as any).__globalAppKitProvider || walletProvider || walletProviderRef.current;
         if (ctxWp) return ctxWp;
+        // Fallback: manualWalletProvider (set by custom WalletConnect flow in TMA)
+        const mwp = (window as any).__manualWalletProvider || manualWalletProvider;
+        if (mwp) return mwp;
         return null;
     };
 

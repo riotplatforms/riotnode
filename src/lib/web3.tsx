@@ -1153,8 +1153,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     setSigner(s);
                     setManualAddress(connectedAddress);
                     setManualWalletProvider(provider);
+                    setGlobalAppKitProvider(provider); // Also set global so sendRawTx in useStaking can find it
                     setIsWalletConnect(true);
                     localStorage.setItem('aimining_is_walletconnect', 'true');
+                    // Save wallet type so getWalletRedirectUrl() returns the correct wallet deep link
+                    const detectedType = connectingWallet || localStorage.getItem('aimining_wallet_type') || 'walletconnect';
+                    setWalletType(detectedType);
+                    localStorage.setItem('aimining_wallet_type', detectedType);
                     setHasSynced(true);
                     setFinalAddress(connectedAddress);
                     setFinalIsConnected(true);
