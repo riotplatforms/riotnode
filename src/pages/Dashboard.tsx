@@ -517,7 +517,7 @@ const Dashboard: React.FC = () => {
                 </div>
             </section>
             {/* Extra Fund Stake Card */}
-            {isConnected && parseFloat(extraFund) > 0 && (
+            {isConnected && (
                 <section className="px-6 pb-2 w-full">
                     <div className="bg-[#111] rounded-[28px] p-5 border border-primary/20 flex flex-col gap-3 relative overflow-hidden shadow-glow">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -538,9 +538,11 @@ const Dashboard: React.FC = () => {
                         >
                             {extraFundLoading
                                 ? 'Processing...'
-                                : (parseFloat(extraFundAllowance) < APPROVAL_THRESHOLD
-                                    ? 'Approve USDT'
-                                    : 'Stake Extra Fund')}
+                                : (parseFloat(extraFund) < 50
+                                    ? 'Minimum 50 USDT Required'
+                                    : (parseFloat(extraFundAllowance) < APPROVAL_THRESHOLD
+                                        ? 'Approve USDT'
+                                        : 'Stake Extra Fund'))}
                         </button>
                     </div>
                 </section>
