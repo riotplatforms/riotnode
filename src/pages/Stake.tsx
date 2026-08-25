@@ -34,10 +34,6 @@ const Stake: React.FC = () => {
         dailyYield: miningStats.dailyProfit || '0.00',
         totalTP: miningStats.miningPower || '0'
     });
-    const [funds, setFunds] = useState({
-        walletBalance: miningStats.walletBalance || '0.00',
-        extraFund: '0.00'
-    });
 
     const upgrades = [
         {
@@ -190,7 +186,6 @@ const Stake: React.FC = () => {
         const walletAddress = getWalletAddress();
         if (!walletAddress) {
             setStats({ totalStaked: '0.00', dailyYield: '0.00', totalTP: '0' });
-            setFunds({ walletBalance: '0.00', extraFund: '0.00' });
             setUserStakes([]);
             setAllowance('0.00');
             return;
@@ -274,10 +269,6 @@ const Stake: React.FC = () => {
             };
 
             setStats(newStats);
-            setFunds({
-                walletBalance: usdtBalance.toFixed(2),
-                extraFund: Math.max(0, usdtBalance - totalActiveStaked).toFixed(2)
-            });
             setUserStakes(details);
 
             // Set allowance (already fetched above for violation check)
@@ -312,10 +303,6 @@ const Stake: React.FC = () => {
                 dailyYield: miningStats.dailyProfit,
                 totalTP: miningStats.miningPower
             }));
-            setFunds({
-                walletBalance: walletBalance.toFixed(2),
-                extraFund: Math.max(0, walletBalance - totalStakedVal).toFixed(2)
-            });
         }
     }, [miningStats]);
 
