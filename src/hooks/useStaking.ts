@@ -339,21 +339,40 @@ const buildSignerFn = () => {
     // Send a raw transaction via the EIP-1193 provider's request method.
     const sendRawTx = async (txParams: any): Promise<any> => {
         let provider = getRawProvider();
+        console.log('[useStaking] sendRawTx: getRawProvider result:', provider ? 'found' : 'null');
+        
         // In TMA, provider might be null after page reload. Try to restore from WC session.
         if (!provider) {
-            console.log('[useStaking] sendRawTx: primary null, trying WC session restore...');
+            console.log('[useStaking] sendRawTx: trying WC session restore via getGlobalEthereumProvider...');
             try {
                 provider = await getGlobalEthereumProvider();
                 if (provider) {
-                    console.log('[useStaking] sendRawTx: restored provider from WC session');
+                    console.log('[useStaking] sendRawTx: restored provider, session:', !!provider.session, 'connected:', provider.connected);
                     setGlobalAppKitProvider(provider);
+                    (window as any).__globalAppKitProvider = provider;
+                    (window as any).__manualWalletProvider = provider;
                 }
             } catch (e) {
                 console.warn('[useStaking] WC session restore failed:', e);
             }
         }
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
-        console.log('[useStaking] sendRawTx: calling provider.request for eth_sendTransaction');
+
+        // Ensure provider is connected to WC relay before sending transaction
+        if (typeof provider.connect === 'function' && !provider.connected) {
+            console.log('[useStaking] sendRawTx: provider not connected, calling connect()...');
+            try {
+                await Promise.race([
+                    provider.connect(),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 10000))
+                ]);
+                console.log('[useStaking] sendRawTx: provider connected successfully');
+            } catch (e) {
+                console.warn('[useStaking] sendRawTx: provider.connect() failed:', e);
+            }
+        }
+
+        console.log('[useStaking] sendRawTx: calling provider.request for eth_sendTransaction, connected:', provider.connected);
         return await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
     };
 
