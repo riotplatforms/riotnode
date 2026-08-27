@@ -21,7 +21,7 @@ let globalEthereumProviderPromise: Promise<any> | null = null;
 let activeDisplayUriCallback: ((uri: string) => void) | null = null;
 let globalAppKitProvider: any = null;
 let _activeWalletType: string | null = localStorage.getItem('aimining_wallet_type');
-export const setGlobalAppKitProvider = (p: any) => { globalAppKitProvider = p; };
+export const setGlobalAppKitProvider = (p: any) => { globalAppKitProvider = p; (window as any).__globalAppKitProvider = p; };
 export const getGlobalAppKitProvider = () => globalAppKitProvider;
 export const setActiveWalletType = (type: string) => { _activeWalletType = type; localStorage.setItem('aimining_wallet_type', type); };
 

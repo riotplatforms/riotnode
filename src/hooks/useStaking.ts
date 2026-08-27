@@ -21,9 +21,7 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
     const tg = (window as any).Telegram?.WebApp;
     const isTMA = !!tg;
 
-    try {
-        if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
-    } catch (e) { /* ignore */ }
+    try { if (tg?.HapticFeedback?.impactOccurred) tg.HapticFeedback.impactOccurred('medium'); } catch (_) { /* Telegram 6.0: HapticFeedback may not be supported */ }
 
     // Redirect to wallet app so user can approve the transaction.
     // The tx request is already in-flight via WC relay (txPromise was started
@@ -36,20 +34,9 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
                 console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
                 // Small delay to ensure tx request reaches WC relay before TMA WebView suspends
                 setTimeout(() => {
-                    tg.openLink(redirectUrl, { try_instant_view: false });
+                    try { tg.openLink(redirectUrl, { try_instant_view: false }); } catch (_) { /* ignore */ }
                 }, 500);
-                if (tg?.showPopup) {
-                    try {
-                        tg.showPopup({
-                            title: 'Approve Transaction',
-                            message: `Opening your wallet to approve: ${label}`,
-                            buttons: [{ type: 'default', text: 'OK' }]
-                        });
-                    } catch (popupErr) {
-                        console.warn('[useStaking] showPopup not supported, using showAlert fallback');
-                        try { tg.showAlert(`Opening your wallet to approve: ${label}`); } catch (_) { /* ignore */ }
-                    }
-                }
+                // NOTE: tg.showPopup is NOT supported in Telegram 6.0 — do NOT call it
             } else {
                 console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
                 setTimeout(() => {
