@@ -144,7 +144,27 @@ export const getWalletRedirectUrl = (): string => {
         console.log(`[getWalletRedirectUrl] localStorage=${walletType}`);
     }
 
-    // 3. If still unknown, detect from ALL available WC sessions and providers
+    // 3. Try to get redirect URL and wallet type from ALL WC session sources
+    const tryGetSessionRedirect = (session: any): { url: string | null; type: string | null } => {
+        if (!session?.peer?.metadata) return { url: null, type: null };
+        const meta = session.peer.metadata;
+        const peerName = (meta.name || '').toLowerCase();
+        const detected = detectWalletFromPeerName(peerName);
+
+        // WalletConnect v2 sessions include redirect URLs in peer metadata
+        // redirect.native = custom URI scheme (trust://, metamask://)
+        // redirect.universal = universal link (https://link.trustwallet.com/)
+        const nativeRedirect = meta.redirect?.native || '';
+        const universalRedirect = meta.redirect?.universal || '';
+
+        // Prefer native URI scheme (e.g., trust://) — opens app directly
+        const bestUrl = nativeRedirect || universalRedirect || '';
+        console.log(`[getWalletRedirectUrl] session peer="${peerName}" type="${detected}" native="${nativeRedirect}" universal="${universalRedirect}"`);
+        return { url: bestUrl || null, type: detected };
+    };
+
+    let sessionRedirectUrl: string | null = null;
+
     if (!walletType || walletType === 'walletconnect') {
         // Try global AppKit provider session (multiple paths)
         const globalWp = getGlobalAppKitProvider();
@@ -153,12 +173,9 @@ export const getWalletRedirectUrl = (): string => {
                 || globalWp.provider?.session
                 || globalWp.provider?.provider?.session
                 || globalWp.connector?.session;
-            const peerName = session?.peer?.metadata?.name || '';
-            console.log(`[getWalletRedirectUrl] AppKit session peer="${peerName}"`);
-            if (peerName) {
-                const detected = detectWalletFromPeerName(peerName);
-                if (detected) walletType = detected;
-            }
+            const result = tryGetSessionRedirect(session);
+            if (result.type) walletType = result.type;
+            if (result.url) sessionRedirectUrl = result.url;
         }
 
         // Try manualWalletProvider session (custom WC flow)
@@ -166,12 +183,9 @@ export const getWalletRedirectUrl = (): string => {
             const mwp = (window as any).__manualWalletProvider;
             if (mwp) {
                 const mSession = mwp.session || mwp.provider?.session;
-                const mPeerName = mSession?.peer?.metadata?.name || '';
-                console.log(`[getWalletRedirectUrl] manualProvider session peer="${mPeerName}"`);
-                if (mPeerName) {
-                    const detected = detectWalletFromPeerName(mPeerName);
-                    if (detected) walletType = detected;
-                }
+                const result = tryGetSessionRedirect(mSession);
+                if (result.type) walletType = result.type;
+                if (result.url) sessionRedirectUrl = result.url;
             }
         }
 
@@ -181,6 +195,25 @@ export const getWalletRedirectUrl = (): string => {
             console.log(`[getWalletRedirectUrl] window.ethereum detection=${detected}`);
             if (detected) walletType = detected;
         }
+    } else {
+        // We already have a wallet type, but still try to get session redirect URL
+        const globalWp = getGlobalAppKitProvider();
+        if (globalWp) {
+            const session = globalWp.session
+                || globalWp.provider?.session
+                || globalWp.provider?.provider?.session
+                || globalWp.connector?.session;
+            const result = tryGetSessionRedirect(session);
+            if (result.url) sessionRedirectUrl = result.url;
+        }
+        if (!sessionRedirectUrl) {
+            const mwp = (window as any).__manualWalletProvider;
+            if (mwp) {
+                const mSession = mwp.session || mwp.provider?.session;
+                const result = tryGetSessionRedirect(mSession);
+                if (result.url) sessionRedirectUrl = result.url;
+            }
+        }
     }
 
     // 4. Persist
@@ -189,10 +222,17 @@ export const getWalletRedirectUrl = (): string => {
         localStorage.setItem('aimining_wallet_type', walletType);
     }
 
-    // 5. Return the URL
+    // 5. Return the best URL: session native redirect > hardcoded fallback
+    if (sessionRedirectUrl) {
+        console.log(`[getWalletRedirectUrl] Using session redirect: ${sessionRedirectUrl}`);
+        return sessionRedirectUrl;
+    }
     if (walletType) {
         const url = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
-        if (url) return url;
+        if (url) {
+            console.log(`[getWalletRedirectUrl] Using fallback URL for "${walletType}": ${url}`);
+            return url;
+        }
     }
 
     // 6. Last resort: fallback to MetaMask
