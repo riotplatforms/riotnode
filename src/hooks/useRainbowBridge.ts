@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useAccount, useWalletClient } from 'wagmi';
 import { BrowserProvider } from 'ethers';
+import { setActiveWalletType } from '../lib/web3';
 
 /**
  * Bridge hook: When a user connects via RainbowKit, this hook syncs
@@ -46,6 +47,7 @@ export function useRainbowBridge(opts: {
                     opts.setSigner(signer);
                     opts.setWalletType('rainbow');
                     localStorage.setItem('aimining_wallet_type', 'rainbow');
+                    setActiveWalletType('rainbow');
                     opts.setIsWalletConnect(false);
                     localStorage.setItem('aimining_is_walletconnect', 'false');
                     opts.setHasSynced(true);

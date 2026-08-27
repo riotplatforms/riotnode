@@ -20,8 +20,10 @@ let globalEthereumProvider: any = null;
 let globalEthereumProviderPromise: Promise<any> | null = null;
 let activeDisplayUriCallback: ((uri: string) => void) | null = null;
 let globalAppKitProvider: any = null;
+let _activeWalletType: string | null = localStorage.getItem('aimining_wallet_type');
 export const setGlobalAppKitProvider = (p: any) => { globalAppKitProvider = p; };
 export const getGlobalAppKitProvider = () => globalAppKitProvider;
+export const setActiveWalletType = (type: string) => { _activeWalletType = type; localStorage.setItem('aimining_wallet_type', type); };
 
 export const getGlobalEthereumProvider = async () => {
     if (globalEthereumProvider) return globalEthereumProvider;
@@ -132,10 +134,15 @@ const detectWalletFromEthereum = (): string | null => {
 };
 
 export const getWalletRedirectUrl = (): string => {
-    // 1. Check localStorage first
-    let walletType = localStorage.getItem('aimining_wallet_type');
+    // 1. Check module-level variable first (most reliable — set during wallet connect)
+    let walletType = _activeWalletType;
 
-    // 2. If stored type is generic 'walletconnect' or null, try to detect from multiple sources
+    // 2. Fallback to localStorage
+    if (!walletType || walletType === 'walletconnect') {
+        walletType = localStorage.getItem('aimining_wallet_type');
+    }
+
+    // 3. If stored type is generic 'walletconnect' or null, try to detect from multiple sources
     if (!walletType || walletType === 'walletconnect') {
         // Try global AppKit provider session peer metadata
         const globalWp = getGlobalAppKitProvider();
@@ -154,19 +161,19 @@ export const getWalletRedirectUrl = (): string => {
         }
     }
 
-    // 3. Persist the detected type so future calls don't need re-detection
+    // 4. Persist the detected type so future calls don't need re-detection
     if (walletType && walletType !== 'walletconnect') {
+        _activeWalletType = walletType;
         localStorage.setItem('aimining_wallet_type', walletType);
     }
 
-    // 4. Return the URL for the detected wallet
+    // 5. Return the URL for the detected wallet
     if (walletType) {
         const url = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
         if (url) return url;
     }
 
-    // 5. Last resort: do NOT hard-fallback to MetaMask. Return empty string
-    //    so caller can handle gracefully (e.g. skip redirect or show choice).
+    // 6. Last resort: return empty string (caller skips redirect gracefully)
     return '';
 };
 
@@ -440,7 +447,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             if (wt) {
                 console.log("[Web3] Detected active wallet from AppKit info:", wt);
                 setWalletType(wt);
-                localStorage.setItem('aimining_wallet_type', wt);
+                setActiveWalletType(wt);
             }
         }
     }, [walletInfo]);
@@ -767,7 +774,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                             const conn = walletConnectionsManager.getByWallet(currentAddress);
                             const wt = conn?.walletType || 'walletconnect';
                             setWalletType(wt);
-                            localStorage.setItem('aimining_wallet_type', wt);
+                            setActiveWalletType(wt);
                         }
 
                         // Clear manual address if it's different from the native one being synced
@@ -1014,7 +1021,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setManualWalletProvider(injectedProvider);
             setSigner(injectedSigner);
             setWalletType(wt);
-            localStorage.setItem('aimining_wallet_type', wt);
+            setActiveWalletType(wt);
             setIsWalletConnect(false);
             localStorage.setItem('aimining_is_walletconnect', 'false');
             setHasSynced(true);
@@ -1204,7 +1211,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     // Save wallet type so getWalletRedirectUrl() returns the correct wallet deep link
                     const detectedType = connectingWallet || localStorage.getItem('aimining_wallet_type') || 'walletconnect';
                     setWalletType(detectedType);
-                    localStorage.setItem('aimining_wallet_type', detectedType);
+                    setActiveWalletType(detectedType);
                     setHasSynced(true);
                     setFinalAddress(connectedAddress);
                     setFinalIsConnected(true);
@@ -1448,6 +1455,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             setManualAddress(null);
             setManualWalletProvider(null);
             setWalletType(null);
+            _activeWalletType = null;
+            localStorage.removeItem('aimining_wallet_type');
             setSigner(null);
             setHasSynced(false);
             setFinalAddress(undefined);
