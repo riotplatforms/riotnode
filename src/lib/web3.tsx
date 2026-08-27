@@ -189,11 +189,16 @@ export const getWalletRedirectUrl = (): string => {
             }
         }
 
-        // Try injected window.ethereum
+        // Try injected window.ethereum — skip if WalletConnect is active (avoids picking up MetaMask extension when user connected via Trust Wallet WC)
         if (!walletType || walletType === 'walletconnect') {
-            const detected = detectWalletFromEthereum();
-            console.log(`[getWalletRedirectUrl] window.ethereum detection=${detected}`);
-            if (detected) walletType = detected;
+            const isWC = localStorage.getItem('aimining_is_walletconnect') === 'true';
+            if (!isWC) {
+                const detected = detectWalletFromEthereum();
+                console.log(`[getWalletRedirectUrl] window.ethereum detection=${detected} (isWC=${isWC})`);
+                if (detected) walletType = detected;
+            } else {
+                console.log(`[getWalletRedirectUrl] Skipping window.ethereum — WalletConnect session active`);
+            }
         }
     } else {
         // We already have a wallet type, but still try to get session redirect URL

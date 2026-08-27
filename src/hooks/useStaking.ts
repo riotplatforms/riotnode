@@ -322,20 +322,30 @@ const buildSignerFn = () => {
     // Bypasses all JsonRpcSigner/BrowserProvider complexity.
     // Uses the AppKit walletProvider directly (EIP-1193 standard).
     const getRawProvider = (): any => {
+        // 1. Global AppKit provider (set during connection)
         const globalWp = getGlobalAppKitProvider();
         if (globalWp) { console.log('[useStaking] getRawProvider: using globalAppKitProvider'); return globalWp; }
+        // 2. Context / ref providers
         const ctxWp = (window as any).__globalAppKitProvider || walletProvider || walletProviderRef.current;
         if (ctxWp) { console.log('[useStaking] getRawProvider: using ctxWp'); return ctxWp; }
+        // 3. Manual WC provider (custom WalletConnect flow in TMA)
         const mwp = (window as any).__manualWalletProvider || manualWalletProvider;
         if (mwp) { console.log('[useStaking] getRawProvider: using manualWalletProvider'); return mwp; }
-        console.error('[useStaking] getRawProvider: ALL sources null!', {
-            globalWp: !!globalWp,
-            ctxWp: !!(window as any).__globalAppKitProvider,
-            walletProvider: !!walletProvider,
-            walletProviderRef: !!walletProviderRef.current,
-            mwp: !!(window as any).__manualWalletProvider,
-            manualWalletProvider: !!manualWalletProvider
-        });
+        // 4. Injected provider (MetaMask, Trust Wallet extension, etc.)
+        const eth = (window as any).ethereum;
+        if (eth) {
+            // If multiple providers exist, try to find the right one
+            if (Array.isArray(eth.providers) && eth.providers.length > 0) {
+                // Trust Wallet first, then others
+                const trust = eth.providers.find((p: any) => p.isTrust);
+                if (trust) { console.log('[useStaking] getRawProvider: using injected Trust Wallet provider'); return trust; }
+                console.log('[useStaking] getRawProvider: using first injected provider');
+                return eth.providers[0];
+            }
+            console.log('[useStaking] getRawProvider: using window.ethereum');
+            return eth;
+        }
+        console.error('[useStaking] getRawProvider: ALL sources null');
         return null;
     };
 
