@@ -83,7 +83,13 @@ export function useTelegram() {
 
   const showAlert = useCallback((message: string) => {
     if (tg) {
-      tg.showAlert(message);
+      try {
+        tg.showAlert(message);
+      } catch (e) {
+        // Telegram 6.0: showAlert/showPopup may not be supported
+        console.warn('[Telegram] showAlert failed, falling back to console.log:', message);
+        console.log('[Alert]', message);
+      }
     } else {
       alert(message);
     }

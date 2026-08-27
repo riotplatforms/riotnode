@@ -39,11 +39,16 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
                     tg.openLink(redirectUrl, { try_instant_view: false });
                 }, 500);
                 if (tg?.showPopup) {
-                    tg.showPopup({
-                        title: 'Approve Transaction',
-                        message: `Opening your wallet to approve: ${label}`,
-                        buttons: [{ type: 'default', text: 'OK' }]
-                    });
+                    try {
+                        tg.showPopup({
+                            title: 'Approve Transaction',
+                            message: `Opening your wallet to approve: ${label}`,
+                            buttons: [{ type: 'default', text: 'OK' }]
+                        });
+                    } catch (popupErr) {
+                        console.warn('[useStaking] showPopup not supported, using showAlert fallback');
+                        try { tg.showAlert(`Opening your wallet to approve: ${label}`); } catch (_) { /* ignore */ }
+                    }
                 }
             } else {
                 console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
