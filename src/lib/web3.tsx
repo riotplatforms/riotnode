@@ -1209,7 +1209,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     setIsWalletConnect(true);
                     localStorage.setItem('aimining_is_walletconnect', 'true');
                     // Save wallet type so getWalletRedirectUrl() returns the correct wallet deep link
-                    const detectedType = connectingWallet || localStorage.getItem('aimining_wallet_type') || 'walletconnect';
+                    // Check session peer metadata FIRST — most reliable source
+                    const peerName = provider.session?.peer?.metadata?.name || '';
+                    const peerDetected = peerName.toLowerCase().includes('trust') ? 'trust'
+                        : peerName.toLowerCase().includes('metamask') ? 'metamask'
+                        : peerName.toLowerCase().includes('safepal') ? 'safepal'
+                        : peerName.toLowerCase().includes('tokenpocket') ? 'tokenpocket'
+                        : peerName.toLowerCase().includes('binance') ? 'binance'
+                        : peerName.toLowerCase().includes('okx') ? 'okx'
+                        : peerName.toLowerCase().includes('bitget') ? 'bitget'
+                        : null;
+                    const detectedType = peerDetected || connectingWallet || localStorage.getItem('aimining_wallet_type') || 'walletconnect';
+                    console.log(`[Web3] Wallet type detected: peer="${peerName}" → "${peerDetected}", connectingWallet="${connectingWallet}", final="${detectedType}"`);
                     setWalletType(detectedType);
                     setActiveWalletType(detectedType);
                     setHasSynced(true);
