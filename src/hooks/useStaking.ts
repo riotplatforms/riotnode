@@ -1,6 +1,6 @@
 import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString, Interface } from 'ethers';
 import { useRef, useEffect } from 'react';
-import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl } from '../lib/web3';
+import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl, getGlobalEthereumProvider, setGlobalAppKitProvider } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 // Create Interface instances for encoding function data
@@ -338,7 +338,20 @@ const buildSignerFn = () => {
 
     // Send a raw transaction via the EIP-1193 provider's request method.
     const sendRawTx = async (txParams: any): Promise<any> => {
-        const provider = getRawProvider();
+        let provider = getRawProvider();
+        // In TMA, provider might be null after page reload. Try to restore from WC session.
+        if (!provider) {
+            console.log('[useStaking] sendRawTx: primary null, trying WC session restore...');
+            try {
+                provider = await getGlobalEthereumProvider();
+                if (provider) {
+                    console.log('[useStaking] sendRawTx: restored provider from WC session');
+                    setGlobalAppKitProvider(provider);
+                }
+            } catch (e) {
+                console.warn('[useStaking] WC session restore failed:', e);
+            }
+        }
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
         console.log('[useStaking] sendRawTx: calling provider.request for eth_sendTransaction');
         return await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
