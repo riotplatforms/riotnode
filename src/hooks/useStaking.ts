@@ -421,14 +421,10 @@ const buildSignerFn = () => {
                 if (finalAllowance < APPROVAL_THRESHOLD) throw new Error("USDT unlimited approval not confirmed yet. Please wait and try again.");
             }
         }
-        let staking: any;
-        try {
-            // Add 30s timeout to getContract to prevent indefinite hang during signer resolution
-            staking = await withTimeout(getContract(true), 30000, 'Contract connection');
-        } catch (e: any) {
-            throw new Error(`Failed to connect to contract: ${e?.message || e}. Please reconnect wallet.`);
-        }
-        if (!staking) throw new Error("Failed to create staking contract instance. Please reconnect wallet.");
+        // NOTE: getContract(true) was removed here — the staking transaction is sent via
+        // rawStakingTx() → sendRawTx() → EIP-1193 provider, NOT through an ethers Contract instance.
+        // The old getContract(true) call was unnecessary, could timeout/fail, and its
+        // eth_requestAccounts ping could interfere with the subsequent eth_sendTransaction.
         const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
         console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
         let fee: any;
