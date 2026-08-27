@@ -1218,6 +1218,8 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                         setManualAddress(connectedAddress);
                         setManualWalletProvider(provider);
+                        (window as any).__manualWalletProvider = provider; // immediate access for getRawProvider()
+                        setGlobalAppKitProvider(provider); // also set global for cross-module access
                         setHasSynced(true);
                         setFinalAddress(connectedAddress);
                         setFinalIsConnected(true);
