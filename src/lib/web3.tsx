@@ -134,46 +134,69 @@ const detectWalletFromEthereum = (): string | null => {
 };
 
 export const getWalletRedirectUrl = (): string => {
-    // 1. Check module-level variable first (most reliable — set during wallet connect)
+    // 1. Check module-level variable first
     let walletType = _activeWalletType;
+    console.log(`[getWalletRedirectUrl] _activeWalletType=${walletType}`);
 
     // 2. Fallback to localStorage
     if (!walletType || walletType === 'walletconnect') {
         walletType = localStorage.getItem('aimining_wallet_type');
+        console.log(`[getWalletRedirectUrl] localStorage=${walletType}`);
     }
 
-    // 3. If stored type is generic 'walletconnect' or null, try to detect from multiple sources
+    // 3. If still unknown, detect from ALL available WC sessions and providers
     if (!walletType || walletType === 'walletconnect') {
-        // Try global AppKit provider session peer metadata
+        // Try global AppKit provider session (multiple paths)
         const globalWp = getGlobalAppKitProvider();
         if (globalWp) {
-            const session = globalWp.session || globalWp.provider?.session;
-            if (session?.peer?.metadata?.name) {
-                const detected = detectWalletFromPeerName(session.peer.metadata.name);
+            const session = globalWp.session
+                || globalWp.provider?.session
+                || globalWp.provider?.provider?.session
+                || globalWp.connector?.session;
+            const peerName = session?.peer?.metadata?.name || '';
+            console.log(`[getWalletRedirectUrl] AppKit session peer="${peerName}"`);
+            if (peerName) {
+                const detected = detectWalletFromPeerName(peerName);
                 if (detected) walletType = detected;
             }
         }
 
-        // Try injected window.ethereum properties (works when wallet is in-browser)
+        // Try manualWalletProvider session (custom WC flow)
+        if (!walletType || walletType === 'walletconnect') {
+            const mwp = (window as any).__manualWalletProvider;
+            if (mwp) {
+                const mSession = mwp.session || mwp.provider?.session;
+                const mPeerName = mSession?.peer?.metadata?.name || '';
+                console.log(`[getWalletRedirectUrl] manualProvider session peer="${mPeerName}"`);
+                if (mPeerName) {
+                    const detected = detectWalletFromPeerName(mPeerName);
+                    if (detected) walletType = detected;
+                }
+            }
+        }
+
+        // Try injected window.ethereum
         if (!walletType || walletType === 'walletconnect') {
             const detected = detectWalletFromEthereum();
+            console.log(`[getWalletRedirectUrl] window.ethereum detection=${detected}`);
             if (detected) walletType = detected;
         }
     }
 
-    // 4. Persist the detected type so future calls don't need re-detection
+    // 4. Persist
     if (walletType && walletType !== 'walletconnect') {
         _activeWalletType = walletType;
         localStorage.setItem('aimining_wallet_type', walletType);
     }
 
-    // 5. Return the URL for the detected wallet
+    // 5. Return the URL
     if (walletType) {
         const url = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
         if (url) return url;
     }
 
-    // 6. Last resort: fallback to MetaMask. Better to open a wallet than none at all.
+    // 6. Last resort: fallback to MetaMask
+    console.warn('[getWalletRedirectUrl] No wallet detected, falling back to MetaMask');
     return WALLET_REDIRECT_LINKS.metamask;
 };
 
