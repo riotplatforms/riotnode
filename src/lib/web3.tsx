@@ -173,8 +173,8 @@ export const getWalletRedirectUrl = (): string => {
         if (url) return url;
     }
 
-    // 6. Last resort: return empty string (caller skips redirect gracefully)
-    return '';
+    // 6. Last resort: fallback to MetaMask. Better to open a wallet than none at all.
+    return WALLET_REDIRECT_LINKS.metamask;
 };
 
 const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {

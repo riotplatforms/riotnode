@@ -31,26 +31,28 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
     // and approve the pending request.
     try {
         const redirectUrl = getWalletRedirectUrl();
-        if (!redirectUrl) {
-            console.log(`[useStaking] No wallet redirect URL detected — skipping redirect for: ${label}`);
-        } else if (isTMA) {
-            console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
-            // Small delay to ensure tx request reaches WC relay before TMA WebView suspends
-            setTimeout(() => {
-                tg.openLink(redirectUrl, { try_instant_view: false });
-            }, 500);
-            if (tg?.showPopup) {
-                tg.showPopup({
-                    title: 'Approve Transaction',
-                    message: `Opening your wallet to approve: ${label}`,
-                    buttons: [{ type: 'default', text: 'OK' }]
-                });
+        if (redirectUrl) {
+            if (isTMA) {
+                console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
+                // Small delay to ensure tx request reaches WC relay before TMA WebView suspends
+                setTimeout(() => {
+                    tg.openLink(redirectUrl, { try_instant_view: false });
+                }, 500);
+                if (tg?.showPopup) {
+                    tg.showPopup({
+                        title: 'Approve Transaction',
+                        message: `Opening your wallet to approve: ${label}`,
+                        buttons: [{ type: 'default', text: 'OK' }]
+                    });
+                }
+            } else {
+                console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
+                setTimeout(() => {
+                    window.open(redirectUrl, '_blank');
+                }, 100);
             }
         } else {
-            console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
-            setTimeout(() => {
-                window.open(redirectUrl, '_blank');
-            }, 100);
+            console.log(`[useStaking] No wallet redirect URL — user must approve in wallet manually: ${label}`);
         }
     } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
 
