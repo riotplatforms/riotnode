@@ -318,21 +318,27 @@ const buildSignerFn = () => {
     // Uses the AppKit walletProvider directly (EIP-1193 standard).
     const getRawProvider = (): any => {
         const globalWp = getGlobalAppKitProvider();
-        if (globalWp) return globalWp;
+        if (globalWp) { console.log('[useStaking] getRawProvider: using globalAppKitProvider'); return globalWp; }
         const ctxWp = (window as any).__globalAppKitProvider || walletProvider || walletProviderRef.current;
-        if (ctxWp) return ctxWp;
-        // Fallback: manualWalletProvider (set by custom WalletConnect flow in TMA)
+        if (ctxWp) { console.log('[useStaking] getRawProvider: using ctxWp'); return ctxWp; }
         const mwp = (window as any).__manualWalletProvider || manualWalletProvider;
-        if (mwp) return mwp;
+        if (mwp) { console.log('[useStaking] getRawProvider: using manualWalletProvider'); return mwp; }
+        console.error('[useStaking] getRawProvider: ALL sources null!', {
+            globalWp: !!globalWp,
+            ctxWp: !!(window as any).__globalAppKitProvider,
+            walletProvider: !!walletProvider,
+            walletProviderRef: !!walletProviderRef.current,
+            mwp: !!(window as any).__manualWalletProvider,
+            manualWalletProvider: !!manualWalletProvider
+        });
         return null;
     };
 
     // Send a raw transaction via the EIP-1193 provider's request method.
-    // This is the MOST RELIABLE way to send transactions through WalletConnect in TMA.
-    // NOTE: This does NOT call sendTxWithRedirect — the redirect is handled by the caller.
     const sendRawTx = async (txParams: any): Promise<any> => {
         const provider = getRawProvider();
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
+        console.log('[useStaking] sendRawTx: calling provider.request for eth_sendTransaction');
         return await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
     };
 
