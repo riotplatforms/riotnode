@@ -30,9 +30,11 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
     // before this function was called). Opening the wallet lets the user see
     // and approve the pending request.
     try {
-        if (isTMA) {
-            const redirectUrl = getWalletRedirectUrl();
-            console.log(`[useStaking] TMA: opening wallet for: ${label}`);
+        const redirectUrl = getWalletRedirectUrl();
+        if (!redirectUrl) {
+            console.log(`[useStaking] No wallet redirect URL detected — skipping redirect for: ${label}`);
+        } else if (isTMA) {
+            console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
             // Small delay to ensure tx request reaches WC relay before TMA WebView suspends
             setTimeout(() => {
                 tg.openLink(redirectUrl, { try_instant_view: false });
@@ -45,8 +47,7 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
                 });
             }
         } else {
-            const redirectUrl = getWalletRedirectUrl();
-            console.log(`[useStaking] Redirecting to wallet for: ${label}`);
+            console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
             setTimeout(() => {
                 window.open(redirectUrl, '_blank');
             }, 100);

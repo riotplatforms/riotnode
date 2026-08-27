@@ -97,33 +97,77 @@ const getRedirectLinkForProvider = (provider: any): string | null => {
     }
     return null;
 };
+const detectWalletFromPeerName = (peerName: string): string | null => {
+    const lower = peerName.toLowerCase();
+    if (lower.includes('metamask')) return 'metamask';
+    if (lower.includes('trust')) return 'trust';
+    if (lower.includes('safepal')) return 'safepal';
+    if (lower.includes('tokenpocket')) return 'tokenpocket';
+    if (lower.includes('binance')) return 'binance';
+    if (lower.includes('okx')) return 'okx';
+    if (lower.includes('bitget')) return 'bitget';
+    return null;
+};
+
+const detectWalletFromEthereum = (): string | null => {
+    const eth = (window as any).ethereum;
+    if (!eth) return null;
+    if (eth.isTrust || eth.isTrustWallet) return 'trust';
+    if (eth.isMetaMask && !eth.isTrust && !eth.isSafePal && !eth.isTokenPocket) return 'metamask';
+    if (eth.isSafePal) return 'safepal';
+    if (eth.isTokenPocket) return 'tokenpocket';
+    if (eth.isBinance || eth.isBinanceChain) return 'binance';
+    if (eth.isOkxWallet || eth.isOKX) return 'okx';
+    if (eth.isBitget) return 'bitget';
+    // Check providers array
+    if (Array.isArray(eth.providers)) {
+        for (const p of eth.providers) {
+            if (p.isTrust || p.isTrustWallet) return 'trust';
+            if (p.isMetaMask && !p.isTrust && !p.isSafePal) return 'metamask';
+            if (p.isSafePal) return 'safepal';
+            if (p.isTokenPocket) return 'tokenpocket';
+        }
+    }
+    return null;
+};
+
 export const getWalletRedirectUrl = (): string => {
-    // Try to detect wallet type from WC session peer metadata first
+    // 1. Check localStorage first
     let walletType = localStorage.getItem('aimining_wallet_type');
-    
-    // Try global AppKit provider to get session peer metadata
-    const globalWp = getGlobalAppKitProvider();
-    if (globalWp) {
-        const session = globalWp.session || globalWp.provider?.session;
-        if ((!walletType || walletType === 'walletconnect') && session?.peer?.metadata?.name) {
-            const peerName = session.peer.metadata.name.toLowerCase();
-            if (peerName.includes('metamask')) walletType = 'metamask';
-            else if (peerName.includes('trust')) walletType = 'trust';
-            else if (peerName.includes('safepal')) walletType = 'safepal';
-            else if (peerName.includes('tokenpocket')) walletType = 'tokenpocket';
-            else if (peerName.includes('binance')) walletType = 'binance';
-            else if (peerName.includes('okx')) walletType = 'okx';
-            else if (peerName.includes('bitget')) walletType = 'bitget';
+
+    // 2. If stored type is generic 'walletconnect' or null, try to detect from multiple sources
+    if (!walletType || walletType === 'walletconnect') {
+        // Try global AppKit provider session peer metadata
+        const globalWp = getGlobalAppKitProvider();
+        if (globalWp) {
+            const session = globalWp.session || globalWp.provider?.session;
+            if (session?.peer?.metadata?.name) {
+                const detected = detectWalletFromPeerName(session.peer.metadata.name);
+                if (detected) walletType = detected;
+            }
+        }
+
+        // Try injected window.ethereum properties (works when wallet is in-browser)
+        if (!walletType || walletType === 'walletconnect') {
+            const detected = detectWalletFromEthereum();
+            if (detected) walletType = detected;
         }
     }
 
+    // 3. Persist the detected type so future calls don't need re-detection
+    if (walletType && walletType !== 'walletconnect') {
+        localStorage.setItem('aimining_wallet_type', walletType);
+    }
+
+    // 4. Return the URL for the detected wallet
     if (walletType) {
         const url = WALLET_REDIRECT_LINKS[walletType.toLowerCase()];
         if (url) return url;
     }
 
-    // Fallback to MetaMask
-    return WALLET_REDIRECT_LINKS.metamask;
+    // 5. Last resort: do NOT hard-fallback to MetaMask. Return empty string
+    //    so caller can handle gracefully (e.g. skip redirect or show choice).
+    return '';
 };
 
 const getWalletConnectionLink = (walletName: string | null | undefined, encodedUri: string): string => {
@@ -557,7 +601,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setFinalIsConnected(true);
                         localStorage.setItem('aimining_manual_address', wcAddress);
                         localStorage.setItem('aimining_address', wcAddress);
-                        walletConnectionsManager.saveConnection(wcAddress, 'walletconnect');
+                        walletConnectionsManager.saveConnection(wcAddress, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
                         console.log('[TMA] Re-synced wallet from WC session:', wcAddress);
                         return;
                     }
@@ -716,7 +760,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         localStorage.setItem('aimining_address', currentAddress);
 
                         // Track wallet connection
-                        walletConnectionsManager.saveConnection(currentAddress, 'walletconnect');
+                        walletConnectionsManager.saveConnection(currentAddress, localStorage.getItem('aimining_wallet_type') || 'walletconnect');
 
                         const savedType = localStorage.getItem('aimining_wallet_type');
                         if (!savedType) {
