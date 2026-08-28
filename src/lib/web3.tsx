@@ -867,10 +867,29 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
         // FIX: Manual Re-sync on App Resume (Fixes Telegram background freeze)
         let lastSync = 0;
-        const handleFocus = () => {
+        const handleFocus = async () => {
             const now = Date.now();
             if (now - lastSync < 3000) return; // 3s throttle for stability
             lastSync = now;
+
+            // TMA FIX: When Telegram WebView returns to foreground after user
+            // approved a transaction in the wallet app, the WC relay WebSocket
+            // may have been killed by the OS. Reconnect it proactively so
+            // subsequent eth_sendTransaction calls don't hang forever.
+            const isTMA = !!(window as any).Telegram?.WebApp;
+            if (isTMA) {
+                const wp = (window as any).__globalAppKitProvider || (window as any).__manualWalletProvider;
+                if (wp && typeof wp.connect === 'function' && !wp.connected) {
+                    try {
+                        console.log('[Web3] TMA resume: WC provider disconnected, reconnecting...');
+                        await wp.connect();
+                        console.log('[Web3] TMA resume: WC provider reconnected');
+                    } catch (e) {
+                        console.warn('[Web3] TMA resume: WC reconnect failed:', e);
+                    }
+                }
+            }
+
             syncSigner();
         };
 

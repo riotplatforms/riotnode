@@ -27,26 +27,37 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
     // The tx request is already in-flight via WC relay (txPromise was started
     // before this function was called). Opening the wallet lets the user see
     // and approve the pending request.
-    try {
-        const redirectUrl = getWalletRedirectUrl();
-        if (redirectUrl) {
-            if (isTMA) {
-                console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
-                // Small delay to ensure tx request reaches WC relay before TMA WebView suspends
-                setTimeout(() => {
+    //
+    // FIX: In TMA, delay redirect longer (1500ms) to give the WC relay time to
+    // deliver the eth_sendTransaction request to the wallet before the WebView
+    // suspends. If the redirect fires before the relay receives the request,
+    // the wallet opens but shows nothing to approve.
+    let redirected = false;
+    const doRedirect = () => {
+        if (redirected) return;
+        redirected = true;
+        try {
+            const redirectUrl = getWalletRedirectUrl();
+            if (redirectUrl) {
+                if (isTMA) {
+                    console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
                     try { tg.openLink(redirectUrl, { try_instant_view: false }); } catch (_) { /* ignore */ }
-                }, 500);
-                // NOTE: tg.showPopup is NOT supported in Telegram 6.0 — do NOT call it
-            } else {
-                console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
-                setTimeout(() => {
+                } else {
+                    console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
                     window.open(redirectUrl, '_blank');
-                }, 100);
+                }
+            } else {
+                console.log(`[useStaking] No wallet redirect URL — user must approve in wallet manually: ${label}`);
             }
-        } else {
-            console.log(`[useStaking] No wallet redirect URL — user must approve in wallet manually: ${label}`);
-        }
-    } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
+        } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
+    };
+
+    // For TMA: redirect after a delay so the tx request reaches WC relay first
+    if (isTMA) {
+        setTimeout(doRedirect, 1500);
+    } else {
+        setTimeout(doRedirect, 100);
+    }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please check your wallet app for pending approvals.`)), timeoutMs); });
@@ -338,8 +349,9 @@ const buildSignerFn = () => {
 
     // Send a raw transaction via the EIP-1193 provider's request method.
     const sendRawTx = async (txParams: any): Promise<any> => {
+        const isTMA = !!(window as any).Telegram?.WebApp;
         let provider = getRawProvider();
-        console.log('[useStaking] sendRawTx: getRawProvider result:', provider ? 'found' : 'null');
+        console.log('[useStaking] sendRawTx: getRawProvider result:', provider ? 'found' : 'null', 'isTMA:', isTMA);
         
         // In TMA, provider might be null after page reload. Try to restore from WC session.
         if (!provider) {
@@ -358,17 +370,70 @@ const buildSignerFn = () => {
         }
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
 
-        // Ensure provider is connected to WC relay before sending transaction
-        if (typeof provider.connect === 'function' && !provider.connected) {
-            console.log('[useStaking] sendRawTx: provider not connected, calling connect()...');
-            try {
-                await Promise.race([
-                    provider.connect(),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 10000))
-                ]);
-                console.log('[useStaking] sendRawTx: provider connected successfully');
-            } catch (e) {
-                console.warn('[useStaking] sendRawTx: provider.connect() failed:', e);
+        // ── FIX: Ensure WC relay is alive before sending eth_sendTransaction ──
+        // In TMA, `provider.connected` can be STALE — returns true but the WebSocket
+        // is dead after the Telegram WebView went to background (user switched to wallet
+        // app). Sending eth_sendTransaction over a dead relay HANGS FOREVER — the wallet
+        // never receives the request, so nothing to approve. User sees wallet open but
+        // no transaction prompt.
+        if (typeof provider.connect === 'function') {
+            // Step 1: If provider says disconnected, reconnect
+            if (!provider.connected) {
+                console.log('[useStaking] sendRawTx: provider not connected, calling connect()...');
+                try {
+                    await Promise.race([
+                        provider.connect(),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 15000))
+                    ]);
+                    console.log('[useStaking] sendRawTx: provider connected successfully');
+                    // Wait for WebSocket to stabilize after reconnection
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch (e) {
+                    console.warn('[useStaking] sendRawTx: provider.connect() failed:', e);
+                }
+            }
+
+            // Step 2 (TMA): Verify relay is alive by pinging with eth_chainId.
+            // This catches the stale `connected=true` case where WebSocket is dead.
+            if (isTMA) {
+                try {
+                    const chainId = await Promise.race([
+                        provider.request({ method: 'eth_chainId' }),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('relay ping timeout')), 8000))
+                    ]);
+                    console.log('[useStaking] sendRawTx: relay alive, chainId:', chainId);
+                } catch (pingErr) {
+                    console.warn('[useStaking] sendRawTx: relay ping failed, forcing full reconnect...', String(pingErr));
+                    // The relay is dead — force a full reconnection
+                    try {
+                        await provider.connect();
+                        await new Promise(r => setTimeout(r, 2000));
+                        // Verify it worked
+                        await Promise.race([
+                            provider.request({ method: 'eth_chainId' }),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('reconnect verify timeout')), 8000))
+                        ]);
+                        console.log('[useStaking] sendRawTx: reconnect succeeded');
+                    } catch (reconnErr) {
+                        console.warn('[useStaking] sendRawTx: reconnect failed, trying fresh provider from WC session...', String(reconnErr));
+                        try {
+                            const freshProvider = await getGlobalEthereumProvider();
+                            if (freshProvider && freshProvider.session) {
+                                await freshProvider.connect();
+                                await new Promise(r => setTimeout(r, 2000));
+                                provider = freshProvider;
+                                setGlobalAppKitProvider(freshProvider);
+                                (window as any).__globalAppKitProvider = freshProvider;
+                                (window as any).__manualWalletProvider = freshProvider;
+                                console.log('[useStaking] sendRawTx: fresh provider created from WC session');
+                            } else {
+                                throw new Error("No active WalletConnect session found.");
+                            }
+                        } catch (finalErr) {
+                            throw new Error("Wallet relay connection lost. Please go back and reconnect your wallet, then try again.");
+                        }
+                    }
+                }
             }
         }
 
