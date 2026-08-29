@@ -982,24 +982,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }, [isConnected, walletProvider, address, hasSynced, manualWalletProvider, manualAddress]);
 
     const connect = async () => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-
-        if (isTMA) {
-            // In TMA — AppKit modal is unreliable in Telegram WebView (WebSocket relay issues).
-            // Go straight to the custom WalletConnect modal which generates a WC URI
-            // and shows an "Open Wallet" deep-link button.
-            console.log("[Web3] TMA detected — opening custom WalletConnect modal");
-            setIsConnectModalOpen(true);
-            return;
-        }
-
-        try {
-            // Use AppKit — it handles WalletConnect, QR codes, deep links, relay reconnection natively
-            await open({ view: 'Connect' });
-        } catch (err) {
-            console.warn("[Web3] AppKit open failed, using custom modal:", err);
-            setIsConnectModalOpen(true);
-        }
+        // Always use the custom WalletConnect modal. The AppKit modal has two
+        // problems: (1) in the Telegram WebView its relay is unreliable, and
+        // (2) in normal browsers (e.g. Chrome on desktop) its wallet list
+        // redirects to wallet DOWNLOAD pages for mobile-only wallets. The
+        // custom modal shows a scannable QR code on desktop/laptop and a
+        // wallet deep link on mobile.
+        console.log("[Web3] Opening custom WalletConnect modal");
+        setIsConnectModalOpen(true);
     };
 
     const connectInjectedWallet = async (preferredWallet?: string): Promise<'connected' | 'not_installed' | 'failed'> => {
