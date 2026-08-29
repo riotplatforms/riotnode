@@ -2,7 +2,7 @@ import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, Browser
 import { useRef, useEffect } from 'react';
 import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl, getGlobalEthereumProvider, setGlobalAppKitProvider } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
-import { CONTRACT_ADDRESS, USDT_ADDRESS, LEGACY_CONTRACT_ADDRESS } from '../lib/contracts';
+import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 // Create Interface instances for encoding function data
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
@@ -580,43 +580,6 @@ const buildSignerFn = () => {
         return await sendTxWithRedirect(rawWithdrawTx(i), 'Withdraw transaction');
     };
 
-    // ── Legacy contract support (pre-redeploy stakes on 0x56AC...) ──
-    // Users who staked before the 07-08-2026 redeploy have stakes on the OLD
-    // contract. These functions read those stakes and withdraw through the OLD
-    // contract address so those users can recover their funds.
-    const getLegacyStakeCount = async (userAddress?: string) => {
-        const target = userAddress || address || getStoredAddress();
-        if (!target) return 0;
-        try {
-            const legacy = new Contract(LEGACY_CONTRACT_ADDRESS, ABI, getCachedProvider(RPC_NODES[currentRpcIdx]));
-            const info = await withTimeout(legacy.getUserInfo(target), 10000, 'Legacy info');
-            return Number(info.stakeCount);
-        } catch (err) { console.warn("[useStaking] Legacy stakeCount error:", err); return 0; }
-    };
-
-    const getLegacyStakeDetails = async (userAddress: string, index: number) => {
-        const target = userAddress || getStoredAddress();
-        if (!target) return null;
-        try {
-            const legacy = new Contract(LEGACY_CONTRACT_ADDRESS, ABI, getCachedProvider(RPC_NODES[currentRpcIdx]));
-            const stake = await withTimeout(legacy.getUserStake(target, index), 10000, 'Legacy stake');
-            return { amount: stake.amount, startTime: Number(stake.startTime), tier: Number(stake.tier), withdrawn: stake.withdrawn };
-        } catch (err) { console.warn("[useStaking] Legacy detail error:", err); return null; }
-    };
-
-    const rawLegacyWithdrawTx = async (stakeIndex: number): Promise<any> => {
-        const data = CONTRACT_IFACE.encodeFunctionData('withdraw', [stakeIndex]);
-        const anyAddr = getStoredAddress() || address;
-        if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({ from: anyAddr, to: LEGACY_CONTRACT_ADDRESS, data });
-    };
-
-    const legacyWithdraw = async (index: any) => {
-        const i = typeof index === 'string' ? parseInt(index) : index;
-        await ensureRelayAlive();
-        return await sendTxWithRedirect(rawLegacyWithdrawTx(i), 'Legacy withdraw transaction');
-    };
-
     const getStakedInfo = async (userAddress?: string) => {
         const target = userAddress || address || getStoredAddress();
         if (!target) return null;
@@ -750,7 +713,6 @@ const buildSignerFn = () => {
 
     return {
         stake, approve, getAllowance, withdraw, getStakedInfo, getStakeDetails,
-        getLegacyStakeCount, getLegacyStakeDetails, legacyWithdraw,
         getWalletBalance, getTeamTree, getTeamMiningStats, getReferralEarnings,
         calculateEffectiveEarned, recordViolation, recordStakeFlush, getViolationStakeCount, isViolationActive, clearViolation,
         recordReferralFlush, getIsReferralFlushed, clearReferralFlush, getPerLevelReferralIncome,

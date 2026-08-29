@@ -21,7 +21,7 @@ const getTierRate = (val: number) => {
 const Stake: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, signer, walletProvider, miningStats, setMiningStats } = useWallet();
-    const { stake, approve, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed, getLegacyStakeCount, getLegacyStakeDetails, legacyWithdraw } = useStaking();
+    const { stake, approve, getAllowance, getStakedInfo, getStakeDetails, withdraw, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { referrer, showAlert } = useTelegram();
     const { btcPrice } = usePrice();
 
@@ -258,20 +258,6 @@ const Stake: React.FC = () => {
                 }
             }
 
-            // LEGACY CONTRACT stakes (pre-redeploy 0x56AC...) — shown so users who
-            // staked before the redeploy can see and withdraw them. Not counted
-            // toward active mining power/yield; no violation logic applies.
-            try {
-                const legacyCount = await getLegacyStakeCount(walletAddress);
-                for (let li = 0; li < legacyCount; li++) {
-                    const ld = await getLegacyStakeDetails(walletAddress, li);
-                    if (ld && !ld.withdrawn) {
-                        const lAmount = parseFloat(formatUnits(ld.amount, 18));
-                        details.push({ ...ld, index: li, displayVal: lAmount, currentHold: lAmount, isViolated: false, isLegacy: true });
-                    }
-                }
-            } catch (e) { console.warn('[Stake] Legacy stakes fetch failed:', e); }
-
             const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 78000;
             const yieldVal = dailyUsdtYield / safeBtcPrice;
             const dailyYieldStr = (!isNaN(yieldVal) && isFinite(yieldVal)) ? yieldVal.toFixed(14) : '0.00000000000000';
@@ -298,7 +284,7 @@ const Stake: React.FC = () => {
                 isLoaded: true
             }));
         }
-    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, getAllowance, recordPermanentStakeFlush, isStakePermanentlyFlushed, getLegacyStakeCount, getLegacyStakeDetails, btcPrice, setMiningStats]);
+    }, [isConnected, address, getStakedInfo, getStakeDetails, getWalletBalance, getAllowance, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
 
     useEffect(() => {
         updateStakes();
@@ -692,20 +678,15 @@ const Stake: React.FC = () => {
         }
     }, [isConnected, address, walletProvider]);
 
-    const handleWithdraw = async (index: number, isLegacy = false) => {
+    const handleWithdraw = async (index: number) => {
         const fallbackAddress = await getActiveWalletAddress();
         if (!fallbackAddress) {
             connect(); // Opens WalletConnect modal
             return;
         }
-        const loadingKey = isLegacy ? `withdraw-legacy-${index}` : `withdraw-${index}`;
-        setLoading(loadingKey);
+        setLoading(`withdraw-${index}`);
         try {
-            if (isLegacy) {
-                await legacyWithdraw(index);
-            } else {
-                await withdraw(index);
-            }
+            await withdraw(index);
             // withdraw returns tx hash (string) from provider.request — wallet already approved
             showAlert('Success: Withdrawal submitted! Funds will arrive shortly.');
             await updateStakes();
@@ -953,7 +934,7 @@ const Stake: React.FC = () => {
                                     <div key={i} className={`bg-card-dark rounded-[32px] p-6 border border-white/5 shadow-2xl relative overflow-hidden ${s.isViolated ? 'opacity-50 grayscale' : ''}`}>
                                         <div className="flex justify-between items-start mb-4">
                                             <div>
-                                                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">{s.isLegacy ? 'Legacy Cycle #' : 'Mining Cycle #'}{s.index + 1}{s.isLegacy ? ' (Old Contract)' : ''}</p>
+                                                <p className="text-[10px] text-gray-500 font-black uppercase tracking-widest">Mining Cycle #{s.index + 1}</p>
                                                 <h3 className="text-xl font-black text-white italic">{s.displayVal} <span className="text-primary text-sm uppercase">USDT</span></h3>
                                             </div>
                                             <div className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${s.isViolated ? 'bg-red-500/10 text-red-500 border border-red-500/20' : (finished ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-primary/10 text-primary border border-primary/20')}`}>
@@ -991,14 +972,14 @@ const Stake: React.FC = () => {
                                         </div>
 
                                         <button
-                                            disabled={!finished || s.isViolated || loading === (s.isLegacy ? `withdraw-legacy-${s.index}` : `withdraw-${s.index}`)}
-                                            onClick={() => handleWithdraw(s.index, !!s.isLegacy)}
+                                            disabled={!finished || s.isViolated || loading === `withdraw-${s.index}`}
+                                            onClick={() => handleWithdraw(s.index)}
                                             className={`w-full py-4 rounded-xl font-black text-xs uppercase tracking-widest transition-all ${finished && !s.isViolated
                                                 ? 'bg-primary text-black shadow-glow cursor-pointer hover:scale-[1.02]'
                                                 : 'bg-white/5 text-gray-600 cursor-not-allowed border border-white/5'
                                                 }`}
                                         >
-                                            {loading === (s.isLegacy ? `withdraw-legacy-${s.index}` : `withdraw-${s.index}`) ? 'Processing...' : s.isViolated ? 'Flushed' : finished ? (s.isLegacy ? 'Claim & Withdraw (Legacy Contract)' : 'Claim & Withdraw (Mining + Team Yield)') : `Locked (${formatCountdown(s.startTime)})`}
+                                            {loading === `withdraw-${s.index}` ? 'Processing...' : s.isViolated ? 'Flushed' : finished ? 'Claim & Withdraw (Mining + Team Yield)' : `Locked (${formatCountdown(s.startTime)})`}
                                         </button>
                                     </div>
                                 );
