@@ -258,7 +258,7 @@ const Stake: React.FC = () => {
                 }
             }
 
-            const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
+            const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 78000;
             const yieldVal = dailyUsdtYield / safeBtcPrice;
             const dailyYieldStr = (!isNaN(yieldVal) && isFinite(yieldVal)) ? yieldVal.toFixed(14) : '0.00000000000000';
 

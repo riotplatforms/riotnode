@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 
 const BINANCE_BTC_USDT_API = 'https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT';
-const DEFAULT_BTC_PRICE = 65000;
+const DEFAULT_BTC_PRICE = 78000;
 
 export function usePrice() {
     const [btcPrice, setBtcPrice] = useState<number>(() => {

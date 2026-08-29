@@ -320,7 +320,7 @@ const Dashboard: React.FC = () => {
                     if (isViolated) {
                         recordPermanentStakeFlush(address, i);
                     } else {
-                        const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
+                        const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 78000;
                         if (!finished) {
                             runningStakedSum += stakeAmount;
                             totalActiveStaked += stakeAmount;

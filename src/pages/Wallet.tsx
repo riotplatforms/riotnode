@@ -110,7 +110,7 @@ const Wallet: React.FC = () => {
                     if (isViolated) {
                         recordPermanentStakeFlush(address, i);
                     } else {
-                        const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
+                        const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 78000;
                         // Only active (non-finished) stakes require wallet balance and count towards active staked sum
                         if (!finished) {
                             runningStakedSum += stakeAmount;
@@ -148,7 +148,7 @@ const Wallet: React.FC = () => {
 
             // Detailed Team Update
             const tree = await getTeamTree(address);
-            const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 65000;
+            const safeBtcPrice = btcPrice && btcPrice > 0 && !isNaN(btcPrice) ? btcPrice : 78000;
             const teamStats = await getTeamMiningStats(tree, safeBtcPrice);
             const directCount = Math.floor(parseFloat(formatUnits(info.totalBonus, 18)) / 20);
             
