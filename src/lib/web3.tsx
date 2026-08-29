@@ -267,6 +267,19 @@ const getWalletConnectionLink = (walletName: string | null | undefined, encodedU
 // user scans with their phone's wallet app).
 const isMobileUA = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
+// WalletConnect sessions expire (1-7 days, wallet dependent). An expired
+// session still sits in WC storage — provider.session is truthy and
+// provider.accounts still lists the old account — so the app LOOKS connected,
+// but eth_sendTransaction published on the dead session topic never reaches
+// the wallet: the wallet opens (deep link) but shows NO approval popup.
+export const isWCSessionExpired = (provider: any): boolean => {
+    try {
+        if (!provider || typeof provider.connect !== 'function') return false; // not a WC provider
+        const expiry = Number(provider?.session?.expiry || 0);
+        return expiry > 0 && (expiry * 1000) < Date.now() + 30000; // expired / expiring within 30s
+    } catch { return false; }
+};
+
 const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: string): string => {
     const url = encodeURIComponent(dappUrl);
     switch ((walletName || '').toLowerCase()) {
@@ -1202,6 +1215,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 const provider = await getGlobalEthereumProvider();
 
                 if (provider.session) {
+                    // EXPIRED SESSION CHECK — an expired session LOOKS connected
+                    // (session + accounts still in storage) but transactions never
+                    // reach the wallet (no approval popup). Disconnect and require
+                    // a clean reconnect instead of silently restoring it.
+                    if (isWCSessionExpired(provider)) {
+                        console.warn('[Web3] Boot: stored WC session is EXPIRED — disconnecting so the user reconnects cleanly');
+                        try { await provider.disconnect(); } catch {}
+                        localStorage.removeItem('aimining_is_walletconnect');
+                        localStorage.removeItem('aimining_address');
+                        localStorage.removeItem('aimining_manual_address');
+                    } else {
                     const accounts = provider.accounts;
                     if (accounts && accounts.length > 0) {
                         const connectedAddress = accounts[0];
@@ -1219,12 +1243,17 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 
                                 if (args && isSignOrTx) {
                                     const promise = originalRequest(args);
-                                    const redirectUrl = getRedirectLinkForProvider(provider);
-                                    if (redirectUrl) {
-                                        console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
-                                        setTimeout(() => {
-                                            launchExternalLink(redirectUrl);
-                                        }, 150);
+                                    // Only redirect on mobile (wallet app on same device).
+                                    // Desktop: the deep link just opens the wallet's
+                                    // download website — the user scans/checks their phone.
+                                    if (isMobileUA()) {
+                                        const redirectUrl = getRedirectLinkForProvider(provider);
+                                        if (redirectUrl) {
+                                            console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
+                                            setTimeout(() => {
+                                                launchExternalLink(redirectUrl);
+                                            }, 150);
+                                        }
                                     }
                                     return promise;
                                 }
@@ -1245,6 +1274,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                         setIsWalletConnect(true);
                         localStorage.setItem('aimining_is_walletconnect', 'true');
                         return;
+                    }
                     }
                 }
             } catch (err) {

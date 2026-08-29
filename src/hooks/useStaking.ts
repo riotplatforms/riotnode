@@ -1,6 +1,6 @@
 import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString, Interface } from 'ethers';
 import { useRef, useEffect } from 'react';
-import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl, getGlobalEthereumProvider, setGlobalAppKitProvider } from '../lib/web3';
+import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl, getGlobalEthereumProvider, setGlobalAppKitProvider, isWCSessionExpired } from '../lib/web3';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 // Create Interface instances for encoding function data
@@ -16,6 +16,10 @@ const CONTRACT_IFACE = new Interface(ABI);
 const ERC20_IFACE = new Interface(ERC20_ABI);
 
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
+
+// Mobile detection — used to decide when to deep-link the wallet app after a
+// transaction request (mobile: wallet is a separate app on the same phone).
+const isMobileUA = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
 const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 120000): Promise<T> => {
     const tg = (window as any).Telegram?.WebApp;
@@ -52,12 +56,14 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
         } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
     };
 
-    // TMA only: deep-link to the wallet app after a delay so the tx request
-    // reaches the WC relay first. Non-TMA (wallet's built-in dApp browser /
-    // desktop): NEVER redirect — the wallet's native approval prompt appears
-    // over the page automatically, and opening a wallet URL here navigates the
-    // dApp browser away and kills the pending approval prompt.
-    if (isTMA) {
+    // Deep-link to the wallet app after a delay so the tx request reaches the
+    // WC relay first. Applies to TMA AND mobile browsers (Chrome etc.) where the
+    // wallet is a separate app on the same phone. NEVER redirect on desktop
+    // (QR user checks their phone) or inside a wallet's built-in dApp browser
+    // (window.ethereum exists there — the native approval prompt appears over
+    // the page automatically and a redirect would navigate away and kill it).
+    const mobileBrowser = isMobileUA() && !(window as any).ethereum;
+    if (isTMA || mobileBrowser) {
         setTimeout(doRedirect, 1500);
     }
 
@@ -418,8 +424,22 @@ const buildSignerFn = () => {
         }
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
 
-        // If the WalletConnect session is truly gone (expired / never established),
-        // fail FAST with a clear message. Never call provider.connect() here - it
+        // EXPIRED SESSION CHECK (local + instant): an expired WalletConnect
+        // session still sits in storage, so the app LOOKS connected — but
+        // publishing eth_sendTransaction on the dead session topic never
+        // reaches the wallet (wallet opens via deep link but shows NO approval
+        // popup). Detect it, disconnect cleanly and ask the user to reconnect.
+        if (isWCSessionExpired(provider)) {
+            console.warn('[useStaking] sendRawTx: WC session EXPIRED — disconnecting + requiring reconnect');
+            try { await provider.disconnect(); } catch (e) { console.warn('[useStaking] disconnect failed:', e); }
+            setGlobalAppKitProvider(null as any);
+            (window as any).__globalAppKitProvider = null;
+            (window as any).__manualWalletProvider = null;
+            throw new Error("Your wallet connection has expired. Please tap Connect Wallet to reconnect, then try again.");
+        }
+
+        // If the WalletConnect session is truly gone (never established), fail
+        // FAST with a clear message. Never call provider.connect() here - it
         // starts a NEW pairing and blocks the transaction behind a prompt the user
         // can never see (the wallet is only opened by the redirect afterwards).
         if (typeof provider.connect === 'function' && !provider.connected && !provider.session) {
