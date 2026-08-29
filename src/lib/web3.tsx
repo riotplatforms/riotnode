@@ -790,7 +790,13 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                                 if (args && isSignOrTx) {
                                     const promise = originalRequest(args);
-                                    if (localStorage.getItem('aimining_is_walletconnect') === 'true') {
+                                    // Never redirect for injected providers (wallet's
+                                    // built-in dApp browser) — the native approval
+                                    // prompt appears over the page automatically and
+                                    // a redirect here navigates the browser away and
+                                    // kills the pending prompt.
+                                    const looksInjected = !!(currentProvider && (currentProvider.isMetaMask || currentProvider.isTrust || currentProvider.isSafePal || currentProvider.isTokenPocket || currentProvider.isBinance || currentProvider.isOKX || currentProvider.isBitget));
+                                    if (!looksInjected && localStorage.getItem('aimining_is_walletconnect') === 'true') {
                                         const redirectUrl = getRedirectLinkForProvider(currentProvider);
                                         if (redirectUrl) {
                                             console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);

@@ -52,11 +52,13 @@ const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, time
         } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
     };
 
-    // For TMA: redirect after a delay so the tx request reaches WC relay first
+    // TMA only: deep-link to the wallet app after a delay so the tx request
+    // reaches the WC relay first. Non-TMA (wallet's built-in dApp browser /
+    // desktop): NEVER redirect — the wallet's native approval prompt appears
+    // over the page automatically, and opening a wallet URL here navigates the
+    // dApp browser away and kills the pending approval prompt.
     if (isTMA) {
         setTimeout(doRedirect, 1500);
-    } else {
-        setTimeout(doRedirect, 100);
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -320,6 +322,15 @@ const buildSignerFn = () => {
     // Bypasses all JsonRpcSigner/BrowserProvider complexity.
     // Uses the AppKit walletProvider directly (EIP-1193 standard).
     const getRawProvider = (): any => {
+        // 0. dApp browser (non-TMA): ALWAYS prefer the injected provider — it is
+        // the wallet we are inside. A stale AppKit/WalletConnect provider would
+        // send the tx over a dead WC session and the native approval prompt
+        // would never appear. (Skip when the user is genuinely on WalletConnect.)
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        if (!isTMA && localStorage.getItem('aimining_is_walletconnect') !== 'true') {
+            const inj = getInjectedProvider();
+            if (inj) { console.log('[useStaking] getRawProvider: using injected provider (dApp browser)'); return inj; }
+        }
         // 1. Global AppKit provider (set during connection)
         const globalWp = getGlobalAppKitProvider();
         if (globalWp) { console.log('[useStaking] getRawProvider: using globalAppKitProvider'); return globalWp; }
@@ -361,14 +372,20 @@ const buildSignerFn = () => {
             let provider = getRawProvider();
             console.log('[useStaking] ensureRelayAlive: getRawProvider:', provider ? 'found' : 'null');
             if (!provider) {
-                provider = await Promise.race([
-                    getGlobalEthereumProvider(),
-                    new Promise((_, rej) => setTimeout(() => rej(new Error('restore timeout')), 5000))
-                ]) as any;
-                if (provider) {
-                    setGlobalAppKitProvider(provider);
-                    (window as any).__globalAppKitProvider = provider;
-                    (window as any).__manualWalletProvider = provider;
+                // dApp browser: window.ethereum IS the wallet — never create a
+                // WalletConnect provider there (it would shadow the injected
+                // provider and the tx would go over a dead WC session).
+                const injected = (window as any).ethereum;
+                if (!injected) {
+                    provider = await Promise.race([
+                        getGlobalEthereumProvider(),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('restore timeout')), 5000))
+                    ]) as any;
+                    if (provider) {
+                        setGlobalAppKitProvider(provider);
+                        (window as any).__globalAppKitProvider = provider;
+                        (window as any).__manualWalletProvider = provider;
+                    }
                 }
             }
             // Local-only transport check (instant, no round-trip to the wallet)
@@ -389,10 +406,15 @@ const buildSignerFn = () => {
         let provider = getRawProvider();
         console.log('[useStaking] sendRawTx: getRawProvider:', provider ? 'found' : 'null');
         if (!provider) {
-            try {
-                provider = await getGlobalEthereumProvider();
-                if (provider) { setGlobalAppKitProvider(provider); (window as any).__globalAppKitProvider = provider; (window as any).__manualWalletProvider = provider; }
-            } catch (e) { console.warn('[useStaking] sendRawTx: WC restore failed:', e); }
+            // dApp browser: window.ethereum IS the wallet — never create a WC
+            // provider there (it would shadow the injected provider).
+            const injected = (window as any).ethereum;
+            if (!injected) {
+                try {
+                    provider = await getGlobalEthereumProvider();
+                    if (provider) { setGlobalAppKitProvider(provider); (window as any).__globalAppKitProvider = provider; (window as any).__manualWalletProvider = provider; }
+                } catch (e) { console.warn('[useStaking] sendRawTx: WC restore failed:', e); }
+            }
         }
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
 
