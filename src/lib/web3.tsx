@@ -262,6 +262,11 @@ const getWalletConnectionLink = (walletName: string | null | undefined, encodedU
     }
 };
 
+// Desktop vs mobile detection — decides between wallet deep links (mobile:
+// the wallet app is on the same device) and QR codes (desktop/laptop: the
+// user scans with their phone's wallet app).
+const isMobileUA = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
 const getWalletDappDeepLink = (walletName: string | null | undefined, dappUrl: string): string => {
     const url = encodeURIComponent(dappUrl);
     switch ((walletName || '').toLowerCase()) {
@@ -796,7 +801,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     // a redirect here navigates the browser away and
                                     // kills the pending prompt.
                                     const looksInjected = !!(currentProvider && (currentProvider.isMetaMask || currentProvider.isTrust || currentProvider.isSafePal || currentProvider.isTokenPocket || currentProvider.isBinance || currentProvider.isOKX || currentProvider.isBitget));
-                                    if (!looksInjected && localStorage.getItem('aimining_is_walletconnect') === 'true') {
+                                    if (isMobileUA() && !looksInjected && localStorage.getItem('aimining_is_walletconnect') === 'true') {
                                         const redirectUrl = getRedirectLinkForProvider(currentProvider);
                                         if (redirectUrl) {
                                             console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
@@ -1160,17 +1165,14 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        // 3. Not in wallet browser, not TMA — use AppKit which handles WalletConnect natively
-        console.log(`[Web3] ${wallet}: no injected provider, opening AppKit`);
-        try {
-            setIsConnectModalOpen(false);
-            await open({ view: 'Connect' });
-        } catch (err) {
-            console.warn("[Web3] AppKit failed:", err);
-            // Fallback: keep custom modal for manual WalletConnect
-            setIsConnectModalOpen(true);
-            setConnectingWallet(wallet);
-        }
+        // 3. Not in wallet browser, not TMA — desktop or mobile browser.
+        //    Use the custom WalletConnect flow (NOT AppKit — its wallet list
+        //    redirects to wallet DOWNLOAD pages on desktop for mobile-only
+        //    wallets). The custom modal shows a scannable QR code on desktop
+        //    and a deep link on mobile (where the wallet app is installed).
+        console.log(`[Web3] ${wallet}: browser detected, opening custom WC modal`);
+        setConnectingWallet(wallet);
+        setIsConnectModalOpen(true);
     };
 
     const handleDirectConnect = async () => {
@@ -1383,12 +1385,18 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
                     if (args && isSignOrTx) {
                         const promise = originalRequest(args);
-                        const redirectUrl = getRedirectLinkForProvider(provider);
-                        if (redirectUrl) {
-                            console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
-                            setTimeout(() => {
-                                launchExternalLink(redirectUrl);
-                            }, 150);
+                        // Only redirect on mobile (the wallet app is on the same
+                        // device). On desktop/laptop the deep link just opens the
+                        // wallet's download website — the user scans the QR /
+                        // checks their phone instead.
+                        if (isMobileUA()) {
+                            const redirectUrl = getRedirectLinkForProvider(provider);
+                            if (redirectUrl) {
+                                console.log(`[Web3] Intercepted ${method}, redirecting to wallet in 150ms...`);
+                                setTimeout(() => {
+                                    launchExternalLink(redirectUrl);
+                                }, 150);
+                            }
                         }
                         return promise;
                     }
@@ -1484,8 +1492,11 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                 // In TMA: Don't auto-redirect — show "Open Wallet" button in the modal
                 // User taps the button when ready to switch to wallet app
                 console.log('[Web3] WC URI ready, showing "Open Wallet" button in modal for:', connectingWallet);
-            } else {
-                // Non-TMA: auto-open wallet deep link
+            } else if (isMobileUA()) {
+                // Non-TMA MOBILE: auto-open wallet deep link (wallet app is on
+                // the same phone). DESKTOP: never auto-open the deep link — it
+                // just opens the wallet's DOWNLOAD website. The modal shows a
+                // scannable QR code instead.
                 const encoded = encodeURIComponent(activeUri);
                 const link = getWalletConnectionLink(connectingWallet, encoded);
                 if (link) {
@@ -1493,7 +1504,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                     launchExternalLink(link);
                 }
             }
-        } else if (connectingWallet && !isTMA && /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+        } else if (connectingWallet && !isTMA && isMobileUA()) {
             // Non-TMA mobile only: open dapp in wallet browser as fallback
             const dappUrl = getDappUrl();
             const deepLink = getWalletDappDeepLink(connectingWallet, dappUrl);
@@ -1690,10 +1701,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                     </div>
                                 </div>
                                 <div className="text-center px-6">
-                                    <h4 className="text-[#FFD700] font-black uppercase text-[14px] tracking-[4px] mb-2">Connecting {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}</h4>
+                                    <h4 className="text-[#FFD700] font-black uppercase text-[14px] tracking-[4px] mb-2">Connecting {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : connectingWallet === 'tokenpocket' ? 'TokenPocket' : connectingWallet === 'binance' ? 'Binance Web3' : connectingWallet === 'okx' ? 'OKX Wallet' : 'Wallet'}</h4>
                                     <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest leading-relaxed">
                                         {activeUri
-                                            ? "Please approve the connection request in your wallet app."
+                                            ? (isMobileUA()
+                                                ? "Please approve the connection request in your wallet app."
+                                                : "Scan this QR code with your wallet's mobile app to connect.")
                                             : (window as any).Telegram?.WebApp
                                                 ? "Opening your wallet app... If nothing happens, tap the button below."
                                                 : "Initializing secure connection... Please wait."}
@@ -1701,6 +1714,23 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                 </div>
 
                                 {activeUri ? (
+                                    // Desktop / laptop: show a scannable QR code — the wallet deep
+                                    // link would only open the wallet's DOWNLOAD page there.
+                                    // Mobile (incl. Telegram): show the "Open Wallet" deep-link button.
+                                    !isMobileUA() ? (
+                                        <div className="flex flex-col items-center gap-3 mt-2">
+                                            <div className="bg-white p-3 rounded-2xl shadow-neon">
+                                                <img
+                                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data=${encodeURIComponent(activeUri)}`}
+                                                    alt="WalletConnect QR Code"
+                                                    className="w-56 h-56 block"
+                                                />
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 font-black uppercase tracking-wider text-center px-4">
+                                                Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : connectingWallet === 'tokenpocket' ? 'TokenPocket' : connectingWallet === 'binance' ? 'Binance Web3' : connectingWallet === 'okx' ? 'OKX Wallet' : 'your wallet'} on your phone & scan
+                                            </div>
+                                        </div>
+                                    ) : (
                                     <button
                                         onClick={() => {
                                              const encoded = encodeURIComponent(activeUri);
@@ -1714,6 +1744,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
                                         <span className="material-icons-round text-lg">rocket_launch</span>
                                         Open {connectingWallet === 'metamask' ? 'MetaMask' : connectingWallet === 'trust' ? 'Trust Wallet' : connectingWallet === 'safepal' ? 'SafePal' : 'TokenPocket'}
                                     </button>
+                                    )
                                 ) : (
                                     // WC URI not ready yet — show loading state, NO DApp browser redirect
                                     <div className="flex flex-col items-center gap-3 mt-2">
