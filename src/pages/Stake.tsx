@@ -413,6 +413,16 @@ const Stake: React.FC = () => {
             if (account) return account;
         }
 
+        // TMA fallback: after a page reload in the Telegram WebView the AppKit
+        // context (address / signer / walletProvider) is often not synced yet and
+        // window.ethereum does NOT exist there — so everything above returns
+        // nothing even though the wallet is still connected (WC session persists
+        // in localStorage). The wallet address is saved at connect time; the
+        // actual transaction is sent via useStaking's raw EIP-1193 provider path
+        // (WC session restore), so the stored address is enough to proceed.
+        const storedAddress = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
+        if (storedAddress) return storedAddress;
+
         return undefined;
     };
 

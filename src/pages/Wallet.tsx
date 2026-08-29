@@ -9,7 +9,7 @@ import { parseEthersError } from '../utils/errors';
 
 const Wallet: React.FC = () => {
     const navigate = useNavigate();
-    const { address, isConnected, connect, signer, miningStats, setMiningStats } = useWallet();
+    const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
 
     const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { btcPrice } = usePrice();
@@ -196,13 +196,16 @@ const Wallet: React.FC = () => {
     }, [miningStats]);
 
     const handleWithdraw = async () => {
-        if (!signer) {
+        // Resolve the wallet address WITHOUT requiring a live signer. In TMA the
+        // signer is often null after a page reload even though the wallet is still
+        // connected (WC session + stored address persist). withdraw() sends the
+        // transaction via the raw EIP-1193 provider path, so a live signer is NOT
+        // required. Only open the connect modal when this device never connected.
+        const userAddress = address
+            || localStorage.getItem('aimining_address')
+            || localStorage.getItem('aimining_manual_address');
+        if (!userAddress) {
             connect();
-            return;
-        }
-
-        if (!address) {
-            showAlert('Wallet not connected. Please reconnect.');
             return;
         }
 
@@ -210,14 +213,14 @@ const Wallet: React.FC = () => {
 
         setLoading(true);
         try {
-            const info = await getStakedInfo(address);
+            const info = await getStakedInfo(userAddress);
             if (!info || info.stakeCount === 0) {
                 showAlert('No active mining cycle found.');
                 return;
             }
 
             // Get current wallet balance for violation check
-            const wBalance = await getWalletBalance(address);
+            const wBalance = await getWalletBalance(userAddress);
             if (wBalance === null) {
                 showAlert('Could not read wallet balance. Try again.');
                 return;
@@ -228,7 +231,7 @@ const Wallet: React.FC = () => {
             let runningStakedSum = 0;
 
             for (let i = 0; i < info.stakeCount; i++) {
-                const detail = await getStakeDetails(address, i);
+                const detail = await getStakeDetails(userAddress, i);
                 if (detail === null) {
                     throw new Error("RPC error: Failed to fetch stake details. Please try again.");
                 }
@@ -236,12 +239,12 @@ const Wallet: React.FC = () => {
 
                 const stakeAmount = parseFloat(formatUnits(detail.amount, 18));
                 const finished = (Date.now() / 1000) > detail.startTime + (37 * 86400);
-                const wasFlushed = isStakePermanentlyFlushed(address, i);
+                const wasFlushed = isStakePermanentlyFlushed(userAddress, i);
                 const isBalanceSufficient = finished || (wBalanceNum + 0.1) >= runningStakedSum + stakeAmount;
                 if (isBalanceSufficient && wasFlushed) {
-                    clearPermanentStakeFlush(address, i);
+                    clearPermanentStakeFlush(userAddress, i);
                 }
-                const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
+                const isViolated = isStakePermanentlyFlushed(userAddress, i) || (!finished && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
 
                 if (!isViolated) {
                     if (!finished) {
