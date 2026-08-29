@@ -349,39 +349,37 @@ const buildSignerFn = () => {
 
     // ── Pre-flight: Ensure WC relay is alive BEFORE sendTxWithRedirect. ──
     const ensureRelayAlive = async (): Promise<void> => {
-        const isTMA = !!(window as any).Telegram?.WebApp;
-        if (!isTMA) return;
-        let provider = getRawProvider();
-        console.log('[useStaking] ensureRelayAlive: getRawProvider:', provider ? 'found' : 'null');
-        if (!provider) {
-            try {
-                provider = await getGlobalEthereumProvider();
-                if (provider) { setGlobalAppKitProvider(provider); (window as any).__globalAppKitProvider = provider; (window as any).__manualWalletProvider = provider; }
-            } catch (e) { console.warn('[useStaking] ensureRelayAlive: WC restore failed:', e); }
-        }
-        if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
-        if (typeof provider.connect !== 'function') return;
-        if (!provider.connected) {
-            console.log('[useStaking] ensureRelayAlive: reconnecting...');
-            try { await Promise.race([provider.connect(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000))]); await new Promise(r => setTimeout(r, 1000)); } catch (e) { console.warn('[useStaking] ensureRelayAlive: connect failed:', e); }
-        }
+        // FAST and NON-BLOCKING pre-flight. It must never delay the redirect to the
+        // wallet app, and it must NEVER do a wallet round-trip (eth_chainId etc):
+        // in the Telegram Mini App the wallet app is CLOSED, so any wallet
+        // round-trip times out 100% of the time. The eth_sendTransaction request
+        // is PUBLISHED to the WalletConnect relay server and is delivered to the
+        // wallet the moment the deep link opens it - no wallet response is needed
+        // upfront. This function only ensures a provider exists (fast) and logs
+        // the local transport state (instant, no network call).
         try {
-            const chainId = await Promise.race([provider.request({ method: 'eth_chainId' }), new Promise((_, rej) => setTimeout(() => rej(new Error('relay ping timeout')), 8000))]);
-            console.log('[useStaking] ensureRelayAlive: relay alive, chainId:', chainId);
-        } catch (pingErr) {
-            console.warn('[useStaking] ensureRelayAlive: relay ping failed, reconnecting...', String(pingErr));
-            try {
-                await provider.connect(); await new Promise(r => setTimeout(r, 2000));
-                await Promise.race([provider.request({ method: 'eth_chainId' }), new Promise((_, rej) => setTimeout(() => rej(new Error('verify timeout')), 8000))]);
-                console.log('[useStaking] ensureRelayAlive: reconnect succeeded');
-            } catch (reconnErr) {
-                console.warn('[useStaking] ensureRelayAlive: reconnect failed, trying fresh provider...', String(reconnErr));
-                try {
-                    const fp = await getGlobalEthereumProvider();
-                    if (fp && fp.session) { await fp.connect(); await new Promise(r => setTimeout(r, 2000)); setGlobalAppKitProvider(fp); (window as any).__globalAppKitProvider = fp; (window as any).__manualWalletProvider = fp; console.log('[useStaking] ensureRelayAlive: fresh provider created'); }
-                    else throw new Error("No active WalletConnect session found.");
-                } catch (finalErr) { throw new Error("Wallet relay connection lost. Please reconnect your wallet and try again."); }
+            let provider = getRawProvider();
+            console.log('[useStaking] ensureRelayAlive: getRawProvider:', provider ? 'found' : 'null');
+            if (!provider) {
+                provider = await Promise.race([
+                    getGlobalEthereumProvider(),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('restore timeout')), 5000))
+                ]) as any;
+                if (provider) {
+                    setGlobalAppKitProvider(provider);
+                    (window as any).__globalAppKitProvider = provider;
+                    (window as any).__manualWalletProvider = provider;
+                }
             }
+            // Local-only transport check (instant, no round-trip to the wallet)
+            const relayer: any = (provider as any)?.signClient?.core?.relayer;
+            if (relayer && typeof relayer.connected === 'boolean' && !relayer.connected) {
+                console.warn('[useStaking] ensureRelayAlive: WC transport not connected - SDK will auto-reconnect on publish');
+            }
+        } catch (e) {
+            // Pre-flight must NEVER block or fail the transaction - sendRawTx
+            // handles missing providers with a clear error.
+            console.warn('[useStaking] ensureRelayAlive: non-fatal pre-flight issue:', e);
         }
     };
 
@@ -398,13 +396,12 @@ const buildSignerFn = () => {
         }
         if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
 
-        // Quick reconnect if disconnected (relay check already done in ensureRelayAlive)
-        if (typeof provider.connect === 'function' && !provider.connected) {
-            console.log('[useStaking] sendRawTx: provider not connected, quick reconnect...');
-            try {
-                await Promise.race([provider.connect(), new Promise((_, reject) => setTimeout(() => reject(new Error('connect timeout')), 15000))]);
-                await new Promise(r => setTimeout(r, 1000));
-            } catch (e) { console.warn('[useStaking] sendRawTx: quick reconnect failed:', e); }
+        // If the WalletConnect session is truly gone (expired / never established),
+        // fail FAST with a clear message. Never call provider.connect() here - it
+        // starts a NEW pairing and blocks the transaction behind a prompt the user
+        // can never see (the wallet is only opened by the redirect afterwards).
+        if (typeof provider.connect === 'function' && !provider.connected && !provider.session) {
+            throw new Error("Wallet session expired. Please reconnect your wallet and try again.");
         }
 
         console.log('[useStaking] sendRawTx: sending eth_sendTransaction, connected:', provider.connected);
