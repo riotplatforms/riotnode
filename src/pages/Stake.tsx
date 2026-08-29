@@ -676,15 +676,9 @@ const Stake: React.FC = () => {
         }
         setLoading(`withdraw-${index}`);
         try {
-            const tx = await withdraw(index);
-            try {
-                if (tx && typeof tx.wait === 'function') {
-                    await tx.wait();
-                }
-            } catch (waitErr: any) {
-                console.warn("[Withdraw] tx.wait failed after wallet redirect:", waitErr?.shortMessage || waitErr);
-            }
-            showAlert('Success: Withdrawal completed!');
+            await withdraw(index);
+            // withdraw returns tx hash (string) from provider.request — wallet already approved
+            showAlert('Success: Withdrawal submitted! Funds will arrive shortly.');
             await updateStakes();
         } catch (err: any) {
             showAlert(parseEthersError(err));
