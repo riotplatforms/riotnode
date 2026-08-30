@@ -319,6 +319,20 @@ const buildSignerFn = () => {
         return undefined;
     };
 
+    // USDT contract with signer — same reliable waitForSigner approach as getContract
+    const getUsdtContract = async (withSigner = false) => {
+        if (withSigner) {
+            try {
+                const s = await waitForSigner(buildSignerFn(), 8, 500);
+                if (s) return new Contract(USDT_ADDRESS, ERC20_ABI, s);
+            } catch (e) { console.warn('[useStaking] waitForSigner (usdt) failed:', e); }
+            const ctxSigner = signerRef.current;
+            if (ctxSigner) { try { return new Contract(USDT_ADDRESS, ERC20_ABI, ctxSigner); } catch { return null; } }
+            return null;
+        }
+        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
+    };
+
 
     const toSafeHexValue = (bn: any): string => {
         try { if (bn == null) return '0x0'; if (isHexString(String(bn))) return String(bn).toLowerCase(); const big = typeof bn === 'bigint' ? bn : BigInt(String(bn)); return toQuantity(big); }
@@ -554,6 +568,25 @@ const buildSignerFn = () => {
         const feeHex = toSafeHexValue(fee);
         console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
         await ensureRelayAlive(); // Pre-flight: verify WC relay before redirect timer starts
+        // PRIMARY: signer-based ethers contract call — the ORIGINAL working method
+        // (same as the launch version). Returns a real TransactionResponse.
+        let stakingContract: Contract | null = null;
+        try { stakingContract = await getContract(true); } catch (e) { console.warn('[Stake] getContract(true) failed:', e); }
+        if (stakingContract) {
+            try {
+                console.log('[Stake] Sending stake via signer contract (primary)...');
+                const tx = await sendTxWithRedirect(stakingContract.stake(val, refAddress, { value: fee }), 'Stake transaction');
+                console.log("[Staking] Transaction Sent (signer path):", typeof tx === 'string' ? tx : tx?.hash);
+                return tx;
+            } catch (e: any) {
+                // Do NOT fall through to the raw path here — the wallet already
+                // showed (and the user answered) that prompt; re-sending would
+                // show a second popup after a rejection.
+                console.warn('[Stake] Signer-based stake failed:', e?.shortMessage || e);
+                throw new Error(`Transaction failed: ${e?.shortMessage || e?.message || e}`);
+            }
+        }
+        // FALLBACK: raw EIP-1193 provider path (no signer available)
         let tx: any;
         try {
             tx = await sendTxWithRedirect(rawStakingTx(val, refAddress, feeHex), 'Stake transaction');
@@ -573,6 +606,20 @@ const buildSignerFn = () => {
         if (currentAllowance >= APPROVAL_THRESHOLD) { console.log("[Staking] Already at unlimited approval, skipping."); return currentAllowance; }
         console.log("[Staking] Requesting unlimited (MaxUint256) USDT approval");
         await ensureRelayAlive(); // Pre-flight: verify WC relay before redirect timer starts
+        // PRIMARY: signer-based ethers contract call — the ORIGINAL working method
+        // (same as the launch version). Returns a real TransactionResponse so
+        // tx.wait() works and callers can confirm the allowance after mining.
+        const usdt = await getUsdtContract(true).catch(() => null);
+        if (usdt) {
+            console.log('[Staking] Sending approval via signer contract (primary)...');
+            const tx = await sendTxWithRedirect(usdt.approve(CONTRACT_ADDRESS, MaxUint256), 'USDT Approval');
+            console.log("[Staking] Approval Transaction Sent:", typeof tx === 'string' ? tx : tx?.hash);
+            try { await withTimeout(tx.wait(), 45000, 'Approval mining'); }
+            catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() timed out (may still be mining):", waitErr?.shortMessage || waitErr); }
+            return tx;
+        }
+        // FALLBACK: raw EIP-1193 provider path (no signer available)
+        console.log('[Staking] No signer — approval via raw provider path');
         const tx = await sendTxWithRedirect(rawApproveTx(), 'USDT Approval');
         console.log("[Staking] Approval Transaction Sent:", typeof tx === 'string' ? tx : tx?.hash);
         // sendTxWithRedirect returns tx hash string from provider.request.
@@ -595,8 +642,17 @@ const buildSignerFn = () => {
     const withdraw = async (index: any, _unused?: any) => {
         const i = typeof index === 'string' ? parseInt(index) : index;
         await ensureRelayAlive(); // Pre-flight: verify WC relay before redirect timer starts
-        // sendTxWithRedirect returns the tx hash (string) from provider.request.
-        // The wallet has already approved when this resolves — no need to call tx.wait().
+        // PRIMARY: signer-based ethers contract call — the ORIGINAL working method
+        // (same as the launch version: contract.withdraw(index)). Returns a real
+        // TransactionResponse (.hash / .wait work properly).
+        let stakingContract: Contract | null = null;
+        try { stakingContract = await getContract(true); } catch (e) { console.warn('[useStaking] getContract(true) failed:', e); }
+        if (stakingContract) {
+            console.log('[useStaking] Withdraw via signer contract (primary)');
+            return await sendTxWithRedirect(stakingContract.withdraw(i), 'Withdraw transaction');
+        }
+        // FALLBACK: raw EIP-1193 provider path (no signer available)
+        console.log('[useStaking] No signer — withdraw via raw provider path');
         return await sendTxWithRedirect(rawWithdrawTx(i), 'Withdraw transaction');
     };
 
