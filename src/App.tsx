@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
+import DebugPanel from './components/DebugPanel';
 import Dashboard from './pages/Dashboard';
 import Stake from './pages/Stake';
 import Team from './pages/Team';
@@ -108,9 +109,14 @@ function AppContent() {
         {/* Subtle Admin Debug Info (Only for admins) */}
         {isUserAdmin && (
           <div className="fixed bottom-0 left-0 right-0 p-1 bg-black/80 text-[6px] text-primary/50 text-center pointer-events-none z-[9999] font-mono">
-            Auth: {address} | Ver: 1.0.5 | Admin: YES
+            Auth: {address} | Ver: 2.0.0-D1 | Admin: YES
           </div>
         )}
+
+        {/* On-device debug log viewer — lets us see what happens inside the
+            Telegram WebView (no devtools there). Tap the bug icon, reproduce
+            the issue, then Copy Logs and paste to the developer. */}
+        <DebugPanel />
       </Layout>
     </>
   );

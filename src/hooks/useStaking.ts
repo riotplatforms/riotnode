@@ -388,8 +388,9 @@ const buildSignerFn = () => {
         // wallet the moment the deep link opens it - no wallet response is needed
         // upfront. This function only ensures a provider exists (fast) and logs
         // the local transport state (instant, no network call).
+        let provider: any = null;
         try {
-            let provider = getRawProvider();
+            provider = getRawProvider();
             console.log('[useStaking] ensureRelayAlive: getRawProvider:', provider ? 'found' : 'null');
             if (!provider) {
                 // dApp browser: window.ethereum IS the wallet — never create a
@@ -414,9 +415,22 @@ const buildSignerFn = () => {
                 console.warn('[useStaking] ensureRelayAlive: WC transport not connected - SDK will auto-reconnect on publish');
             }
         } catch (e) {
-            // Pre-flight must NEVER block or fail the transaction - sendRawTx
+            // Pre-flight issues must never block the transaction — sendRawTx
             // handles missing providers with a clear error.
             console.warn('[useStaking] ensureRelayAlive: non-fatal pre-flight issue:', e);
+        }
+        // EXPIRED SESSION GUARD (must fail LOUDLY, not be swallowed above):
+        // a dead session means the wallet NEVER receives the transaction — the
+        // user would see the wallet open (deep link) with NO approval popup and
+        // the request would hang for 2 minutes. Detect it here, disconnect and
+        // demand a clean reconnect instead.
+        if (isWCSessionExpired(provider)) {
+            console.warn('[useStaking] ensureRelayAlive: WC session EXPIRED — disconnecting + requiring reconnect');
+            try { await provider.disconnect(); } catch (e) { console.warn('[useStaking] disconnect failed:', e); }
+            setGlobalAppKitProvider(null as any);
+            (window as any).__globalAppKitProvider = null;
+            (window as any).__manualWalletProvider = null;
+            throw new Error("Your wallet connection has expired. Please tap Connect Wallet to reconnect, then try again.");
         }
     };
 
