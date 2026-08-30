@@ -213,13 +213,20 @@ const buildSignerFn = () => {
         let sessionPinged = false;
 
         return async () => {
-            const getAnyAddress = () => address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
-            const anyAddr = getAnyAddress();
-            if (!anyAddr) return null;
-
             // ★ STEP 1: Try GLOBAL AppKit walletProvider (persists across page navigations)
             const globalWp = getGlobalAppKitProvider();
             if (!globalWp) return null;
+
+            // The wallet only shows approval prompts for requests whose `from`
+            // matches its OWN active account — prefer the live session account
+            // over any stored (possibly stale / different-wallet) address.
+            let anyAddr: string | undefined;
+            try {
+                const accts: any = (globalWp as any).accounts;
+                if (Array.isArray(accts) && accts.length > 0) anyAddr = accts[0];
+            } catch (e) { /* fall through */ }
+            if (!anyAddr) anyAddr = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address') || undefined;
+            if (!anyAddr) return null;
 
             const bp = new BrowserProvider(globalWp);
 
@@ -409,10 +416,24 @@ const buildSignerFn = () => {
                     }
                 }
             }
-            // Local-only transport check (instant, no round-trip to the wallet)
+            // Local transport check (instant, no round-trip to the wallet).
+            // If the dapp's WebSocket to the WalletConnect relay server is dead
+            // (Telegram WebView was suspended/resumed), the eth_sendTransaction
+            // publish never reaches the relay — the wallet opens via deep link
+            // but shows NO approval popup. Re-open the transport LOCALLY here
+            // (same proven method as web3.tsx's visibilitychange handler).
             const relayer: any = (provider as any)?.signClient?.core?.relayer;
             if (relayer && typeof relayer.connected === 'boolean' && !relayer.connected) {
-                console.warn('[useStaking] ensureRelayAlive: WC transport not connected - SDK will auto-reconnect on publish');
+                console.warn('[useStaking] ensureRelayAlive: WC transport DEAD — reopening (transportOpen)...');
+                try {
+                    if (typeof relayer.transportOpen === 'function') {
+                        await withTimeout(relayer.transportOpen(), 8000, 'transportOpen');
+                    }
+                    await new Promise(r => setTimeout(r, 500));
+                    console.log('[useStaking] ensureRelayAlive: transport reopened, connected =', relayer.connected);
+                } catch (e) {
+                    console.warn('[useStaking] ensureRelayAlive: transportOpen failed:', e);
+                }
             }
         } catch (e) {
             // Pre-flight issues must never block the transaction — sendRawTx
@@ -478,24 +499,39 @@ const buildSignerFn = () => {
         return await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
     };
 
+    // The wallet only displays approval prompts for requests whose `from`
+    // matches its OWN active account. If the stored localStorage address
+    // belongs to an older wallet than the current session, the wallet
+    // receives the request and silently shows NOTHING. Always prefer the
+    // live provider session account.
+    const getTxFromAddress = (): string | undefined => {
+        const wp: any = getRawProvider();
+        try {
+            if (Array.isArray(wp?.accounts) && wp.accounts.length > 0) return wp.accounts[0];
+            const nsAcct = wp?.session?.namespaces?.eip155?.accounts?.[0];
+            if (nsAcct) { const parts = String(nsAcct).split(':'); if (parts.length === 3) return parts[2]; }
+        } catch (e) { /* fall through */ }
+        return getStoredAddress() || address;
+    };
+
     // Encode a contract function call and send as raw transaction
     const rawStakingTx = async (amount: bigint, referrer: string, feeHex: string): Promise<any> => {
         const data = CONTRACT_IFACE.encodeFunctionData('stake', [amount, referrer]);
-        const anyAddr = getStoredAddress() || address;
+        const anyAddr = getTxFromAddress();
         if (!anyAddr) throw new Error("Wallet address not available");
         return await sendRawTx({ from: anyAddr, to: CONTRACT_ADDRESS, data, value: feeHex });
     };
 
     const rawApproveTx = async (): Promise<any> => {
         const data = ERC20_IFACE.encodeFunctionData('approve', [CONTRACT_ADDRESS, MaxUint256]);
-        const anyAddr = getStoredAddress() || address;
+        const anyAddr = getTxFromAddress();
         if (!anyAddr) throw new Error("Wallet address not available");
         return await sendRawTx({ from: anyAddr, to: USDT_ADDRESS, data });
     };
 
     const rawWithdrawTx = async (stakeIndex: number): Promise<any> => {
         const data = CONTRACT_IFACE.encodeFunctionData('withdraw', [stakeIndex]);
-        const anyAddr = getStoredAddress() || address;
+        const anyAddr = getTxFromAddress();
         if (!anyAddr) throw new Error("Wallet address not available");
         return await sendRawTx({ from: anyAddr, to: CONTRACT_ADDRESS, data });
     };
