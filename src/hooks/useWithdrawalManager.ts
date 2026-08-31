@@ -1,114 +1,117 @@
-import { Contract, parseUnits, formatUnits, JsonRpcProvider, BrowserProvider } from 'ethers';
-import { useWallet } from '../lib/web3';
-import { CONTRACT_ABI as WITHDRAWAL_MANAGER_ABI } from '../lib/abi';
-import { WITHDRAWAL_MANAGER_ADDRESS } from '../lib/contracts'; 
+/**
+ * useWithdrawalManager — Withdrawal request hook (Rewritten write path)
+ * =============================================================================
+ * ALL writes (requestReferralWithdrawal / requestStakingRewardWithdrawal /
+ * approveWithdrawal / processWithdrawal) go through
+ * walletService.sendWalletTransaction() — the unified EIP-1193 path that uses
+ * the exact provider + account the wallet connected with, enforces the BSC
+ * chain, pre-estimates gas on public RPC, deep-links the wallet app on
+ * mobile / TMA, and confirms via public-RPC receipt polling.
+ *
+ * The old implementation called browserProvider.getSigner() which dispatches
+ * eth_requestAccounts — in Telegram Mini App the wallet app is not open to
+ * answer, so it hung forever and NO withdrawal transaction was ever created.
+ * That is exactly the bug this rewrite fixes.
+ *
+ * Reads use public BSC RPC nodes with rotation. API surface unchanged.
+ */
 
-const BSC_RPC_NODES = [
-    'https://bsc-dataseed.binance.org',
-    'https://bsc-dataseed1.binance.org',
-    'https://binance.llamarpc.com',
-    'https://bsc-rpc.publicnode.com',
-    'https://bsc.meowrpc.com'
-];
-let _wmRpcIdx = 0;
-const getWmProvider = (): JsonRpcProvider => new JsonRpcProvider(BSC_RPC_NODES[_wmRpcIdx % BSC_RPC_NODES.length]);
+import { Contract, parseUnits, formatUnits, Interface } from 'ethers';
+import { walletService } from '../lib/walletService';
+import { CONTRACT_ABI as WITHDRAWAL_MANAGER_ABI } from '../lib/abi';
+import { WITHDRAWAL_MANAGER_ADDRESS } from '../lib/contracts';
+
+const WM_IFACE = new Interface(WITHDRAWAL_MANAGER_ABI);
 
 export function useWithdrawalManager() {
-    const { signer, walletProvider } = useWallet();
-
-    const getContract = async (withSigner = false) => {
-        if (withSigner) {
-            if (signer) return new Contract(WITHDRAWAL_MANAGER_ADDRESS, WITHDRAWAL_MANAGER_ABI, signer);
-            if (walletProvider) {
-                const browserProvider = new BrowserProvider(walletProvider as any);
-                const s = await browserProvider.getSigner();
-                return new Contract(WITHDRAWAL_MANAGER_ADDRESS, WITHDRAWAL_MANAGER_ABI, s);
+    // ─── READ path (public RPC rotation) ────────────────────────────────────
+    const callReadOnly = async <T,>(fn: (contract: Contract) => Promise<T>): Promise<T> => {
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+                const provider = walletService.getReadProvider();
+                const contract = new Contract(WITHDRAWAL_MANAGER_ADDRESS, WITHDRAWAL_MANAGER_ABI as any, provider);
+                return await fn(contract);
+            } catch (err) {
+                lastErr = err;
+                walletService.rotateRpc();
             }
-            if ((window as any).ethereum) {
-                const browserProvider = new BrowserProvider((window as any).ethereum);
-                const s = await browserProvider.getSigner();
-                return new Contract(WITHDRAWAL_MANAGER_ADDRESS, WITHDRAWAL_MANAGER_ABI, s);
-            }
-            throw new Error("Wallet connection not ready. Please ensure your wallet is connected and try again.");
         }
-        const readOnlyProvider = getWmProvider();
-        return new Contract(WITHDRAWAL_MANAGER_ADDRESS, WITHDRAWAL_MANAGER_ABI, readOnlyProvider);
+        throw lastErr;
     };
 
+    // ─── WRITE path (unified, via walletService) ────────────────────────────
+    const sendWrite = async (functionName: string, args: any[], label: string) => {
+        const from = walletService.getTransactionFromAddress();
+        if (!from) throw new Error('Wallet connection not ready. Please reconnect your wallet and try again.');
+        const data = WM_IFACE.encodeFunctionData(functionName, args);
+        const hash = await walletService.sendWalletTransaction({
+            to: WITHDRAWAL_MANAGER_ADDRESS,
+            data,
+            from,
+            label,
+        });
+        return walletService.waitForReceipt(hash);
+    };
+
+    // ─── User actions ───────────────────────────────────────────────────────
     const requestReferralWithdrawal = async () => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
-        const contract = await getContract(true);
-        const tx = await contract.requestReferralWithdrawal();
-        return await tx.wait();
+        return await sendWrite('requestReferralWithdrawal', [], 'Referral withdrawal request');
     };
 
     const requestStakingRewardWithdrawal = async (amount: string) => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
-        const contract = await getContract(true);
         const val = parseUnits(amount, 18);
-        const tx = await contract.requestStakingRewardWithdrawal(val);
-        return await tx.wait();
+        return await sendWrite('requestStakingRewardWithdrawal', [val], 'Staking reward withdrawal request');
     };
 
+    // ─── Admin actions ───────────────────────────────────────────────────────
     const approveWithdrawal = async (requestId: number) => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
-        const contract = await getContract(true);
-        const tx = await contract.approveWithdrawal(requestId);
-        return await tx.wait();
+        return await sendWrite('approveWithdrawal', [requestId], 'Approve withdrawal');
     };
 
     const processWithdrawal = async (requestId: number) => {
-        if (!signer) throw new Error("Wallet not fully connected. Please reconnect.");
-        const contract = await getContract(true);
-        const tx = await contract.processWithdrawal(requestId);
-        return await tx.wait();
+        return await sendWrite('processWithdrawal', [requestId], 'Process withdrawal');
     };
 
+    // ─── Reads ───────────────────────────────────────────────────────────────
     const getPendingRequestsCount = async () => {
-        const contract = await getContract();
-        const count = await contract.getPendingRequestsCount();
+        const count = await callReadOnly(async (contract) => await contract.getPendingRequestsCount());
         return Number(count);
     };
 
     const getUserRequests = async (userAddress: string) => {
-        const contract = await getContract();
-        const requests = await contract.getUserRequests(userAddress);
+        const requests = await callReadOnly(async (contract) => await contract.getUserRequests(userAddress));
         return requests.map((id: any) => Number(id));
     };
 
     const getWithdrawalRequest = async (requestId: number) => {
-        const contract = await getContract();
-        const request = await contract.withdrawalRequests(requestId);
+        const request = await callReadOnly(async (contract) => await contract.withdrawalRequests(requestId));
         return {
             user: request.user,
             amount: formatUnits(request.amount, 18),
             requestTime: Number(request.requestTime),
             approved: request.approved,
             processed: request.processed,
-            withdrawalType: request.withdrawalType
+            withdrawalType: request.withdrawalType,
         };
     };
 
     const hasCompletedStakingCycle = async (userAddress: string) => {
-        const contract = await getContract();
-        return await contract.hasCompletedStakingCycle(userAddress);
+        return await callReadOnly(async (contract) => await contract.hasCompletedStakingCycle(userAddress));
     };
 
     const getMatureStakingRewards = async (userAddress: string) => {
-        const contract = await getContract();
-        const rewards = await contract.getMatureStakingRewards(userAddress);
+        const rewards = await callReadOnly(async (contract) => await contract.getMatureStakingRewards(userAddress));
         return formatUnits(rewards, 18);
     };
 
     const getTotalStakingRewardsWithdrawn = async (userAddress: string) => {
-        const contract = await getContract();
-        const withdrawn = await contract.totalStakingRewardsWithdrawn(userAddress);
+        const withdrawn = await callReadOnly(async (contract) => await contract.totalStakingRewardsWithdrawn(userAddress));
         return formatUnits(withdrawn, 18);
     };
 
     const getTotalReferralRewardsWithdrawn = async (userAddress: string) => {
-        const contract = await getContract();
-        const withdrawn = await contract.totalReferralRewardsWithdrawn(userAddress);
+        const withdrawn = await callReadOnly(async (contract) => await contract.totalReferralRewardsWithdrawn(userAddress));
         return formatUnits(withdrawn, 18);
     };
 

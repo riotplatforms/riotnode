@@ -11,6 +11,7 @@ import trustLogo from '../assets/trust.png';
 import binanceLogo from '../assets/binance.png';
 import okxLogo from '../assets/okx.png';
 import { walletConnectionsManager } from './walletConnections';
+import { walletService } from './walletService';
 
 
 // 1. Connection Config (REOWN / WALLETCONNECT)
@@ -516,6 +517,48 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     const [_tpLoading, setTpLoading] = useState(false);
     const [showTpFallback, setShowTpFallback] = useState(false);
     const skipAutoConnectRef = React.useRef(false); // Prevent auto-reconnect after disconnect
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // SINGLE SOURCE OF TRUTH: register the live wallet provider with
+    // walletService. All contract write paths (stake / approve / withdraw /
+    // withdrawal requests / admin actions) go through
+    // walletService.sendWalletTransaction(), which uses THIS provider +
+    // account. This is what fixes "wallet connects but no transaction popup /
+    // no contract call" across Telegram Mini App, mobile browsers, dApp
+    // browsers and desktop — there is now exactly ONE provider and ONE
+    // account used for every sendTransaction.
+    // ─────────────────────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (isConnected && walletProvider && address) {
+            const peerName = (walletInfo?.name || '').toLowerCase();
+            let stored = '';
+            try { stored = (localStorage.getItem('aimining_wallet_type') || '').toLowerCase(); } catch { /* ignore */ }
+            const wt = peerName || stored || 'wallet';
+            const isWC = (() => {
+                try {
+                    if (localStorage.getItem('aimining_is_walletconnect') === 'true') return true;
+                } catch { /* ignore */ }
+                return !!(walletProvider as any).session;
+            })();
+            walletService.setActiveConnection(walletProvider, address, wt, isWC);
+        }
+    }, [isConnected, walletProvider, address, walletInfo]);
+
+    // Fallback registration for the manual (SignClient-restored) provider path
+    useEffect(() => {
+        if (manualWalletProvider && manualAddress) {
+            let wt = 'walletconnect';
+            try { wt = localStorage.getItem('aimining_wallet_type') || 'walletconnect'; } catch { /* ignore */ }
+            walletService.setActiveConnection(manualWalletProvider, manualAddress, wt, true);
+        }
+    }, [manualWalletProvider, manualAddress]);
+
+    // Clear the unified connection when the user disconnects
+    useEffect(() => {
+        if (!isConnected && !manualWalletProvider) {
+            walletService.clearActiveConnection();
+        }
+    }, [isConnected, manualWalletProvider]);
 
     // Sync wallet type from AppKit walletInfo
     useEffect(() => {

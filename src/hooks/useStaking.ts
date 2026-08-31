@@ -1,754 +1,336 @@
-import { Contract, parseUnits, formatUnits, MaxUint256, JsonRpcProvider, BrowserProvider, JsonRpcSigner, toQuantity, isHexString, Interface } from 'ethers';
-import { useRef, useEffect } from 'react';
-import { useWallet, getGlobalAppKitProvider, getWalletRedirectUrl, getGlobalEthereumProvider, setGlobalAppKitProvider, isWCSessionExpired } from '../lib/web3';
+﻿/**
+ * useStaking - Staking hook (Rewritten write path)
+ * ============================================================================
+ * ALL write transactions (USDT approve / stake / withdraw) now go through
+ * walletService.sendWalletTransaction() - the ONE unified EIP-1193 path that:
+ *   - uses the exact provider + account the wallet connected with
+ *   - enforces the BSC chain for injected wallets (switch/add prompt)
+ *   - pre-estimates gas on PUBLIC BSC RPC (WC wallets own estimation was a
+ *     root cause of transactions silently never reaching the wallet)
+ *   - deep-links into the wallet app on mobile / Telegram Mini App so the
+ *     approval sheet is always visible
+ *   - confirms via public-RPC receipt polling (survives WebView suspension)
+ *
+ * Reads use public BSC RPC nodes with automatic rotation.
+ * The exported API surface is IDENTICAL to the previous version, so no page
+ * needs to change.
+ */
+
+import { Contract, parseUnits, formatUnits, MaxUint256, Interface } from 'ethers';
+import { useWallet } from '../lib/web3';
+import { walletService } from '../lib/walletService';
 import { CONTRACT_ABI as ABI } from '../lib/abi';
 import { CONTRACT_ADDRESS, USDT_ADDRESS } from '../lib/contracts';
-// Create Interface instances for encoding function data
+
+// --- Encoding --------------------------------------------------------------
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
     "function allowance(address owner, address spender) external view returns (uint256)",
     "function balanceOf(address account) external view returns (uint256)"
 ];
 
-// Contract requires Unlimited/Max approval � use MaxUint256
-// Create Interface instances for encoding function data
 const CONTRACT_IFACE = new Interface(ABI);
 const ERC20_IFACE = new Interface(ERC20_ABI);
 
 const APPROVAL_THRESHOLD = MaxUint256 / 2n;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+const EVENTS_FROM_BLOCK = 110320760;
 
-// Mobile detection — used to decide when to deep-link the wallet app after a
-// transaction request (mobile: wallet is a separate app on the same phone).
-const isMobileUA = () => /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
-const sendTxWithRedirect = async <T,>(txPromise: Promise<T>, label: string, timeoutMs = 120000): Promise<T> => {
-    const tg = (window as any).Telegram?.WebApp;
-    const isTMA = !!tg;
-
-    try { if (tg?.HapticFeedback?.impactOccurred) tg.HapticFeedback.impactOccurred('medium'); } catch (_) { /* Telegram 6.0: HapticFeedback may not be supported */ }
-
-    // Redirect to wallet app so user can approve the transaction.
-    // The tx request is already in-flight via WC relay (txPromise was started
-    // before this function was called). Opening the wallet lets the user see
-    // and approve the pending request.
-    //
-    // FIX: In TMA, delay redirect longer (1500ms) to give the WC relay time to
-    // deliver the eth_sendTransaction request to the wallet before the WebView
-    // suspends. If the redirect fires before the relay receives the request,
-    // the wallet opens but shows nothing to approve.
-    let redirected = false;
-    const doRedirect = () => {
-        if (redirected) return;
-        redirected = true;
-        try {
-            const redirectUrl = getWalletRedirectUrl();
-            if (redirectUrl) {
-                if (isTMA) {
-                    console.log(`[useStaking] TMA: opening wallet for: ${label} → ${redirectUrl}`);
-                    try { tg.openLink(redirectUrl, { try_instant_view: false }); } catch (_) { /* ignore */ }
-                } else {
-                    console.log(`[useStaking] Redirecting to wallet for: ${label} → ${redirectUrl}`);
-                    window.open(redirectUrl, '_blank');
-                }
-            } else {
-                console.log(`[useStaking] No wallet redirect URL — user must approve in wallet manually: ${label}`);
-            }
-        } catch (e) { console.warn('[useStaking] Redirect failed:', e); }
-    };
-
-    // Deep-link to the wallet app after a delay so the tx request reaches the
-    // WC relay first. Applies to TMA AND mobile browsers (Chrome etc.) where the
-    // wallet is a separate app on the same phone. NEVER redirect on desktop
-    // (QR user checks their phone) or inside a wallet's built-in dApp browser
-    // (window.ethereum exists there — the native approval prompt appears over
-    // the page automatically and a redirect would navigate away and kill it).
-    const mobileBrowser = isMobileUA() && !(window as any).ethereum;
-    if (isTMA || mobileBrowser) {
-        setTimeout(doRedirect, 1500);
-    }
-
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} timed out after 2 minutes. Please check your wallet app for pending approvals.`)), timeoutMs); });
-    try { return await Promise.race([txPromise, timeout]); } finally { if (timer) clearTimeout(timer); }
-};
-
-const waitForSigner = async (getSignerFn: () => Promise<any>, maxAttempts?: number, delayMs = 500): Promise<any> => {
-    const isTMA = !!(window as any).Telegram?.WebApp;
-    const attempts = maxAttempts ?? (isTMA ? 10 : 15);
-    let lastError: any;
-    for (let i = 0; i < attempts; i++) {
-        try {
-            const s = await getSignerFn();
-            if (s) return s;
-        } catch (e: any) {
-            lastError = e;
-            const msg = e?.message || String(e?.code || '');
-            if (msg.includes('Already processing') || msg.includes('user rejected') || msg.includes('User rejected')) {
-                throw e;
-            }
-        }
-        const backoff = Math.min(delayMs + i * 100, 1500);
-        await new Promise((res) => setTimeout(res, backoff));
-    }
-    throw lastError || new Error('Wallet signer not ready after retries. Please reconnect your wallet.');
-};
-
-export const getTierRate = (val: number) => {
-    if (val >= 10000) return 0.12;
-    if (val >= 5000) return 0.08;
-    if (val >= 2000) return 0.07;
-    if (val >= 1000) return 0.065;
-    if (val >= 500) return 0.06;
-    if (val >= 50) return 0.055;
+/** Tier rate for a given stake amount (matches on-chain tiers). */
+export const getTierRate = (amount: number): number => {
+    if (amount >= 10000) return 0.12;
+    if (amount >= 5000) return 0.08;
+    if (amount >= 2000) return 0.07;
+    if (amount >= 1000) return 0.06;
+    if (amount >= 500) return 0.055;
+    if (amount >= 50) return 0.05;
     return 0;
 };
 
-const RPC_NODES = [
-    'https://bsc-dataseed.binance.org',
-    'https://bsc-dataseed1.binance.org',
-    'https://bsc-dataseed2.binance.org',
-    'https://bsc-dataseed3.binance.org',
-    'https://bsc-dataseed4.binance.org',
-    'https://binance.llamarpc.com',
-    'https://bsc-rpc.publicnode.com',
-    'https://bsc.meowrpc.com'
-];
-let currentRpcIdx = 0;
-
-// Provider cache to avoid creating new providers for every call
-const providerCache = new Map<string, JsonRpcProvider>();
-const getCachedProvider = (rpcUrl: string): JsonRpcProvider => {
-    let provider = providerCache.get(rpcUrl);
-    if (!provider) {
-        provider = new JsonRpcProvider(rpcUrl);
-        providerCache.set(rpcUrl, provider);
-    }
-    return provider;
-};
-
-// Simple request throttler � max 3 concurrent RPC calls
-let activeRequests = 0;
-const MAX_CONCURRENT = 3;
-const requestQueue: (() => void)[] = [];
-const acquireSlot = () => new Promise<void>((resolve) => {
-    if (activeRequests < MAX_CONCURRENT) { activeRequests++; resolve(); return; }
-    requestQueue.push(() => { activeRequests++; resolve(); });
-});
-const releaseSlot = () => {
-    activeRequests--;
-    if (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
-        const next = requestQueue.shift()!;
-        next();
-    }
-};
-
-// 429 backoff tracker per RPC node
-const rpcCooldown = new Map<string, number>();
-
-// Utility: race a promise against a timeout
-const withTimeout = <T>(promise: Promise<T>, ms: number, label = 'Operation'): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout>;
-    const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-};
-
-const callReadOnly = async <T>(fn: (contract: Contract) => Promise<T>, isUsdt = false): Promise<T> => {
-    let lastError: any;
-    const contractAddr = isUsdt ? USDT_ADDRESS : CONTRACT_ADDRESS;
-    const abi = isUsdt ? ERC20_ABI : ABI;
-
-    for (let attempt = 0; attempt < RPC_NODES.length; attempt++) {
-        // Skip nodes on cooldown (429 backoff)
-        const rpcUrl = RPC_NODES[currentRpcIdx];
-        const cooldownUntil = rpcCooldown.get(rpcUrl) || 0;
-        if (Date.now() < cooldownUntil) {
-            currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
-            continue;
-        }
-
-        await acquireSlot();
-        try {
-            const provider = getCachedProvider(rpcUrl);
-            const contract = new Contract(contractAddr, abi, provider);
-            // Add 10s timeout per individual RPC call to prevent hanging
-            const result = await withTimeout(fn(contract), 10000, `RPC call (${rpcUrl})`);
-            return result;
-        } catch (err: any) {
-            lastError = err;
-            const errMsg = String(err?.message || err?.code || '');
-            // Detect 429 rate limit and put this node on cooldown
-            if (errMsg.includes('429') || errMsg.includes('Too Many Requests') || err?.status === 429) {
-                console.warn(`[useStaking] RPC ${rpcUrl} rate-limited (429). Cooling down 15s.`);
-                rpcCooldown.set(rpcUrl, Date.now() + 15000);
-            } else {
-                console.warn(`[useStaking] RPC Call failed on ${rpcUrl} (attempt ${attempt + 1}/${RPC_NODES.length}):`, errMsg);
-            }
-            currentRpcIdx = (currentRpcIdx + 1) % RPC_NODES.length;
-            // Small delay between retries to avoid hammering
-            if (attempt < RPC_NODES.length - 1) {
-                await new Promise(r => setTimeout(r, 500 + attempt * 300));
-            }
-        } finally {
-            releaseSlot();
-        }
-    }
-    throw lastError || new Error("All RPC nodes failed. Please wait a moment and try again.");
-};
-
 export function useStaking() {
-    const { address, isConnected, signer, walletProvider, manualWalletProvider } = useWallet();
-    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+    const { address, isConnected } = useWallet();
 
-    // FIX: Use refs to avoid stale closure bug � buildSignerFn captures signer at render time,
-    // but waitForSigner retries may run after signer is set in a later render.
-    const signerRef = useRef(signer);
-    const walletProviderRef = useRef(walletProvider);
-    useEffect(() => { signerRef.current = signer; }, [signer]);
-    useEffect(() => { walletProviderRef.current = walletProvider; }, [walletProvider]);
-
-const buildSignerFn = () => {
-        // Track whether we've attempted WC session activation via eth_requestAccounts
-        let sessionPinged = false;
-
-        return async () => {
-            // ★ STEP 1: Try GLOBAL AppKit walletProvider (persists across page navigations)
-            const globalWp = getGlobalAppKitProvider();
-            if (!globalWp) return null;
-
-            // The wallet only shows approval prompts for requests whose `from`
-            // matches its OWN active account — prefer the live session account
-            // over any stored (possibly stale / different-wallet) address.
-            let anyAddr: string | undefined;
-            try {
-                const accts: any = (globalWp as any).accounts;
-                if (Array.isArray(accts) && accts.length > 0) anyAddr = accts[0];
-            } catch (e) { /* fall through */ }
-            if (!anyAddr) anyAddr = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address') || undefined;
-            if (!anyAddr) return null;
-
-            const bp = new BrowserProvider(globalWp);
-
-            // ★ First attempt: getSigner() WITHOUT address → sends eth_requestAccounts to WC relay
-            //   This activates/pings the WC session so subsequent eth_sendTransaction requests reach the wallet.
-            if (!sessionPinged) {
-                sessionPinged = true;
-                try {
-                    console.log('[useStaking] Pinging WC session via getSigner()...');
-                    const signer = await withTimeout(bp.getSigner(), 5000, 'WC session ping');
-                    const addr = await signer.getAddress();
-                    if (addr) { console.log('[useStaking] WC session alive, got signer from getSigner()'); return signer; }
-                } catch (e) {
-                    console.log('[useStaking] getSigner() timed out (expected in TMA). eth_requestAccounts sent to WC relay.');
-                }
-            }
-
-            // ★ Create signer directly via JsonRpcSigner constructor
-            try {
-                const s = new JsonRpcSigner(bp, anyAddr);
-                await withTimeout(s.getAddress(), 2000, 'JsonRpcSigner verify');
-                console.log('[useStaking] Got signer via JsonRpcSigner constructor');
-                return s;
-            } catch (e) { console.warn('[useStaking] JsonRpcSigner creation failed:', e); }
-
-            const currentSigner = signerRef.current;
-            if (currentSigner) {
-                try { await withTimeout(currentSigner.getAddress(), 5000, 'Context signer getAddress'); return currentSigner; }
-                catch (e) { console.warn('[useStaking] Context signer invalid:', e); }
-            }
-
-            const fp = getInjectedProvider();
-            if (fp) {
-                try {
-                    const bp2 = new BrowserProvider(fp);
-                    const s = new JsonRpcSigner(bp2, anyAddr);
-                    await withTimeout(s.getAddress(), 2000, 'injected verify');
-                    return s;
-                } catch (e) { console.warn('[useStaking] injected signer failed:', e); }
-            }
-
-            return null;
-        };
-    };
-    const getContract = async (withSigner = false) => {
-        if (withSigner) {
-            // PRIMARY: Use waitForSigner + buildSignerFn (same reliable approach as getUsdtContract/approve)
-            // This tries injected, context signer, WC provider, AppKit walletProvider, and last-resort fallbacks
-            try {
-                const s = await waitForSigner(buildSignerFn(), 8, 500);
-                if (s) {
-                    console.log('[useStaking] Got signer via waitForSigner (primary)');
-                    return new Contract(CONTRACT_ADDRESS, ABI, s);
-                }
-            } catch (e) { console.warn('[useStaking] waitForSigner (primary) failed:', e); }
-
-            // FALLBACK 1: Quick context signer check (no timeout overhead)
-            const ctxSigner = signerRef.current;
-            if (ctxSigner) {
-                try {
-                    await ctxSigner.getAddress();
-                    console.log('[useStaking] Using context signer (fallback)');
-                    return new Contract(CONTRACT_ADDRESS, ABI, ctxSigner);
-                } catch (e) { console.warn('[useStaking] Context signer invalid:', e); }
-            }
-
-            // FALLBACK 2: AppKit walletProvider with short timeout � use JsonRpcSigner to avoid eth_requestAccounts
-            const ctxAddress = address || localStorage.getItem('aimining_manual_address') || localStorage.getItem('aimining_address');
-            if (ctxAddress && walletProvider) {
-                try {
-                    const bp = new BrowserProvider(walletProvider as any);
-                    // KEY: JsonRpcSigner constructor bypasses eth_requestAccounts (which hangs in TMA)
-                    const s = new JsonRpcSigner(bp, ctxAddress);
-                    await withTimeout(s.getAddress(), 3000, 'JsonRpcSigner verify (fallback)');
-                    if (s) { console.log('[useStaking] Got signer via AppKit walletProvider (fallback)'); return new Contract(CONTRACT_ADDRESS, ABI, s); }
-                } catch (e) { console.warn('[useStaking] AppKit walletProvider signer failed:', e); }
-            }
-
-            throw new Error("Wallet signer not ready. Please reconnect your wallet.");
-        }
-        return new Contract(CONTRACT_ADDRESS, ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
-    };
-
-    const getInjectedProvider = () => {
-        const eth = (window as any).ethereum;
-        if (eth) {
-            if (Array.isArray(eth.providers) && eth.providers.length > 0) { const best = eth.providers.find((p: any) => p.isMetaMask || p.isTokenPocket || p.isTrust || p.isSafePal || p.isBinance || p.isOKX || p.isBitget); if (best) return best; }
-            return eth;
-        }
-        const tp = (window as any).tokenpocket?.ethereum; if (tp) return tp;
-        const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider; if (sp) return sp;
-        const trust = (window as any).trustwallet?.ethereum || (window as any).trustwallet; if (trust) return trust;
-        const binance = (window as any).binance?.ethereum || (window as any).binance; if (binance) return binance;
-        const okx = (window as any).okxwallet?.ethereum || (window as any).okxwallet; if (okx) return okx;
-        const bitget = (window as any).bitget?.ethereum || (window as any).bitget; if (bitget) return bitget;
-        const fallbackProvider = (window as any).web3?.currentProvider; if (fallbackProvider) return fallbackProvider;
-        return undefined;
-    };
-
-    // USDT contract with signer — same reliable waitForSigner approach as getContract
-    const getUsdtContract = async (withSigner = false) => {
-        if (withSigner) {
-            try {
-                const s = await waitForSigner(buildSignerFn(), 8, 500);
-                if (s) return new Contract(USDT_ADDRESS, ERC20_ABI, s);
-            } catch (e) { console.warn('[useStaking] waitForSigner (usdt) failed:', e); }
-            const ctxSigner = signerRef.current;
-            if (ctxSigner) { try { return new Contract(USDT_ADDRESS, ERC20_ABI, ctxSigner); } catch { return null; } }
-            return null;
-        }
-        return new Contract(USDT_ADDRESS, ERC20_ABI, new JsonRpcProvider(RPC_NODES[currentRpcIdx]));
-    };
-
-
-    const toSafeHexValue = (bn: any): string => {
-        try { if (bn == null) return '0x0'; if (isHexString(String(bn))) return String(bn).toLowerCase(); const big = typeof bn === 'bigint' ? bn : BigInt(String(bn)); return toQuantity(big); }
-        catch (e) { console.warn("[useStaking] toSafeHexValue fallback:", e); return '0x' + (BigInt(String(bn || 0))).toString(16); }
-    };
-// ── Raw EIP-1193 provider for write transactions ──
-    // Bypasses all JsonRpcSigner/BrowserProvider complexity.
-    // Uses the AppKit walletProvider directly (EIP-1193 standard).
-    const getRawProvider = (): any => {
-        // 0. dApp browser (non-TMA): ALWAYS prefer the injected provider — it is
-        // the wallet we are inside. A stale AppKit/WalletConnect provider would
-        // send the tx over a dead WC session and the native approval prompt
-        // would never appear. (Skip when the user is genuinely on WalletConnect.)
-        const isTMA = !!(window as any).Telegram?.WebApp;
-        if (!isTMA && localStorage.getItem('aimining_is_walletconnect') !== 'true') {
-            const inj = getInjectedProvider();
-            if (inj) { console.log('[useStaking] getRawProvider: using injected provider (dApp browser)'); return inj; }
-        }
-        // 1. Global AppKit provider (set during connection)
-        const globalWp = getGlobalAppKitProvider();
-        if (globalWp) { console.log('[useStaking] getRawProvider: using globalAppKitProvider'); return globalWp; }
-        // 2. Context / ref providers
-        const ctxWp = (window as any).__globalAppKitProvider || walletProvider || walletProviderRef.current;
-        if (ctxWp) { console.log('[useStaking] getRawProvider: using ctxWp'); return ctxWp; }
-        // 3. Manual WC provider (custom WalletConnect flow in TMA)
-        const mwp = (window as any).__manualWalletProvider || manualWalletProvider;
-        if (mwp) { console.log('[useStaking] getRawProvider: using manualWalletProvider'); return mwp; }
-        // 4. Injected provider (MetaMask, Trust Wallet extension, etc.)
-        const eth = (window as any).ethereum;
-        if (eth) {
-            // If multiple providers exist, try to find the right one
-            if (Array.isArray(eth.providers) && eth.providers.length > 0) {
-                // Trust Wallet first, then others
-                const trust = eth.providers.find((p: any) => p.isTrust);
-                if (trust) { console.log('[useStaking] getRawProvider: using injected Trust Wallet provider'); return trust; }
-                console.log('[useStaking] getRawProvider: using first injected provider');
-                return eth.providers[0];
-            }
-            console.log('[useStaking] getRawProvider: using window.ethereum');
-            return eth;
-        }
-        console.error('[useStaking] getRawProvider: ALL sources null');
-        return null;
-    };
-
-    // ── Pre-flight: Ensure WC relay is alive BEFORE sendTxWithRedirect. ──
-    const ensureRelayAlive = async (): Promise<void> => {
-        // FAST and NON-BLOCKING pre-flight. It must never delay the redirect to the
-        // wallet app, and it must NEVER do a wallet round-trip (eth_chainId etc):
-        // in the Telegram Mini App the wallet app is CLOSED, so any wallet
-        // round-trip times out 100% of the time. The eth_sendTransaction request
-        // is PUBLISHED to the WalletConnect relay server and is delivered to the
-        // wallet the moment the deep link opens it - no wallet response is needed
-        // upfront. This function only ensures a provider exists (fast) and logs
-        // the local transport state (instant, no network call).
-        let provider: any = null;
-        try {
-            provider = getRawProvider();
-            console.log('[useStaking] ensureRelayAlive: getRawProvider:', provider ? 'found' : 'null');
-            if (!provider) {
-                // dApp browser: window.ethereum IS the wallet — never create a
-                // WalletConnect provider there (it would shadow the injected
-                // provider and the tx would go over a dead WC session).
-                const injected = (window as any).ethereum;
-                if (!injected) {
-                    provider = await Promise.race([
-                        getGlobalEthereumProvider(),
-                        new Promise((_, rej) => setTimeout(() => rej(new Error('restore timeout')), 5000))
-                    ]) as any;
-                    if (provider) {
-                        setGlobalAppKitProvider(provider);
-                        (window as any).__globalAppKitProvider = provider;
-                        (window as any).__manualWalletProvider = provider;
-                    }
-                }
-            }
-            // Local transport check (instant, no round-trip to the wallet).
-            // If the dapp's WebSocket to the WalletConnect relay server is dead
-            // (Telegram WebView was suspended/resumed), the eth_sendTransaction
-            // publish never reaches the relay — the wallet opens via deep link
-            // but shows NO approval popup. Re-open the transport LOCALLY here
-            // (same proven method as web3.tsx's visibilitychange handler).
-            const relayer: any = (provider as any)?.signClient?.core?.relayer;
-            if (relayer && typeof relayer.connected === 'boolean' && !relayer.connected) {
-                console.warn('[useStaking] ensureRelayAlive: WC transport DEAD — reopening (transportOpen)...');
-                try {
-                    if (typeof relayer.transportOpen === 'function') {
-                        await withTimeout(relayer.transportOpen(), 8000, 'transportOpen');
-                    }
-                    await new Promise(r => setTimeout(r, 500));
-                    console.log('[useStaking] ensureRelayAlive: transport reopened, connected =', relayer.connected);
-                } catch (e) {
-                    console.warn('[useStaking] ensureRelayAlive: transportOpen failed:', e);
-                }
-            }
-        } catch (e) {
-            // Pre-flight issues must never block the transaction — sendRawTx
-            // handles missing providers with a clear error.
-            console.warn('[useStaking] ensureRelayAlive: non-fatal pre-flight issue:', e);
-        }
-        // EXPIRED SESSION GUARD (must fail LOUDLY, not be swallowed above):
-        // a dead session means the wallet NEVER receives the transaction — the
-        // user would see the wallet open (deep link) with NO approval popup and
-        // the request would hang for 2 minutes. Detect it here, disconnect and
-        // demand a clean reconnect instead.
-        if (isWCSessionExpired(provider)) {
-            console.warn('[useStaking] ensureRelayAlive: WC session EXPIRED — disconnecting + requiring reconnect');
-            try { await provider.disconnect(); } catch (e) { console.warn('[useStaking] disconnect failed:', e); }
-            setGlobalAppKitProvider(null as any);
-            (window as any).__globalAppKitProvider = null;
-            (window as any).__manualWalletProvider = null;
-            throw new Error("Your wallet connection has expired. Please tap Connect Wallet to reconnect, then try again.");
-        }
-    };
-
-    // Send a raw transaction via the EIP-1193 provider's request method.
-    // NOTE: ensureRelayAlive() should be called BEFORE this to verify the WC relay.
-    const sendRawTx = async (txParams: any): Promise<any> => {
-        let provider = getRawProvider();
-        console.log('[useStaking] sendRawTx: getRawProvider:', provider ? 'found' : 'null');
-        if (!provider) {
-            // dApp browser: window.ethereum IS the wallet — never create a WC
-            // provider there (it would shadow the injected provider).
-            const injected = (window as any).ethereum;
-            if (!injected) {
-                try {
-                    provider = await getGlobalEthereumProvider();
-                    if (provider) { setGlobalAppKitProvider(provider); (window as any).__globalAppKitProvider = provider; (window as any).__manualWalletProvider = provider; }
-                } catch (e) { console.warn('[useStaking] sendRawTx: WC restore failed:', e); }
-            }
-        }
-        if (!provider) throw new Error("No wallet provider available. Please reconnect your wallet.");
-
-        // EXPIRED SESSION CHECK (local + instant): an expired WalletConnect
-        // session still sits in storage, so the app LOOKS connected — but
-        // publishing eth_sendTransaction on the dead session topic never
-        // reaches the wallet (wallet opens via deep link but shows NO approval
-        // popup). Detect it, disconnect cleanly and ask the user to reconnect.
-        if (isWCSessionExpired(provider)) {
-            console.warn('[useStaking] sendRawTx: WC session EXPIRED — disconnecting + requiring reconnect');
-            try { await provider.disconnect(); } catch (e) { console.warn('[useStaking] disconnect failed:', e); }
-            setGlobalAppKitProvider(null as any);
-            (window as any).__globalAppKitProvider = null;
-            (window as any).__manualWalletProvider = null;
-            throw new Error("Your wallet connection has expired. Please tap Connect Wallet to reconnect, then try again.");
-        }
-
-        // If the WalletConnect session is truly gone (never established), fail
-        // FAST with a clear message. Never call provider.connect() here - it
-        // starts a NEW pairing and blocks the transaction behind a prompt the user
-        // can never see (the wallet is only opened by the redirect afterwards).
-        if (typeof provider.connect === 'function' && !provider.connected && !provider.session) {
-            throw new Error("Wallet session expired. Please reconnect your wallet and try again.");
-        }
-
-        console.log('[useStaking] sendRawTx: sending eth_sendTransaction, connected:', provider.connected);
-        return await provider.request({ method: 'eth_sendTransaction', params: [txParams] });
-    };
-
-    // The wallet only displays approval prompts for requests whose `from`
-    // matches its OWN active account. If the stored localStorage address
-    // belongs to an older wallet than the current session, the wallet
-    // receives the request and silently shows NOTHING. Always prefer the
-    // live provider session account.
-    const getTxFromAddress = (): string | undefined => {
-        const wp: any = getRawProvider();
-        try {
-            if (Array.isArray(wp?.accounts) && wp.accounts.length > 0) return wp.accounts[0];
-            const nsAcct = wp?.session?.namespaces?.eip155?.accounts?.[0];
-            if (nsAcct) { const parts = String(nsAcct).split(':'); if (parts.length === 3) return parts[2]; }
-        } catch (e) { /* fall through */ }
-        return getStoredAddress() || address;
-    };
-
-    // Encode a contract function call and send as raw transaction
-    const rawStakingTx = async (amount: bigint, referrer: string, feeHex: string): Promise<any> => {
-        const data = CONTRACT_IFACE.encodeFunctionData('stake', [amount, referrer]);
-        const anyAddr = getTxFromAddress();
-        if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({ from: anyAddr, to: CONTRACT_ADDRESS, data, value: feeHex });
-    };
-
-    const rawApproveTx = async (): Promise<any> => {
-        const data = ERC20_IFACE.encodeFunctionData('approve', [CONTRACT_ADDRESS, MaxUint256]);
-        const anyAddr = getTxFromAddress();
-        if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({ from: anyAddr, to: USDT_ADDRESS, data });
-    };
-
-    const rawWithdrawTx = async (stakeIndex: number): Promise<any> => {
-        const data = CONTRACT_IFACE.encodeFunctionData('withdraw', [stakeIndex]);
-        const anyAddr = getTxFromAddress();
-        if (!anyAddr) throw new Error("Wallet address not available");
-        return await sendRawTx({ from: anyAddr, to: CONTRACT_ADDRESS, data });
-    };
-
+    // --- Address resolution ----------------------------------------------
+    // Prefer the LIVE session account (wallet only shows approval prompts for
+    // requests whose `from` matches its own active account).
     const getStoredAddress = (): string | undefined => {
-        const storedAddress = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
-        if (storedAddress) return storedAddress;
+        const activeAddr = walletService.getActiveAddress();
+        if (activeAddr) return activeAddr;
+        try {
+            const stored = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
+            if (stored) return stored;
+        } catch { /* ignore */ }
         const eth = (window as any).ethereum;
         if (eth?.selectedAddress) return eth.selectedAddress;
         if (Array.isArray(eth?.accounts) && eth.accounts.length > 0) return eth.accounts[0];
-        const tp = (window as any).tokenpocket?.ethereum; if (tp?.selectedAddress) return tp.selectedAddress;
-        if (Array.isArray(tp?.accounts) && tp.accounts.length > 0) return tp.accounts[0];
-        const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider; if (sp?.selectedAddress) return sp.selectedAddress;
-        if (Array.isArray(sp?.accounts) && sp.accounts.length > 0) return sp.accounts[0];
+        const tp = (window as any).tokenpocket?.ethereum;
+        if (tp?.selectedAddress) return tp.selectedAddress;
+        const sp = (window as any).safepal?.ethereum || (window as any).safepalProvider;
+        if (sp?.selectedAddress) return sp.selectedAddress;
         return undefined;
     };
 
-    const getSignerAddress = async (): Promise<string | undefined> => {
-        const storedAddress = getStoredAddress(); if (storedAddress) return storedAddress;
-        if (address) return address;
-        if (signer) { try { return await withTimeout(signer.getAddress(), 5000, 'signer.getAddress'); } catch (e) { console.warn('[useStaking] signer.getAddress failed:', e); } }
-        if (walletProvider) {
-            const providerAny = walletProvider as any;
-            try { const browserProvider = new BrowserProvider(providerAny); const signerFromProvider = await withTimeout(browserProvider.getSigner(), 5000, 'walletProvider getSigner'); const addr = await withTimeout(signerFromProvider.getAddress(), 5000, 'walletProvider getAddress'); if (addr) return addr; } catch (e) { console.warn('[useStaking] walletProvider signer failed:', e); }
-            if (providerAny.selectedAddress) return providerAny.selectedAddress;
-            if (Array.isArray(providerAny.accounts) && providerAny.accounts.length > 0) return providerAny.accounts[0];
-            if (Array.isArray(providerAny.wallets) && providerAny.wallets.length > 0) return providerAny.wallets[0];
-            if (providerAny.request) { try { const accounts = await withTimeout(providerAny.request({ method: 'eth_accounts' }), 5000, 'walletProvider eth_accounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (e) { console.warn('[useStaking] walletProvider eth_accounts failed:', e); } }
-        }
-        const injectedProvider = getInjectedProvider();
-        if (injectedProvider) {
-            try { const browserProvider = new BrowserProvider(injectedProvider as any); const signerFromProvider = await withTimeout(browserProvider.getSigner(), 5000, 'injected getSigner'); const addr = await withTimeout(signerFromProvider.getAddress(), 5000, 'injected getAddress'); if (addr) return addr; } catch (e) { console.warn('[useStaking] injected provider signer failed:', e); }
-            const injectedAny = injectedProvider as any;
-            if (injectedAny.selectedAddress) return injectedAny.selectedAddress;
-            if (Array.isArray(injectedAny.accounts) && injectedAny.accounts.length > 0) return injectedAny.accounts[0];
-            if (typeof injectedAny.request === 'function') { try { let accounts = await withTimeout(injectedAny.request({ method: 'eth_accounts' }), 5000, 'injected eth_accounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; accounts = await withTimeout(injectedAny.request({ method: 'eth_requestAccounts' }), 5000, 'injected eth_requestAccounts'); if (Array.isArray(accounts) && accounts.length > 0) return accounts[0]; } catch (err) { console.warn('[useStaking] injected provider account request failed:', err); } }
-        }
-        return undefined;
+    const getOwnerAddress = (): string | undefined => {
+        return walletService.getTransactionFromAddress() || getStoredAddress() || (address as any) || undefined;
     };
 
-    const stake = async (amount: string, customReferrer?: string, skipApproval = false) => {
-        console.log(`[Stake] Starting stake: amount=${amount}, skipApproval=${skipApproval}`);
-        let owner: string | undefined;
+    // --- READ path (public BSC RPC with rotation + retries) ----------------
+    const callReadOnly = async <T,>(fn: (contract: Contract) => Promise<T>, useUsdt = false): Promise<T> => {
+        let lastErr: any = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+                const provider = walletService.getReadProvider();
+                const target = useUsdt ? USDT_ADDRESS : CONTRACT_ADDRESS;
+                const abi = useUsdt ? ERC20_ABI : ABI;
+                const contract = new Contract(target, abi as any, provider);
+                return await fn(contract);
+            } catch (err) {
+                lastErr = err;
+                walletService.rotateRpc();
+            }
+        }
+        throw lastErr;
+    };
+
+    // --- WRITE path (unified, via walletService) ---------------------------
+    // Every write is a raw `eth_sendTransaction` on the ACTIVE provider with
+    // data pre-encoded here. No ethers signer / contract.populateTransaction
+    // round-trips to the wallet (those hang or die silently on WalletConnect).
+
+    /**
+     * USDT unlimited (MaxUint256) approval for the staking contract.
+     * Returns { hash, wait } once the user approves in the wallet.
+     * Skips (and returns the current allowance) when already unlimited.
+     */
+    const approve = async (): Promise<any> => {
+        const owner = getOwnerAddress();
+        if (!owner) throw new Error('Wallet connection not ready. Please reconnect your wallet and try again.');
+
+        const currentAllowanceStr = await getAllowance(owner);
+        const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
+        if (currentAllowance >= APPROVAL_THRESHOLD) {
+            console.log('[useStaking] Already at unlimited approval, skipping.');
+            return currentAllowance;
+        }
+
+        console.log('[useStaking] Requesting unlimited (MaxUint256) USDT approval');
+        const data = ERC20_IFACE.encodeFunctionData('approve', [CONTRACT_ADDRESS, MaxUint256]);
+        const hash = await walletService.sendWalletTransaction({
+            to: USDT_ADDRESS,
+            data,
+            from: owner,
+            label: 'USDT Approval',
+        });
+        console.log('[useStaking] Approval tx sent:', hash);
+
+        // Soft-confirm: poll allowance on-chain (works even if the WebView was
+        // suspended while the wallet mined the tx). Non-fatal on timeout - the
+        // stake() flow re-checks the allowance anyway.
         try {
-            owner = await withTimeout(getSignerAddress(), 15000, 'Get wallet address');
-        } catch (e: any) {
-            throw new Error(`Could not get wallet address: ${e?.message || e}. Please reconnect.`);
+            for (let p = 0; p < 30; p++) {
+                await sleep(2000);
+                const polled = await getAllowance(owner);
+                if (parseUnits(polled || '0', 18) >= APPROVAL_THRESHOLD) {
+                    console.log('[useStaking] Unlimited allowance confirmed on poll ' + (p + 1));
+                    break;
+                }
+            }
+        } catch (waitErr: any) {
+            console.warn('[useStaking] Allowance polling interrupted (tx may still be mining):', waitErr?.message || waitErr);
         }
-        if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
-        console.log(`[Stake] Owner address: ${owner}`);
+
+        return walletService.makeTxResponse(hash, 'USDT Approval');
+    };
+
+    /**
+     * Stake USDT. Handles the unlimited USDT approval first (unless
+     * skipApproval=true - used when the caller already approved).
+     * Returns { hash, wait } once the user approves the stake in the wallet.
+     */
+    const stake = async (amount: string, customReferrer?: string, skipApproval = false) => {
+        console.log('[useStaking] stake: amount=' + amount + ' skipApproval=' + skipApproval);
+        const owner = getOwnerAddress();
+        if (!owner) throw new Error('Wallet connection not ready. Please reconnect your wallet and try again.');
+
         const val = parseUnits(amount, 18);
-        // Only check approval if caller hasn't already handled it
+
+        // Approval gate (contract requires unlimited approval)
         if (!skipApproval) {
             const currentAllowanceStr = await getAllowance(owner);
-            const currentAllowance = parseUnits(currentAllowanceStr, 18);
+            const currentAllowance = parseUnits(currentAllowanceStr || '0', 18);
             if (currentAllowance < APPROVAL_THRESHOLD) {
-                console.log("[Staking] Unlimited approval required. Requesting MaxUint256 approval...");
+                console.log('[useStaking] Unlimited approval required. Requesting MaxUint256 approval...');
                 await approve();
                 const maxAttempts = 10;
                 for (let attempt = 0; attempt < maxAttempts; attempt++) {
-                    const refreshedAllowanceStr = await getAllowance(owner);
-                    const refreshedAllowance = parseUnits(refreshedAllowanceStr, 18);
-                    if (refreshedAllowance >= APPROVAL_THRESHOLD) break;
+                    const refreshed = parseUnits((await getAllowance(owner)) || '0', 18);
+                    if (refreshed >= APPROVAL_THRESHOLD) break;
                     await sleep(1500);
                 }
-                const finalAllowanceStr = await getAllowance(owner);
-                const finalAllowance = parseUnits(finalAllowanceStr, 18);
-                if (finalAllowance < APPROVAL_THRESHOLD) throw new Error("USDT unlimited approval not confirmed yet. Please wait and try again.");
+                const finalAllowance = parseUnits((await getAllowance(owner)) || '0', 18);
+                if (finalAllowance < APPROVAL_THRESHOLD) {
+                    throw new Error('USDT unlimited approval not confirmed yet. Please wait and try again.');
+                }
             }
         }
-        // NOTE: getContract(true) was removed here — the staking transaction is sent via
-        // rawStakingTx() → sendRawTx() → EIP-1193 provider, NOT through an ethers Contract instance.
-        // The old getContract(true) call was unnecessary, could timeout/fail, and its
-        // eth_requestAccounts ping could interfere with the subsequent eth_sendTransaction.
-        const refAddress = customReferrer || (address ? (localStorage.getItem('aimining_referrer') || '0x0000000000000000000000000000000000000000') : '0x0000000000000000000000000000000000000000');
-        console.log(`[Staking] Activating node for ${amount} USDT via ${refAddress}`);
-        let fee: any;
+
+        const refAddress = customReferrer
+            || (address ? (localStorage.getItem('aimining_referrer') || ZERO_ADDRESS) : ZERO_ADDRESS);
+
+        // Read the live stake fee from the contract (admin can update it)
+        let fee: bigint;
         try {
-            fee = await callReadOnly(async (contract) => { return await contract.stakeFee(); });
+            fee = await callReadOnly(async (contract) => await contract.stakeFee());
         } catch (e: any) {
-            console.error('[Stake] Failed to read stakeFee:', e);
-            throw new Error(`Could not read stake fee from contract: ${e?.message || e}`);
+            throw new Error('Could not read stake fee from contract: ' + (e?.message || e));
         }
-        const feeHex = toSafeHexValue(fee);
-        console.log(`[Staking] BNB Fee (hex): ${feeHex}`);
-        await ensureRelayAlive(); // Pre-flight: verify WC relay before redirect timer starts
-        // PRIMARY: signer-based ethers contract call — the ORIGINAL working method
-        // (same as the launch version). Returns a real TransactionResponse.
-        let stakingContract: Contract | null = null;
-        try { stakingContract = await getContract(true); } catch (e) { console.warn('[Stake] getContract(true) failed:', e); }
-        if (stakingContract) {
-            try {
-                console.log('[Stake] Sending stake via signer contract (primary)...');
-                const tx = await sendTxWithRedirect(stakingContract.stake(val, refAddress, { value: fee }), 'Stake transaction');
-                console.log("[Staking] Transaction Sent (signer path):", typeof tx === 'string' ? tx : tx?.hash);
-                return tx;
-            } catch (e: any) {
-                // Do NOT fall through to the raw path here — the wallet already
-                // showed (and the user answered) that prompt; re-sending would
-                // show a second popup after a rejection.
-                console.warn('[Stake] Signer-based stake failed:', e?.shortMessage || e);
-                throw new Error(`Transaction failed: ${e?.shortMessage || e?.message || e}`);
-            }
-        }
-        // FALLBACK: raw EIP-1193 provider path (no signer available)
-        let tx: any;
-        try {
-            tx = await sendTxWithRedirect(rawStakingTx(val, refAddress, feeHex), 'Stake transaction');
-        } catch (e: any) {
-            throw new Error(`Transaction failed: ${e?.message || e}`);
-        }
-        console.log("[Staking] Transaction Sent:", typeof tx === 'string' ? tx : tx?.hash);
-        return tx;
+        console.log('[useStaking] Staking ' + amount + ' USDT via ' + refAddress + ' (fee ' + formatUnits(fee, 18) + ' BNB)');
+
+        const data = CONTRACT_IFACE.encodeFunctionData('stake', [val, refAddress]);
+        const hash = await walletService.sendWalletTransaction({
+            to: CONTRACT_ADDRESS,
+            data,
+            value: BigInt(fee),
+            from: owner,
+            label: 'Stake transaction',
+        });
+        console.log('[useStaking] Stake tx sent:', hash);
+        return walletService.makeTxResponse(hash, 'Stake transaction');
     };
 
-    const approve = async () => {
-        const owner = await withTimeout(getSignerAddress(), 15000, 'Get wallet address (approve)');
-        if (!owner) throw new Error("Wallet connection not ready. Please reconnect your wallet and try again.");
-        const currentAllowanceStr = await getAllowance(owner);
-        const currentAllowance = parseUnits(currentAllowanceStr, 18);
-        // Skip if already at unlimited/max approval
-        if (currentAllowance >= APPROVAL_THRESHOLD) { console.log("[Staking] Already at unlimited approval, skipping."); return currentAllowance; }
-        console.log("[Staking] Requesting unlimited (MaxUint256) USDT approval");
-        await ensureRelayAlive(); // Pre-flight: verify WC relay before redirect timer starts
-        // PRIMARY: signer-based ethers contract call — the ORIGINAL working method
-        // (same as the launch version). Returns a real TransactionResponse so
-        // tx.wait() works and callers can confirm the allowance after mining.
-        const usdt = await getUsdtContract(true).catch(() => null);
-        if (usdt) {
-            console.log('[Staking] Sending approval via signer contract (primary)...');
-            const tx = await sendTxWithRedirect(usdt.approve(CONTRACT_ADDRESS, MaxUint256), 'USDT Approval');
-            console.log("[Staking] Approval Transaction Sent:", typeof tx === 'string' ? tx : tx?.hash);
-            try { await withTimeout(tx.wait(), 45000, 'Approval mining'); }
-            catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() timed out (may still be mining):", waitErr?.shortMessage || waitErr); }
-            return tx;
-        }
-        // FALLBACK: raw EIP-1193 provider path (no signer available)
-        console.log('[Staking] No signer — approval via raw provider path');
-        const tx = await sendTxWithRedirect(rawApproveTx(), 'USDT Approval');
-        console.log("[Staking] Approval Transaction Sent:", typeof tx === 'string' ? tx : tx?.hash);
-        // sendTxWithRedirect returns tx hash string from provider.request.
-        // The wallet already approved — tx.wait() is not needed on a string.
-        try {
-            if (tx && typeof tx.wait === 'function') {
-                await withTimeout(tx.wait(), 30000, 'Approval confirmation');
-            }
-        } catch (waitErr: any) { console.warn("[Staking] Approve tx.wait() failed (may have been mined via wallet redirect):", waitErr?.shortMessage || waitErr); }
-        return tx;
+    /**
+     * Withdraw a matured stake (index) - pays out principal + tier reward +
+     * accumulated referral rewards.
+     * Returns { hash, wait } once the user approves in the wallet.
+     */
+    const withdraw = async (index: any, _unused?: any) => {
+        const i = typeof index === 'string' ? parseInt(index, 10) : Number(index);
+        if (Number.isNaN(i) || i < 0) throw new Error('Invalid stake index.');
+
+        const owner = getOwnerAddress();
+        if (!owner) throw new Error('Wallet connection not ready. Please reconnect your wallet and try again.');
+
+        console.log('[useStaking] withdraw: stake index ' + i);
+        const data = CONTRACT_IFACE.encodeFunctionData('withdraw', [i]);
+        const hash = await walletService.sendWalletTransaction({
+            to: CONTRACT_ADDRESS,
+            data,
+            from: owner,
+            label: 'Withdraw transaction',
+        });
+        console.log('[useStaking] Withdraw tx sent:', hash);
+        return walletService.makeTxResponse(hash, 'Withdraw transaction');
     };
 
+    // --- READ functions ------------------------------------------------------
     const getAllowance = async (ownerAddress?: string) => {
         const owner = ownerAddress || address || getStoredAddress();
-        if (!owner) return "0";
-        try { return await callReadOnly(async (contract) => { const allowance = await contract.allowance(owner, CONTRACT_ADDRESS); return formatUnits(allowance, 18); }, true); }
-        catch (err) { console.error("[useStaking] Allowance Error after retries:", err); return "0"; }
-    };
-
-    const withdraw = async (index: any, _unused?: any) => {
-        const i = typeof index === 'string' ? parseInt(index) : index;
-        await ensureRelayAlive(); // Pre-flight: verify WC relay before redirect timer starts
-        // PRIMARY: signer-based ethers contract call — the ORIGINAL working method
-        // (same as the launch version: contract.withdraw(index)). Returns a real
-        // TransactionResponse (.hash / .wait work properly).
-        let stakingContract: Contract | null = null;
-        try { stakingContract = await getContract(true); } catch (e) { console.warn('[useStaking] getContract(true) failed:', e); }
-        if (stakingContract) {
-            console.log('[useStaking] Withdraw via signer contract (primary)');
-            return await sendTxWithRedirect(stakingContract.withdraw(i), 'Withdraw transaction');
+        if (!owner) return '0';
+        try {
+            return await callReadOnly(async (contract) => {
+                const allowance = await contract.allowance(owner, CONTRACT_ADDRESS);
+                return formatUnits(allowance, 18);
+            }, true);
+        } catch (err) {
+            console.error('[useStaking] Allowance Error after retries:', err);
+            return '0';
         }
-        // FALLBACK: raw EIP-1193 provider path (no signer available)
-        console.log('[useStaking] No signer — withdraw via raw provider path');
-        return await sendTxWithRedirect(rawWithdrawTx(i), 'Withdraw transaction');
     };
 
     const getStakedInfo = async (userAddress?: string) => {
         const target = userAddress || address || getStoredAddress();
         if (!target) return null;
-        try { return await callReadOnly(async (contract) => { const info = await contract.getUserInfo(target); return { referrer: info.referrer, totalStaked: info.totalStaked, totalEarned: info.totalEarned, referralRewards: info.referralRewards, totalBonus: info.totalBonus, totalReferralEarned: info.totalReferralEarned, teamSize: Number(info.teamSize), stakeCount: Number(info.stakeCount) }; }); }
-        catch (err) { console.error("[useStaking] Info Error after retries:", err); return null; }
+        try {
+            return await callReadOnly(async (contract) => {
+                const info = await contract.getUserInfo(target);
+                return {
+                    referrer: info.referrer,
+                    totalStaked: info.totalStaked,
+                    totalEarned: info.totalEarned,
+                    referralRewards: info.referralRewards,
+                    totalBonus: info.totalBonus,
+                    totalReferralEarned: info.totalReferralEarned,
+                    teamSize: Number(info.teamSize),
+                    stakeCount: Number(info.stakeCount),
+                };
+            });
+        } catch (err) {
+            console.error('[useStaking] Info Error after retries:', err);
+            return null;
+        }
     };
 
     const getStakeDetails = async (userAddress: string, index: number) => {
         const target = userAddress || getStoredAddress();
         if (!target) return null;
-        try { return await callReadOnly(async (contract) => { const stake = await contract.getUserStake(target, index); return { amount: stake.amount, startTime: Number(stake.startTime), tier: Number(stake.tier), withdrawn: stake.withdrawn }; }); }
-        catch (err) { console.error("[useStaking] Detail Error after retries:", err); return null; }
+        try {
+            return await callReadOnly(async (contract) => {
+                const s = await contract.getUserStake(target, index);
+                return {
+                    amount: s.amount,
+                    startTime: Number(s.startTime),
+                    tier: Number(s.tier),
+                    withdrawn: s.withdrawn,
+                };
+            });
+        } catch (err) {
+            console.error('[useStaking] Detail Error after retries:', err);
+            return null;
+        }
     };
 
     const getWalletBalance = async (userAddress?: string) => {
         const target = userAddress || address || getStoredAddress();
         if (!target) return null;
         try {
-            const usdtBalStr = await callReadOnly(async (contract) => { const balance = await contract.balanceOf(target); return formatUnits(balance, 18); }, true);
-            let referralRewardsStr = "0";
-            try { const info = await getStakedInfo(target); if (info) { referralRewardsStr = formatUnits(info.referralRewards, 18); } } catch (err) { console.warn("[useStaking] Failed to get referral rewards for wallet balance:", err); }
+            const usdtBalStr = await callReadOnly(async (contract) => {
+                const balance = await contract.balanceOf(target);
+                return formatUnits(balance, 18);
+            }, true);
+            let referralRewardsStr = '0';
+            try {
+                const info = await getStakedInfo(target);
+                if (info) referralRewardsStr = formatUnits(info.referralRewards, 18);
+            } catch (err) {
+                console.warn('[useStaking] Failed to get referral rewards for wallet balance:', err);
+            }
             return (parseFloat(usdtBalStr) + parseFloat(referralRewardsStr)).toString();
-        } catch (err) { console.error("[useStaking] Balance Error after retries:", err); return null; }
+        } catch (err) {
+            console.error('[useStaking] Balance Error after retries:', err);
+            return null;
+        }
     };
 
+    /**
+     * Build the 10-level referral team tree for a user. Candidates are
+     * collected from localStorage caches (wallet/telegram connections,
+     * discovered users) plus recent on-chain Staked events, then linked to
+     * the user via the on-chain referrer chain.
+     */
     const getTeamTree = async (userAddress: string) => {
         const tree: Record<number, string[]> = {};
         if (!userAddress) return tree;
         try {
             const addresses = new Set<string>();
             ['0x3FbFF9Dd24e736FeF4A3a4435DF72b7Ea5978eFD', '0xfB0F04222E080F4d8fC6861fE96Bb54087e77c18', '0xD9B9C49544F1E8dd5c0f6F1992ac2A2a4d75Be9E', '0xb313F163af20245755884C7FdCa051D603428F6d'].forEach(a => addresses.add(a.toLowerCase()));
-            try { const cached = JSON.parse(localStorage.getItem(`discovered_users_${CONTRACT_ADDRESS.toLowerCase()}`) || "[]"); if (Array.isArray(cached)) { cached.forEach(a => { if (typeof a === 'string') addresses.add(a.toLowerCase()); }); } } catch (e) {}
-            try { const walletConns = JSON.parse(localStorage.getItem('wallet_connections_map') || "[]"); if (Array.isArray(walletConns)) { walletConns.forEach(c => { if (c?.walletAddress) addresses.add(c.walletAddress.toLowerCase()); }); } } catch (e) {}
-            try { const tgConns = JSON.parse(localStorage.getItem('telegram_connections_map') || "[]"); if (Array.isArray(tgConns)) { tgConns.forEach(c => { if (c?.walletAddress) addresses.add(c.walletAddress.toLowerCase()); }); } } catch (e) {}
+            try { const cached = JSON.parse(localStorage.getItem('discovered_users_' + CONTRACT_ADDRESS.toLowerCase()) || '[]'); if (Array.isArray(cached)) { cached.forEach((a: string) => { if (typeof a === 'string') addresses.add(a.toLowerCase()); }); } } catch (e) { /* ignore */ }
+            try { const walletConns = JSON.parse(localStorage.getItem('wallet_connections_map') || '[]'); if (Array.isArray(walletConns)) { walletConns.forEach((c: any) => { if (c?.walletAddress) addresses.add(c.walletAddress.toLowerCase()); }); } } catch (e) { /* ignore */ }
+            try { const tgConns = JSON.parse(localStorage.getItem('telegram_connections_map') || '[]'); if (Array.isArray(tgConns)) { tgConns.forEach((c: any) => { if (c?.walletAddress) addresses.add(c.walletAddress.toLowerCase()); }); } } catch (e) { /* ignore */ }
             try {
-                let activeProvider: any = null;
-                if (walletProvider) { activeProvider = new BrowserProvider(walletProvider as any); }
-                else if ((window as any).ethereum) { activeProvider = new BrowserProvider((window as any).ethereum); }
-                else { activeProvider = new JsonRpcProvider(RPC_NODES[currentRpcIdx]); }
-                const contractWithProvider = new Contract(CONTRACT_ADDRESS, ABI, activeProvider);
-                const recentEvents = await contractWithProvider.queryFilter(contractWithProvider.filters.Staked(), 110320760);
-                recentEvents.forEach((e: any) => { if (e.args && e.args[0]) { addresses.add(e.args[0].toLowerCase()); } else if (e.args && e.args.user) { addresses.add(e.args.user.toLowerCase()); } });
-            } catch (err) { console.warn("[useStaking] Recent Staked events fetch failed:", err); }
+                // Recent on-chain Staked events (public RPC - never via the
+                // wallet provider, which can hang in TMA)
+                const provider = walletService.getReadProvider();
+                const contractWithProvider = new Contract(CONTRACT_ADDRESS, ABI as any, provider);
+                const recentEvents = await contractWithProvider.queryFilter(contractWithProvider.filters.Staked(), EVENTS_FROM_BLOCK);
+                recentEvents.forEach((e: any) => {
+                    if (e.args && e.args[0]) addresses.add(e.args[0].toLowerCase());
+                    else if (e.args && e.args.user) addresses.add(e.args.user.toLowerCase());
+                });
+            } catch (err) {
+                console.warn('[useStaking] Recent Staked events fetch failed:', err);
+            }
             addresses.delete(userAddress.toLowerCase());
             const uniqueAddresses = Array.from(addresses);
             const referrersMap = new Map<string, string>();
@@ -756,18 +338,36 @@ const buildSignerFn = () => {
             for (let i = 0; i < uniqueAddresses.length; i += batchSize) {
                 const batch = uniqueAddresses.slice(i, i + batchSize);
                 await Promise.all(batch.map(async (addr) => {
-                    try { const info = await getStakedInfo(addr); if (info && info.referrer && info.referrer !== '0x0000000000000000000000000000000000000000') { referrersMap.set(addr, info.referrer.toLowerCase()); } }
-                    catch (e) { console.warn(`[useStaking] Failed to get referrer for ${addr}:`, e); }
+                    try {
+                        const info = await getStakedInfo(addr);
+                        if (info && info.referrer && info.referrer !== ZERO_ADDRESS) {
+                            referrersMap.set(addr, (info.referrer as string).toLowerCase());
+                        }
+                    } catch (e) {
+                        console.warn('[useStaking] Failed to get referrer for ' + addr + ':', e);
+                    }
                 }));
             }
             const buildTreeLevel = (parents: string[], currentLevel: number) => {
                 if (currentLevel > 10 || parents.length === 0) return;
                 const nextParents: string[] = [];
-                parents.forEach(parent => { referrersMap.forEach((referrer, child) => { if (referrer === parent.toLowerCase()) { if (!tree[currentLevel]) tree[currentLevel] = []; if (!tree[currentLevel].includes(child)) { tree[currentLevel].push(child); nextParents.push(child); } } }); });
+                parents.forEach(parent => {
+                    referrersMap.forEach((referrer, child) => {
+                        if (referrer === parent.toLowerCase()) {
+                            if (!tree[currentLevel]) tree[currentLevel] = [];
+                            if (!tree[currentLevel].includes(child)) {
+                                tree[currentLevel].push(child);
+                                nextParents.push(child);
+                            }
+                        }
+                    });
+                });
                 if (nextParents.length > 0) { buildTreeLevel(nextParents, currentLevel + 1); }
             };
             buildTreeLevel([userAddress], 1);
-        } catch (e) { console.error("[useStaking] getTeamTree error:", e); }
+        } catch (e) {
+            console.error('[useStaking] getTeamTree error:', e);
+        }
         return tree;
     };
 
@@ -778,44 +378,55 @@ const buildSignerFn = () => {
             const level = parseInt(levelStr); const rate = levelRates[level] || 0; const members = tree[level];
             for (const addr of members) {
                 const info = await getStakedInfo(addr);
-                if (info) { const staked = parseFloat(formatUnits(info.totalStaked, 18)); totalTeamStake += staked; if (staked > 0) { const dailyRefRewardUsdt = (staked * getTierRate(staked)) / 37; totalDailyDividend += (dailyRefRewardUsdt / btcPrice) * rate; } }
+                if (info) {
+                    const staked = parseFloat(formatUnits(info.totalStaked, 18));
+                    totalTeamStake += staked;
+                    if (staked > 0) {
+                        const dailyRefRewardUsdt = (staked * getTierRate(staked)) / 37;
+                        totalDailyDividend += (dailyRefRewardUsdt / btcPrice) * rate;
+                    }
+                }
             }
         }
         return { totalTeamStake, totalDailyDividend };
     };
 
-    const getReferralEarnings = async (userAddress?: string) => { const info = await getStakedInfo(userAddress); return info ? formatUnits(info.referralRewards, 18) : "0"; };
+    const getReferralEarnings = async (userAddress?: string) => {
+        const info = await getStakedInfo(userAddress);
+        return info ? formatUnits(info.referralRewards, 18) : '0';
+    };
 
-    const calculateEffectiveEarned = (contractEarned: string, address: string | undefined) => {
-        if (!address) return contractEarned;
-        const flushed = localStorage.getItem(`flushed_btc_${address.toLowerCase()}`) || "0";
+    const calculateEffectiveEarned = (contractEarned: string, addr: string | undefined) => {
+        if (!addr) return contractEarned;
+        const flushed = localStorage.getItem('flushed_btc_' + addr.toLowerCase()) || '0';
         return Math.max(0, parseFloat(contractEarned) - parseFloat(flushed)).toFixed(14);
     };
 
-    const recordViolation = (contractEarned: string, address: string | undefined) => { if (!address) return; localStorage.setItem(`flushed_btc_${address.toLowerCase()}`, contractEarned); };
-    const recordStakeFlush = (contractEarned: string, address: string | undefined, stakeCount: number) => { if (!address) return; recordViolation(contractEarned, address); localStorage.setItem(`flushed_stake_count_${address.toLowerCase()}`, stakeCount.toString()); };
-    const getViolationStakeCount = (address: string | undefined) => { if (!address) return 0; const stored = localStorage.getItem(`flushed_stake_count_${address.toLowerCase()}`) || "0"; return Math.max(0, parseInt(stored, 10) || 0); };
-    const isViolationActive = (address: string | undefined) => getViolationStakeCount(address) > 0;
-    const clearViolation = (address: string | undefined) => { if (!address) return; localStorage.removeItem(`flushed_btc_${address.toLowerCase()}`); localStorage.removeItem(`flushed_stake_count_${address.toLowerCase()}`); };
-    const getStakeLastFlushedTime = (address: string | undefined, index: number, startTime: number) => { if (!address) return startTime; const key = `stake_flushed_time_${address.toLowerCase()}_${index}`; const stored = localStorage.getItem(key); if (!stored) return startTime; return Math.max(startTime, parseFloat(stored) || 0); };
-    const recordStakeViolation = (address: string | undefined, index: number) => { if (!address) return; localStorage.setItem(`stake_flushed_time_${address.toLowerCase()}_${index}`, (Date.now() / 1000).toString()); };
-    const recordPermanentStakeFlush = (address: string | undefined, index: number) => { if (!address) return; localStorage.setItem(`stake_permanently_flushed_${address.toLowerCase()}_${index}`, 'true'); recordStakeViolation(address, index); };
-    const clearPermanentStakeFlush = (address: string | undefined, index: number) => { if (!address) return; localStorage.removeItem(`stake_permanently_flushed_${address.toLowerCase()}_${index}`); };
-    const isStakePermanentlyFlushed = (address: string | undefined, index: number) => { if (!address) return false; return localStorage.getItem(`stake_permanently_flushed_${address.toLowerCase()}_${index}`) === 'true'; };
-    const recordReferralFlush = (referralRewards: string, address: string | undefined) => { if (!address) return; localStorage.setItem(`referral_flush_${address.toLowerCase()}`, referralRewards); };
-    const getIsReferralFlushed = (address: string | undefined) => { if (!address) return false; return localStorage.getItem(`referral_flush_${address.toLowerCase()}`) !== null; };
-    const clearReferralFlush = (address: string | undefined) => { if (!address) return; localStorage.removeItem(`referral_flush_${address.toLowerCase()}`); };
+    // --- Local violation / flush tracking (same keys as before) -------------
+    const recordViolation = (contractEarned: string, addr: string | undefined) => { if (!addr) return; localStorage.setItem('flushed_btc_' + addr.toLowerCase(), contractEarned); };
+    const recordStakeFlush = (contractEarned: string, addr: string | undefined, stakeCount: number) => { if (!addr) return; recordViolation(contractEarned, addr); localStorage.setItem('flushed_stake_count_' + addr.toLowerCase(), stakeCount.toString()); };
+    const getViolationStakeCount = (addr: string | undefined) => { if (!addr) return 0; const stored = localStorage.getItem('flushed_stake_count_' + addr.toLowerCase()) || '0'; return Math.max(0, parseInt(stored, 10) || 0); };
+    const isViolationActive = (addr: string | undefined) => getViolationStakeCount(addr) > 0;
+    const clearViolation = (addr: string | undefined) => { if (!addr) return; localStorage.removeItem('flushed_btc_' + addr.toLowerCase()); localStorage.removeItem('flushed_stake_count_' + addr.toLowerCase()); };
+    const getStakeLastFlushedTime = (addr: string | undefined, index: number, startTime: number) => { if (!addr) return startTime; const key = 'stake_flushed_time_' + addr.toLowerCase() + '_' + index; const stored = localStorage.getItem(key); if (!stored) return startTime; return Math.max(startTime, parseFloat(stored) || 0); };
+    const recordStakeViolation = (addr: string | undefined, index: number) => { if (!addr) return; localStorage.setItem('stake_flushed_time_' + addr.toLowerCase() + '_' + index, (Date.now() / 1000).toString()); };
+    const recordPermanentStakeFlush = (addr: string | undefined, index: number) => { if (!addr) return; localStorage.setItem('stake_permanently_flushed_' + addr.toLowerCase() + '_' + index, 'true'); recordStakeViolation(addr, index); };
+    const clearPermanentStakeFlush = (addr: string | undefined, index: number) => { if (!addr) return; localStorage.removeItem('stake_permanently_flushed_' + addr.toLowerCase() + '_' + index); };
+    const isStakePermanentlyFlushed = (addr: string | undefined, index: number) => { if (!addr) return false; return localStorage.getItem('stake_permanently_flushed_' + addr.toLowerCase() + '_' + index) === 'true'; };
+    const recordReferralFlush = (referralRewards: string, addr: string | undefined) => { if (!addr) return; localStorage.setItem('referral_flush_' + addr.toLowerCase(), referralRewards); };
+    const getIsReferralFlushed = (addr: string | undefined) => { if (!addr) return false; return localStorage.getItem('referral_flush_' + addr.toLowerCase()) !== null; };
+    const clearReferralFlush = (addr: string | undefined) => { if (!addr) return; localStorage.removeItem('referral_flush_' + addr.toLowerCase()); };
 
     const getPerLevelReferralIncome = async (userAddress: string, _walletBalance: number) => {
-        const contract = await getContract();
-        if (!contract) return { byLevel: {}, isEligible: false, isFlushed: false };
         try {
             const info = await getStakedInfo(userAddress);
             if (!info) return { byLevel: {}, isEligible: false, isFlushed: false };
             const selfStaked = parseFloat(formatUnits(info.totalStaked, 18));
             const isEligible = selfStaked >= 200;
             if (!getIsReferralFlushed(userAddress)) { clearReferralFlush(userAddress); }
-            if (!isEligible || getIsReferralFlushed(userAddress)) { return { byLevel: {}, isEligible, isFlushed: getIsReferralFlushed(userAddress) }; }
+            if (!isEligible || getIsReferralFlushed(userAddress)) {
+                return { byLevel: {}, isEligible, isFlushed: getIsReferralFlushed(userAddress) };
+            }
             const tree = await getTeamTree(userAddress);
             const byLevel: Record<number, { count: number; staked: number; rate: number; estimatedIncome: number }> = {};
             const levelRates: Record<number, number> = { 1: 0.05, 2: 0.03, 3: 0.02, 4: 0.01, 5: 0.01, 6: 0.01, 7: 0.01, 8: 0.01, 9: 0.01, 10: 0.01 };
@@ -825,7 +436,8 @@ const buildSignerFn = () => {
                 for (const addr of members) {
                     const memberInfo = await getStakedInfo(addr);
                     if (memberInfo) {
-                        const staked = parseFloat(formatUnits(memberInfo.totalStaked, 18)); levelStaked += staked;
+                        const staked = parseFloat(formatUnits(memberInfo.totalStaked, 18));
+                        levelStaked += staked;
                         if (level <= 3 && staked >= 200) { const memberDailyReward = (staked * getTierRate(staked)) / 37; levelIncome += memberDailyReward * rate; }
                         else if (level <= 6 && staked >= 1000) { const memberDailyReward = (staked * getTierRate(staked)) / 37; levelIncome += memberDailyReward * rate; }
                         else if (level > 6 && staked >= 2000) { const memberDailyReward = (staked * getTierRate(staked)) / 37; levelIncome += memberDailyReward * rate; }
@@ -834,7 +446,10 @@ const buildSignerFn = () => {
                 if (members.length > 0 || levelIncome > 0) { byLevel[level] = { count: members.length, staked: levelStaked, rate: rate * 100, estimatedIncome: levelIncome }; }
             }
             return { byLevel, isEligible, isFlushed: false };
-        } catch (err) { console.error("[useStaking] Per-level referral error:", err); return { byLevel: {}, isEligible: false, isFlushed: false }; }
+        } catch (err) {
+            console.error('[useStaking] Per-level referral error:', err);
+            return { byLevel: {}, isEligible: false, isFlushed: false };
+        }
     };
 
     return {
@@ -847,7 +462,3 @@ const buildSignerFn = () => {
         address, isConnected
     };
 }
-// redeploy 07-08-2026 20:19:04.05  
-
-
-
