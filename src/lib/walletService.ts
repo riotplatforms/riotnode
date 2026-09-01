@@ -16,7 +16,7 @@
  *   - wallet deep-links so the approval sheet is always visible on mobile
  */
 
-import { JsonRpcProvider } from 'ethers';
+import { JsonRpcProvider, FetchRequest } from 'ethers';
 
 // ---------------------------------------------------------------------------
 // Environment / chain constants
@@ -307,7 +307,10 @@ export function openWalletApp(walletType?: string): boolean {
 
 let rpcIdx = 0;
 export function getReadProvider(): JsonRpcProvider {
-    return new JsonRpcProvider(BSC_RPC_NODES[rpcIdx % BSC_RPC_NODES.length]);
+    const url = BSC_RPC_NODES[rpcIdx % BSC_RPC_NODES.length];
+    const freq = new FetchRequest(url);
+    freq.timeout = 10000; // never let a stalled RPC hang the flow for minutes
+    return new JsonRpcProvider(freq, BSC_CHAIN_ID_DEC, { staticNetwork: true });
 }
 export function rotateRpc(): void {
     rpcIdx = (rpcIdx + 1) % BSC_RPC_NODES.length;
@@ -341,11 +344,11 @@ export async function ensureBscChain(provider: any): Promise<void> {
 
     if (chainId) {
         try {
-            await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BSC_CHAIN_ID_HEX }] });
+            await withTimeout(provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BSC_CHAIN_ID_HEX }] }), 45000, 'wallet_switchEthereumChain');
         } catch (switchErr: any) {
             const code = switchErr?.code ?? switchErr?.data?.originalError?.code;
             if (code === 4902 || code === -32603) {
-                try { await provider.request({ method: 'wallet_addEthereumChain', params: [BSC_ADD_CHAIN_PARAMS] }); }
+                try { await withTimeout(provider.request({ method: 'wallet_addEthereumChain', params: [BSC_ADD_CHAIN_PARAMS] }), 45000, 'wallet_addEthereumChain'); }
                 catch { throw new Error('Please add the BNB Smart Chain network in your wallet and try again.'); }
             } else {
                 throw new Error('Please switch your wallet to the BNB Smart Chain network and try again.');
@@ -359,6 +362,39 @@ export async function ensureBscChain(provider: any): Promise<void> {
             }
         } catch (e: any) {
             if (e?.message?.includes('BNB Smart Chain')) throw e;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WalletConnect session pre-flight
+// ---------------------------------------------------------------------------
+
+/**
+ * Verify the WalletConnect session is actually ALIVE before dispatching a
+ * signing request. A dead / expired session (relay socket dropped after a
+ * WebView suspension or wallet-app round trip) means the request NEVER reaches
+ * the wallet - so `eth_sendTransaction` never resolves and the UI hangs on
+ * "Opening wallet..." forever. This is the #1 cause of that symptom.
+ */
+export async function ensureWalletSessionAlive(provider: any): Promise<void> {
+    const session = provider?.session || provider?.provider?.session || null;
+    if (!isWalletConnectActive() && !session) return; // injected wallet - prompts natively
+
+    // Expired session -> the request can never be delivered.
+    if (session?.expiry && session.expiry * 1000 < Date.now()) {
+        throw new Error('Wallet connection session expired. Please reconnect your wallet and try again.');
+    }
+
+    // WalletConnect EthereumProvider exposes `connected`. If the relay dropped,
+    // try to restore the stored session once (bounded - never hangs forever).
+    if (provider && provider.connected === false && typeof provider.connect === 'function') {
+        console.log('[walletService] WalletConnect provider disconnected - restoring session...');
+        try {
+            await withTimeout(provider.connect(), 10000, 'wallet session restore');
+            console.log('[walletService] WalletConnect session restored');
+        } catch {
+            throw new Error('Wallet connection lost. Please reconnect your wallet and try again.');
         }
     }
 }
@@ -440,6 +476,11 @@ export async function sendWalletTransaction(req: TxRequest): Promise<string> {
     // Injected wallets must be on BSC before we send (WC sessions are pinned).
     if (!isWC) {
         await ensureBscChain(provider);
+    } else {
+        // WalletConnect: verify the session is alive BEFORE dispatching. A dead
+        // or expired session means the request never reaches the wallet, which
+        // is exactly the "wallet never opens / hangs forever" symptom.
+        await ensureWalletSessionAlive(provider);
     }
 
     // Pre-estimate gas on PUBLIC RPC so the wallet does not have to (WC wallets
@@ -464,13 +505,32 @@ export async function sendWalletTransaction(req: TxRequest): Promise<string> {
     // after the request is dispatched so the approval sheet is in front of the
     // user. (The request is already in-flight over the WC relay.)
     if (isWC && (isMobileUA() || isTelegramWebApp())) {
-        setTimeout(() => { try { openWalletApp(); } catch { /* ignore */ } }, 900);
+        // Re-fire the deep-link a few times: the first one can fire before the
+        // request is actually dispatched over the WC relay, and on some devices
+        // the first openLink is swallowed by the WebView transition. These only
+        // run while the user is still in the Mini App (JS is suspended once the
+        // wallet app is in the foreground).
+        [900, 8000, 20000].forEach((ms) => {
+            setTimeout(() => { try { openWalletApp(); } catch { /* ignore */ } }, ms);
+        });
     }
 
     let hash: string;
     try {
-        hash = await provider.request({ method: 'eth_sendTransaction', params }) as string;
+        // HARD TIMEOUT: without this, a dead WalletConnect relay (or a wallet
+        // that never shows the approval sheet) leaves the promise pending
+        // FOREVER - the exact "Opening wallet to confirm stake..." hang.
+        hash = await withTimeout(
+            provider.request({ method: 'eth_sendTransaction', params }) as Promise<string>,
+            180000,
+            label + ' wallet response',
+        );
     } catch (err: any) {
+        if (err?.message?.includes('timed out after')) {
+            throw new Error(
+                label + ': your wallet did not respond in time. Please open your wallet app manually and approve the request - if no request is shown there, reconnect your wallet and try again.'
+            );
+        }
         throw normalizeTxError(err, label);
     }
 
@@ -545,6 +605,7 @@ export const walletService = {
     rotateRpc,
     callReadRpc,
     ensureBscChain,
+    ensureWalletSessionAlive,
     sendWalletTransaction,
     waitForReceipt,
     makeTxResponse,
