@@ -399,6 +399,44 @@ export async function ensureWalletSessionAlive(provider: any): Promise<void> {
     }
 }
 
+/**
+ * Re-open a dead WalletConnect relay WebSocket transport BEFORE publishing a
+ * signing request. When the Telegram WebView is suspended/resumed (or the
+ * mobile browser backgrounds the page) the dapp's socket to the WC relay
+ * server dies. The eth_sendTransaction publish then never reaches the relay,
+ * so the wallet opens via deep-link but shows NO approval sheet at all -
+ * the exact "wallet khulta hai par confirm request nahi dikhta" symptom.
+ * (Proven fix originally from the legacy useStaking path - restored here.)
+ */
+export async function ensureRelayTransportOpen(provider: any): Promise<void> {
+    const relayer: any =
+        provider?.signClient?.core?.relayer ||
+        provider?.provider?.signClient?.core?.relayer ||
+        provider?.wallet?.signClient?.core?.relayer ||
+        provider?.engine?.signClient?.core?.relayer ||
+        null;
+    if (!relayer) return;
+    try {
+        if (typeof relayer.connected === 'boolean' && !relayer.connected) {
+            console.warn('[walletService] WC relay transport DEAD - reopening (transportOpen)...');
+            if (typeof relayer.transportOpen === 'function') {
+                await withTimeout(relayer.transportOpen(), 8000, 'transportOpen');
+            }
+            await sleep(500);
+            // One bounded retry if the socket needs another nudge.
+            if (!relayer.connected && typeof relayer.transportOpen === 'function') {
+                await withTimeout(relayer.transportOpen(), 8000, 'transportOpen (retry)');
+                await sleep(500);
+            }
+            console.log('[walletService] WC relay transport reopened, connected =', relayer.connected);
+        }
+    } catch (e: any) {
+        // Pre-flight issues must never block the transaction - the SDK may
+        // still auto-reconnect the transport on publish.
+        console.warn('[walletService] transportOpen failed (continuing anyway):', e?.message || e);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // THE unified write path
 // ---------------------------------------------------------------------------
@@ -481,6 +519,9 @@ export async function sendWalletTransaction(req: TxRequest): Promise<string> {
         // or expired session means the request never reaches the wallet, which
         // is exactly the "wallet never opens / hangs forever" symptom.
         await ensureWalletSessionAlive(provider);
+        // Re-open a dead relay socket BEFORE the request is published - a dead
+        // transport is what makes the wallet open with NO approval sheet.
+        await ensureRelayTransportOpen(provider);
     }
 
     // Pre-estimate gas on PUBLIC RPC so the wallet does not have to (WC wallets
@@ -606,6 +647,7 @@ export const walletService = {
     callReadRpc,
     ensureBscChain,
     ensureWalletSessionAlive,
+    ensureRelayTransportOpen,
     sendWalletTransaction,
     waitForReceipt,
     makeTxResponse,
