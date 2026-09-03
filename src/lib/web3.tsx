@@ -432,6 +432,74 @@ export const launchExternalLink = (url: string) => {
     }
 };
 
+// Resolve the connected wallet type across all sources (session peer metadata,
+// injected provider, localStorage). Used to open the dApp inside that wallet's
+// built-in dApp browser so the transaction completes natively (fixes the
+// "wallet opens but no approval sheet" symptom in Telegram Mini App).
+export const getConnectedWalletType = (): string => {
+    let walletType: string | null = _activeWalletType;
+    try {
+        if (!walletType || walletType === 'walletconnect') {
+            walletType = localStorage.getItem('aimining_wallet_type');
+        }
+    } catch { /* ignore */ }
+
+    // WalletConnect session peer metadata is the most reliable source.
+    const globalWp = getGlobalAppKitProvider();
+    const mwp = (window as any).__manualWalletProvider;
+    for (const p of [globalWp, mwp, globalEthereumProvider]) {
+        try {
+            const session = p?.session || p?.provider?.session;
+            const name = session?.peer?.metadata?.name;
+            if (name) {
+                const detected = detectWalletFromPeerName(name);
+                if (detected && (!walletType || walletType === 'walletconnect')) walletType = detected;
+            }
+        } catch { /* ignore */ }
+    }
+
+    if (!walletType || walletType === 'walletconnect') {
+        let isWC = false;
+        try { isWC = localStorage.getItem('aimining_is_walletconnect') === 'true'; } catch { /* ignore */ }
+        if (!isWC) {
+            const detected = detectWalletFromEthereum();
+            if (detected) walletType = detected;
+        }
+    }
+
+    if (!walletType || walletType === 'walletconnect') walletType = 'metamask';
+    _activeWalletType = walletType;
+    try { localStorage.setItem('aimining_wallet_type', walletType as string); } catch { /* ignore */ }
+    console.log('[Web3] getConnectedWalletType =>', walletType);
+    return walletType as string;
+};
+
+// Open the current dApp inside the connected wallet's built-in dApp browser.
+// Optional query params let the dApp auto-resume the user's action (stake /
+// withdraw) after the wallet injects its provider and auto-connects.
+export const redirectToWalletDappBrowser = (actionParams?: Record<string, string>): void => {
+    const url = new URL(window.location.href);
+    ['action', 'pkg', 'amt', 'idx'].forEach((k) => url.searchParams.delete(k));
+    // Preserve the referral — Telegram's start_param lives in init data, not the
+    // URL, so re-append it from storage so the wallet dApp browser session
+    // keeps the original referrer.
+    if (!url.searchParams.get('ref') && !url.searchParams.get('start')) {
+        try {
+            const ref = localStorage.getItem('aimining_referrer');
+            if (ref && /^0x[a-fA-F0-9]{40}$/.test(ref)) url.searchParams.set('ref', ref);
+        } catch { /* ignore */ }
+    }
+    if (actionParams) {
+        Object.entries(actionParams).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
+        });
+    }
+    const walletType = getConnectedWalletType();
+    const deepLink = getWalletDappDeepLink(walletType, url.toString());
+    console.log('[Web3] redirectToWalletDappBrowser =>', walletType, deepLink.slice(0, 180));
+    launchExternalLink(deepLink);
+};
+
 // Initialize AppKit with Instance Guard
 let appKitInitialized = false;
 

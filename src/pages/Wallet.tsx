@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet } from '../lib/web3';
+import { useWallet, redirectToWalletDappBrowser } from '../lib/web3';
 import { useStaking, getTierRate } from '../hooks/useStaking';
 import { formatUnits } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
@@ -11,7 +11,7 @@ const Wallet: React.FC = () => {
     const navigate = useNavigate();
     const { address, isConnected, connect, miningStats, setMiningStats } = useWallet();
 
-    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
+    const { getStakedInfo, getStakeDetails, getWalletBalance, getTeamTree, getTeamMiningStats, withdraw, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed } = useStaking();
     const { btcPrice } = usePrice();
     const { showAlert } = useTelegram();
 
@@ -64,7 +64,6 @@ const Wallet: React.FC = () => {
         const info = await getStakedInfo(address);
         const wBalance = await getWalletBalance(address);
         const wBalanceNum = wBalance !== null ? parseFloat(wBalance) : parseFloat(stats.walletBalance || '0');
-        const isBalanceReliable = wBalance !== null; // Only trust balance if fresh from RPC
         // Don't return early on null balance — continue with previous/zero value
 
         if (info) {
@@ -103,7 +102,7 @@ const Wallet: React.FC = () => {
                     // Check violation for this individual active (non-finished) stake using running sum
                     // IMPORTANT: Only check balance violation if balance is reliable (fresh from RPC)
                     // Otherwise old stakes get incorrectly marked as violated on RPC failure
-                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && isBalanceReliable && (wBalanceNum + 0.1) < runningStakedSum + stakeAmount);
+                    const isViolated = false; // on-chain reward is unconditional (no wallet-balance violation)
                     
                     totalContractAmount += stakeAmount;
 
@@ -124,8 +123,7 @@ const Wallet: React.FC = () => {
                         }
 
                         // Rewards continue to accrue up to the maturity cap
-                        const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
-                        const timePassed = Math.max(0, Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime));
+                        const timePassed = Math.max(0, Math.min(37 * 86400, (Date.now() / 1000) - detail.startTime));
                         const rate = getTierRate(stakeAmount);
                         const accrued = ((stakeAmount * rate) / 37 / 86400 * timePassed) / safeBtcPrice;
                         if (!isNaN(accrued) && isFinite(accrued)) {
@@ -175,7 +173,7 @@ const Wallet: React.FC = () => {
                 isLoaded: true
             }));
         }
-    }, [address, getStakedInfo, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, getTeamTree, getTeamMiningStats, setMiningStats]);
+    }, [address, getStakedInfo, getStakeDetails, getWalletBalance, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, getTeamTree, getTeamMiningStats, setMiningStats]);
 
     useEffect(() => {
         fetchWalletData();
@@ -210,6 +208,16 @@ const Wallet: React.FC = () => {
         }
 
         if (loading) return;
+
+        // In Telegram Mini App (no injected provider), open the dApp inside the
+        // connected wallet's dApp browser and auto-resume there.
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        const hasInjected = !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum;
+        if (isTMA && !hasInjected) {
+            showAlert('Opening in your wallet browser — approve the withdrawal there.');
+            redirectToWalletDappBrowser({ action: 'withdraw_wallet' });
+            return;
+        }
 
         setLoading(true);
         try {
@@ -272,6 +280,25 @@ const Wallet: React.FC = () => {
             setLoading(false);
         }
     };
+
+    const handleWithdrawRef = React.useRef<(() => Promise<void>) | null>(null);
+    handleWithdrawRef.current = handleWithdraw;
+
+    useEffect(() => {
+        if (!isConnected || !address) return;
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        if (action !== 'withdraw_wallet') return;
+
+        params.delete('action');
+        const cleanUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', cleanUrl);
+
+        const timer = setTimeout(() => {
+            handleWithdrawRef.current?.();
+        }, 2500);
+        return () => clearTimeout(timer);
+    }, [isConnected, address]);
 
     return (
         <div className="flex-1 flex flex-col pb-10 bg-background-dark min-h-screen text-white font-display">

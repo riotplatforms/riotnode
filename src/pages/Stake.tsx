@@ -1,22 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useWallet, runWithTimeout } from '../lib/web3';
+import { useWallet, runWithTimeout, redirectToWalletDappBrowser } from '../lib/web3';
 
-import { useStaking } from '../hooks/useStaking';
+import { useStaking, getTierRate } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { BrowserProvider, JsonRpcSigner, formatUnits, parseUnits, MaxUint256 } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
-
-const getTierRate = (val: number) => {
-    if (val >= 10000) return 0.12;
-    if (val >= 5000) return 0.08;
-    if (val >= 2000) return 0.07;
-    if (val >= 1000) return 0.065;
-    if (val >= 500) return 0.06;
-    if (val >= 50) return 0.055;
-    return 0;
-};
 
 const Stake: React.FC = () => {
     const navigate = useNavigate();
@@ -41,7 +31,7 @@ const Stake: React.FC = () => {
             name: 'Lite Mining Node',
             description: 'Entry-level mining node for stable daily returns.',
             tp: '+125 GH/s',
-            lvl: '5.5%',
+            lvl: '5.0%',
             price: '50 USDT',
             icon: 'memory',
             color: 'blue'
@@ -51,7 +41,7 @@ const Stake: React.FC = () => {
             name: 'Starter Cluster',
             description: 'Beginner-friendly cluster for increasing mining efficiency.',
             tp: '+250 GH/s',
-            lvl: '5.5%',
+            lvl: '5.0%',
             price: '100 USDT',
             icon: 'dns',
             color: 'purple'
@@ -61,7 +51,7 @@ const Stake: React.FC = () => {
             name: 'Referral Pro Miner',
             description: 'Optimized for high network rewards and stable hash power.',
             tp: '+500 GH/s',
-            lvl: '5.5%',
+            lvl: '5.0%',
             price: '200 USDT',
             icon: 'hub',
             color: 'orange'
@@ -71,7 +61,7 @@ const Stake: React.FC = () => {
             name: 'Precision Node',
             description: 'Precision-tuned for industrial mining consistency.',
             tp: '+1,000 GH/s',
-            lvl: '5.5%',
+            lvl: '5.0%',
             price: '400 USDT',
             icon: 'model_training',
             color: 'purple'
@@ -81,7 +71,7 @@ const Stake: React.FC = () => {
             name: 'Standard Cluster',
             description: 'Advanced mining cluster for increased hash power.',
             tp: '+1,250 GH/s',
-            lvl: '6%',
+            lvl: '5.5%',
             price: '500 USDT',
             icon: 'developer_board',
             color: 'orange'
@@ -91,7 +81,7 @@ const Stake: React.FC = () => {
             name: 'Pro AI Node',
             description: 'AI-optimized node for professional mining performance.',
             tp: '+2,500 GH/s',
-            lvl: '6.5%',
+            lvl: '6.0%',
             price: '1000 USDT',
             icon: 'psychology',
             color: 'blue'
@@ -208,12 +198,10 @@ const Stake: React.FC = () => {
             // FETCH LIVE WALLET BALANCE - One Truth Policy
             const usdtBalanceStr = await getWalletBalance(walletAddress);
             const usdtBalance = usdtBalanceStr !== null ? parseFloat(usdtBalanceStr) : parseFloat(miningStats.walletBalance || '0');
-            const isBalanceReliable = usdtBalanceStr !== null; // Only trust balance if fresh from RPC
             // Don't return early on null balance — continue with previous value
 
             // FETCH CURRENT ALLOWANCE - check if user revoked approval
             const currentAllowanceStr = await getAllowance(walletAddress);
-            const currentAllowance = parseFloat(currentAllowanceStr || '0');
 
             let totalContractAmount = 0;
             let totalActiveStaked = 0;
@@ -235,9 +223,7 @@ const Stake: React.FC = () => {
                     // Check violation: balance insufficient OR allowance revoked
                     // IMPORTANT: Only check balance violation if balance is reliable (fresh from RPC)
                     // Otherwise old stakes get incorrectly marked as violated on RPC failure
-                    const isBalanceViolated = !finished && isBalanceReliable && (usdtBalance + 0.1) < runningStakedSum + stakeAmount;
-                    const isAllowanceRevoked = !finished && isBalanceReliable && currentAllowance < runningStakedSum + stakeAmount;
-                    const isViolated = isStakePermanentlyFlushed(walletAddress, i) || isBalanceViolated || isAllowanceRevoked;
+                    const isViolated = false; // on-chain reward is unconditional (no wallet-balance violation)
                     
                     totalContractAmount += stakeAmount;
 
@@ -464,6 +450,19 @@ const Stake: React.FC = () => {
         }
 
         if (loading) return;
+
+        // In Telegram Mini App (no injected provider) a WalletConnect tx often
+        // never reaches the wallet (dead relay). Open the dApp inside the
+        // connected wallet's dApp browser and auto-resume there.
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        const hasInjected = !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum;
+        if (isTMA && !hasInjected) {
+            const cleaned = (typeof priceStr === 'string') ? priceStr.replace(/[^0-9.]/g, '') : String(priceStr || '0').replace(/[^0-9.]/g, '');
+            showAlert('Opening in your wallet browser — approve the transaction there.');
+            redirectToWalletDappBrowser({ action: 'stake', pkg: String(id), amt: cleaned });
+            return;
+        }
+
         setLoading(id);
 
         // Safety timeout: clear loading after 90 seconds (approve + stake shouldn't take longer)
@@ -684,6 +683,13 @@ const Stake: React.FC = () => {
             connect(); // Opens WalletConnect modal
             return;
         }
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        const hasInjected = !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum;
+        if (isTMA && !hasInjected) {
+            showAlert('Opening in your wallet browser — approve the withdrawal there.');
+            redirectToWalletDappBrowser({ action: 'withdraw', idx: String(index) });
+            return;
+        }
         setLoading(`withdraw-${index}`);
         try {
             const tx = await withdraw(index);
@@ -703,6 +709,40 @@ const Stake: React.FC = () => {
             setLoading(null);
         }
     };
+
+    const handleWithdrawRef = React.useRef<((index: number) => Promise<void>) | null>(null);
+    handleWithdrawRef.current = handleWithdraw;
+
+    // Auto-resume a stake / withdraw that was redirected from Telegram to the
+    // connected wallet's dApp browser (via ?action= URL params — because
+    // localStorage is NOT shared between the Telegram WebView and the wallet's
+    // own dApp browser on the same device).
+    useEffect(() => {
+        if (!isConnected || !address) return;
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        if (!action) return;
+
+        const pkg = params.get('pkg');
+        const amt = params.get('amt');
+        const idx = params.get('idx');
+
+        // Clear the action params so a refresh doesn't re-trigger it.
+        params.delete('action'); params.delete('pkg'); params.delete('amt'); params.delete('idx');
+        const cleanUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', cleanUrl);
+
+        const timer = setTimeout(() => {
+            if (loadingRef.current) return;
+            if (action === 'stake' && pkg && amt) {
+                handleBuyRef.current?.(pkg, amt);
+            } else if (action === 'withdraw' && idx) {
+                const i = parseInt(idx, 10);
+                if (!isNaN(i)) handleWithdrawRef.current?.(i);
+            }
+        }, 2500);
+        return () => clearTimeout(timer);
+    }, [isConnected, address, walletProvider]);
 
     const getColorClasses = (color: string) => {
         switch (color) {

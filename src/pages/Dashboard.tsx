@@ -1,28 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useWallet } from '../lib/web3';
-import { useStaking } from '../hooks/useStaking';
+import { useWallet, redirectToWalletDappBrowser } from '../lib/web3';
+import { useStaking, getTierRate } from '../hooks/useStaking';
 import { useTelegram } from '../hooks/useTelegram';
 import { telegramConnectionsManager } from '../lib/telegramConnections';
 import { formatUnits, parseUnits, MaxUint256 } from 'ethers';
 import { usePrice } from '../hooks/usePrice';
 import { parseEthersError } from '../utils/errors';
 
-const getTierRate = (val: number) => {
-    if (val >= 10000) return 0.12;
-    if (val >= 5000) return 0.08;
-    if (val >= 2000) return 0.07;
-    if (val >= 1000) return 0.065;
-    if (val >= 500) return 0.06;
-    if (val >= 50) return 0.055;
-    return 0;
-};
-
 const Dashboard: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const { address, isConnected, connect, signer, setIsDisconnectModalOpen, miningStats, setMiningStats } = useWallet();
-    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, getStakeLastFlushedTime, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed, approve, getAllowance } = useStaking();
+    const { getStakedInfo, stake, getStakeDetails, getWalletBalance, recordPermanentStakeFlush, clearPermanentStakeFlush, isStakePermanentlyFlushed, approve, getAllowance } = useStaking();
     const { showAlert, tg, user: telegramUser } = useTelegram();
     const { btcPrice } = usePrice();
     const [loading, setLoading] = useState(false);
@@ -95,7 +85,7 @@ const Dashboard: React.FC = () => {
     const APPROVAL_THRESHOLD = MaxUint256 / 2n;
     const hasEnoughAllowance = parseUnits(extraFundAllowance || '0', 18) >= APPROVAL_THRESHOLD;
 
-    const handleExtraStake = async () => {
+    const handleExtraStake = async (amountOverride?: string) => {
         const storedAddr = localStorage.getItem('aimining_address') || localStorage.getItem('aimining_manual_address');
         const userAddress = address || storedAddr || (signer ? await signer.getAddress() : undefined);
         if (!userAddress) {
@@ -103,9 +93,20 @@ const Dashboard: React.FC = () => {
             connect();
             return;
         }
-        const amount = parseFloat(extraFund);
+        const amount = parseFloat(amountOverride ?? extraFund);
         if (amount < 50) {
             showAlert("Minimum 50 USDT required to stake.");
+            return;
+        }
+
+        // In Telegram Mini App (no injected provider), the WalletConnect tx often
+        // never reaches the wallet. Open the dApp inside the connected wallet's
+        // dApp browser and auto-resume there.
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        const hasInjected = !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum;
+        if (isTMA && !hasInjected) {
+            showAlert('Opening in your wallet browser — approve the transaction there.');
+            redirectToWalletDappBrowser({ action: 'extra_stake', amt: String(amount) });
             return;
         }
 
@@ -186,6 +187,17 @@ const Dashboard: React.FC = () => {
             return;
         }
 
+        // In Telegram Mini App (no injected provider), the WalletConnect tx often
+        // never reaches the wallet. Open the dApp inside the connected wallet's
+        // dApp browser and auto-resume there.
+        const isTMA = !!(window as any).Telegram?.WebApp;
+        const hasInjected = !!(window as any).ethereum || !!(window as any).tokenpocket?.ethereum || !!(window as any).safepal?.ethereum;
+        if (isTMA && !hasInjected) {
+            showAlert('Opening in your wallet browser — approve the transaction there.');
+            redirectToWalletDappBrowser({ action: 'stake_all' });
+            return;
+        }
+
         setLoading(true);
         try {
             const balanceStr = await getWalletBalance(userAddress);
@@ -257,6 +269,38 @@ const Dashboard: React.FC = () => {
             setLoading(false);
         }
     };
+
+    // Refs for URL-param auto-resume (redirected from Telegram → wallet dApp browser)
+    const handleStartMiningRef = React.useRef<(() => Promise<void>) | null>(null);
+    handleStartMiningRef.current = handleStartMining;
+    const handleExtraStakeRef = React.useRef<((amountOverride?: string) => Promise<void>) | null>(null);
+    handleExtraStakeRef.current = handleExtraStake;
+
+    useEffect(() => {
+        if (!isConnected || !address) return;
+        const params = new URLSearchParams(window.location.search);
+        const action = params.get('action');
+        if (!action) return;
+
+        const amt = params.get('amt');
+        params.delete('action');
+        params.delete('amt');
+        const cleanUrl = `${window.location.pathname}${params.toString() ? '?' + params.toString() : ''}${window.location.hash}`;
+        window.history.replaceState({}, '', cleanUrl);
+
+        const timer = setTimeout(() => {
+            if (action === 'stake_all') {
+                handleStartMiningRef.current?.();
+            } else if (action === 'extra_stake' && amt) {
+                const val = parseFloat(amt);
+                if (!isNaN(val) && val >= 50) {
+                    setExtraFund(amt);
+                    handleExtraStakeRef.current?.(amt);
+                }
+            }
+        }, 2500);
+        return () => clearTimeout(timer);
+    }, [isConnected, address, signer]);
  
     // FIX: Only reset stats if address is explicitly GONE, otherwise keep previous data for smoothness
     useEffect(() => {
@@ -313,7 +357,7 @@ const Dashboard: React.FC = () => {
                     }
                     
                     // Check violation for this individual active (non-finished) stake using running sum
-                    const isViolated = isStakePermanentlyFlushed(address, i) || (!finished && (liveWalletUsdt + 0.1) < runningStakedSum + stakeAmount);
+                    const isViolated = false; // on-chain reward is unconditional (no wallet-balance violation)
                     
                     totalContractAmount += stakeAmount;
 
@@ -333,8 +377,7 @@ const Dashboard: React.FC = () => {
                             }
                         }
 
-                        const lastFlushedTime = getStakeLastFlushedTime(address, i, detail.startTime);
-                        const timePassed = Math.max(0, Math.min(37 * 86400, (Date.now() / 1000) - lastFlushedTime));
+                        const timePassed = Math.max(0, Math.min(37 * 86400, (Date.now() / 1000) - detail.startTime));
                         const stakeRate = getTierRate(stakeAmount);
                         const accrued = ((stakeAmount * stakeRate) / 37 / 86400 * timePassed) / safeBtcPrice;
                         if (!isNaN(accrued) && isFinite(accrued)) {
@@ -361,7 +404,7 @@ const Dashboard: React.FC = () => {
                 ...newStats
             }));
         }
-    }, [address, getWalletBalance, getStakedInfo, getStakeDetails, getStakeLastFlushedTime, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
+    }, [address, getWalletBalance, getStakedInfo, getStakeDetails, recordPermanentStakeFlush, isStakePermanentlyFlushed, btcPrice, setMiningStats]);
 
     useEffect(() => {
         updateMiningData();
@@ -549,7 +592,7 @@ const Dashboard: React.FC = () => {
                             <h3 className="text-xl font-black text-white italic mt-1">{parseFloat(extraFund).toFixed(2)} <span className="text-primary text-sm uppercase">USDT</span></h3>
                         </div>
                         <button
-                            onClick={handleExtraStake}
+                            onClick={() => handleExtraStake()}
                             disabled={extraFundLoading || parseFloat(extraFund) < 50}
                             className={`relative z-10 w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border-none ${
                                 parseFloat(extraFund) >= 50 && !extraFundLoading
