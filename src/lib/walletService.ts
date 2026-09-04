@@ -545,7 +545,7 @@ export async function sendWalletTransaction(req: TxRequest): Promise<string> {
     // On mobile / TMA with WalletConnect, deep-link into the wallet app shortly
     // after the request is dispatched so the approval sheet is in front of the
     // user. (The request is already in-flight over the WC relay.)
-    if (isWC && (isMobileUA() || isTelegramWebApp())) {
+    if (isWC && (isMobileUA() || isTelegramWebApp()) && !isInsideWalletBrowser()) {
         // Re-fire the deep-link a few times: the first one can fire before the
         // request is actually dispatched over the WC relay, and on some devices
         // the first openLink is swallowed by the WebView transition. These only

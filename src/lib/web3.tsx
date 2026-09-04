@@ -612,12 +612,19 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         }
     }, [isConnected, walletProvider, address, walletInfo]);
 
-    // Fallback registration for the manual (SignClient-restored) provider path
+    // Fallback registration for the manual (SignClient-restored / injected dApp
+    // browser) provider path. Detect WalletConnect properly: an injected wallet
+    // (Trust / MetaMask / TokenPocket dApp browser) is NOT WalletConnect, and
+    // marking it as WC makes sendWalletTransaction() deep-link to the wallet's
+    // home page (openWalletApp) instead of letting the native approval prompt
+    // appear over the page. This was the root cause of "wallet opens its own
+    // website instead of the contract approval".
     useEffect(() => {
         if (manualWalletProvider && manualAddress) {
             let wt = 'walletconnect';
             try { wt = localStorage.getItem('aimining_wallet_type') || 'walletconnect'; } catch { /* ignore */ }
-            walletService.setActiveConnection(manualWalletProvider, manualAddress, wt, true);
+            const isWC = checkIsWalletConnect(manualWalletProvider);
+            walletService.setActiveConnection(manualWalletProvider, manualAddress, wt, isWC);
         }
     }, [manualWalletProvider, manualAddress]);
 
